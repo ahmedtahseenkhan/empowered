@@ -1,0 +1,401 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+model TutorTimeBlock {
+  id        String       @id @default(uuid())
+  tutor_id  String
+  tutor     TutorProfile @relation(fields: [tutor_id], references: [id])
+
+  start_time DateTime
+  end_time   DateTime
+  reason     String?
+
+  created_at DateTime @default(now())
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ... existing generator/datasource ...
+
+enum Role {
+  STUDENT
+  TUTOR
+  ADMIN
+}
+
+enum TutorTier {
+  STANDARD
+  PRO
+  PREMIUM
+}
+
+enum LessonStatus {
+  PENDING
+  BOOKED
+  COMPLETED
+  CANCELLED
+  MISSED
+}
+
+enum BookingFrequency {
+  ONCE
+  WEEKLY
+  TWICE_WEEKLY
+  THRICE_WEEKLY
+}
+
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  password_hash String
+  role          Role     @default(STUDENT)
+  is_verified   Boolean  @default(false) // For email verification
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  // Relationships
+  student_profile StudentProfile?
+  tutor_profile   TutorProfile?
+}
+
+model StudentProfile {
+  id             String    @id @default(uuid())
+  user_id        String    @unique
+  user           User      @relation(fields: [user_id], references: [id])
+  username       String
+  profile_photo  String?
+  learning_goals String?
+  preferences    Json? // Stores: goal, frequency, budget, subjects
+  date_of_birth  DateTime?
+  grade_level    String?
+
+  lessons          Lesson[]
+  bookings         Booking[]
+  reviews          Review[]
+  subscriptions    Subscription[]
+  mentor_status    StudentTutorStatus[]
+  course_purchases CoursePurchase[]
+}
+
+model TutorProfile {
+  id      String @id @default(uuid())
+  user_id String @unique
+  user    User   @relation(fields: [user_id], references: [id])
+
+  username         String
+  profile_photo    String?
+  tagline          String?
+  about            String?
+  hourly_rate      Int     @default(0)
+  experience_years Int     @default(0)
+  video_url        String?
+  country          String?
+  timezone         String  @default("UTC")
+  key_strengths    String? // Stored as comma-separated or JSON string
+  is_verified      Boolean @default(false) // Admin verification
+
+  tier TutorTier @default(STANDARD) // Subscription plan
+
+  // Denormalized fields
+  rating         Float @default(0)
+  review_count   Int   @default(0)
+  total_students Int   @default(0)
+
+  // Relationships
+  education        TutorEducation[]
+  experience       TutorExperience[]
+  certifications   TutorCertification[]
+  languages        TutorLanguage[]
+  categories       TutorCategory[]
+  availabilities   Availability[]
+  time_blocks      TutorTimeBlock[]
+  lessons          Lesson[]
+  bookings         Booking[]
+  google_calendar_connection GoogleCalendarConnection?
+  oauth_states     OAuthState[]
+  courses          Course[]
+  reviews          Review[]
+  subscriptions    Subscription[]
+  student_status   StudentTutorStatus[]
+  external_reviews TutorExternalReview[]
+}
+
+model GoogleCalendarConnection {
+  id              String      @id @default(uuid())
+  tutor_id        String      @unique
+  tutor           TutorProfile @relation(fields: [tutor_id], references: [id])
+
+  calendar_id      String      @default("primary")
+  timezone         String      @default("UTC")
+  sync_enabled     Boolean     @default(true)
+
+  access_token_enc  String?
+  refresh_token_enc String?
+  scope             String?
+  token_type        String?
+  expires_at        DateTime?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+}
+
+model OAuthState {
+  state      String   @id
+  tutor_id   String
+  tutor      TutorProfile @relation(fields: [tutor_id], references: [id])
+  expires_at DateTime
+  created_at DateTime @default(now())
+}
+
+model EmailOutbox {
+  id              String   @id @default(uuid())
+  type            String
+  to_email        String
+  payload         Json
+  status          String   @default("PENDING")
+  attempts        Int      @default(0)
+  last_error      String?
+  next_retry_at   DateTime?
+  idempotency_key String?  @unique
+  created_at      DateTime @default(now())
+  sent_at         DateTime?
+}
+
+model TutorExternalReview {
+  id          String       @id @default(uuid())
+  tutor_id    String
+  tutor       TutorProfile @relation(fields: [tutor_id], references: [id])
+  platform    String // Google, Facebook, LinkedId, etc.
+  reviewer    String
+  rating      Int
+  comment     String?
+  date        DateTime?
+  is_verified Boolean      @default(false)
+}
+
+// ... existing TutorEducation, TutorExperience, TutorCertification, TutorLanguage ... 
+// (Assuming these are unchanged, but I need to include them or use replace chunks carefully if I don't want to overwrite them. 
+// Since I'm using replace_file_content with a large range, I must include EVERYTHING in the range.)
+
+model TutorEducation {
+  id             String       @id @default(uuid())
+  tutor_id       String
+  tutor          TutorProfile @relation(fields: [tutor_id], references: [id])
+  institution    String
+  degree         String
+  field_of_study String
+  year           Int
+}
+
+model TutorExperience {
+  id          String       @id @default(uuid())
+  tutor_id    String
+  tutor       TutorProfile @relation(fields: [tutor_id], references: [id])
+  role        String
+  company     String
+  start_year  Int
+  end_year    Int?
+  description String?
+}
+
+model TutorCertification {
+  id          String       @id @default(uuid())
+  tutor_id    String
+  tutor       TutorProfile @relation(fields: [tutor_id], references: [id])
+  name        String
+  issuer      String
+  year        Int
+  image_url   String?
+  is_verified Boolean      @default(false)
+}
+
+model TutorLanguage {
+  id          String       @id @default(uuid())
+  tutor_id    String
+  tutor       TutorProfile @relation(fields: [tutor_id], references: [id])
+  language    String
+  proficiency String
+}
+
+model Category {
+  id        String     @id @default(uuid())
+  name      String
+  parent_id String?
+  parent    Category?  @relation("CategoryHierarchy", fields: [parent_id], references: [id])
+  children  Category[] @relation("CategoryHierarchy")
+
+  tutors TutorCategory[]
+}
+
+model TutorCategory {
+  tutor_id    String
+  tutor       TutorProfile @relation(fields: [tutor_id], references: [id])
+  category_id String
+  category    Category     @relation(fields: [category_id], references: [id])
+
+  @@id([tutor_id, category_id])
+}
+
+model Booking {
+  id         String         @id @default(uuid())
+  student_id String
+  student    StudentProfile @relation(fields: [student_id], references: [id])
+  tutor_id   String
+  tutor      TutorProfile   @relation(fields: [tutor_id], references: [id])
+
+  start_date DateTime
+  end_date   DateTime // For recurring: when the block ends. For single: same as start (+duration)
+  frequency  BookingFrequency @default(ONCE)
+
+  status     String // pending, active, completed, cancelled
+  created_at DateTime @default(now())
+
+  lessons          Lesson[]
+  payment_schedule PaymentSchedule[]
+}
+
+model Lesson {
+  id         String         @id @default(uuid())
+  tutor_id   String
+  tutor      TutorProfile   @relation(fields: [tutor_id], references: [id])
+  student_id String
+  student    StudentProfile @relation(fields: [student_id], references: [id])
+  booking_id String?
+  booking    Booking?       @relation(fields: [booking_id], references: [id])
+
+  start_time   DateTime
+  end_time     DateTime
+  duration     Int // in minutes
+  status       LessonStatus @default(PENDING)
+  meeting_link String?
+  google_calendar_event_id String? @unique
+  google_calendar_html_link String?
+  category     String?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  review Review?
+}
+
+model PaymentSchedule {
+  id         String  @id @default(uuid())
+  booking_id String
+  booking    Booking @relation(fields: [booking_id], references: [id])
+
+  amount       Int
+  due_date     DateTime
+  status       String // pending, paid, failed
+  stripe_pi_id String? // PaymentIntent ID
+
+  created_at DateTime @default(now())
+}
+
+model Availability {
+  id          String       @id @default(uuid())
+  tutor_id    String
+  tutor       TutorProfile @relation(fields: [tutor_id], references: [id])
+  day_of_week Int // 0=Sunday
+  start_time  String // "09:00"
+  end_time    String // "17:00"
+}
+
+enum CourseStatus {
+  DRAFT
+  PUBLISHED
+}
+
+model Course {
+  id       String       @id @default(uuid())
+  tutor_id String
+  tutor    TutorProfile @relation(fields: [tutor_id], references: [id])
+
+  // Basic Info
+  title               String
+  description         String? @db.Text
+  duration            String? // e.g., "4 hours", "10 lessons"
+  learning_objectives String? @db.Text
+  target_audience     String?
+
+  // External Hosting
+  course_url  String // YouTube, Vimeo, Google Drive link
+  preview_url String? // Preview video/image URL
+
+  // Pricing
+  price Decimal @db.Decimal(10, 2)
+
+  // Status
+  status CourseStatus @default(DRAFT)
+
+  // Timestamps
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // Relations
+  purchases CoursePurchase[]
+}
+
+model CoursePurchase {
+  id         String         @id @default(uuid())
+  course_id  String
+  course     Course         @relation(fields: [course_id], references: [id], onDelete: Cascade)
+  student_id String
+  student    StudentProfile @relation(fields: [student_id], references: [id])
+
+  // Payment
+  amount_paid       Decimal @db.Decimal(10, 2)
+  stripe_payment_id String?
+
+  // Access
+  purchased_at   DateTime @default(now())
+  access_granted Boolean  @default(true)
+
+  @@unique([course_id, student_id])
+}
+
+model Review {
+  id         String         @id @default(uuid())
+  tutor_id   String
+  tutor      TutorProfile   @relation(fields: [tutor_id], references: [id])
+  student_id String
+  student    StudentProfile @relation(fields: [student_id], references: [id])
+  lesson_id  String?        @unique
+  lesson     Lesson?        @relation(fields: [lesson_id], references: [id])
+
+  rating      Int
+  comment     String?
+  is_verified Boolean  @default(false)
+  created_at  DateTime @default(now())
+}
+
+model Subscription {
+  id         String         @id @default(uuid())
+  student_id String
+  student    StudentProfile @relation(fields: [student_id], references: [id])
+  tutor_id   String
+  tutor      TutorProfile   @relation(fields: [tutor_id], references: [id])
+
+  stripe_sub_id      String
+  status             String
+  lessons_per_week   Int
+  current_period_end DateTime
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+}
+
+model StudentTutorStatus {
+  student_id String
+  student    StudentProfile @relation(fields: [student_id], references: [id])
+  tutor_id   String
+  tutor      TutorProfile   @relation(fields: [tutor_id], references: [id])
+
+  has_taken_trial Boolean @default(false)
+  status          String
+
+  @@id([student_id, tutor_id])
+}
