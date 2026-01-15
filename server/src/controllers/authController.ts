@@ -5,7 +5,7 @@ import { RegisterSchema, LoginSchema } from '../utils/validation';
 
 export const register = async (req: Request, res: Response) => {
     try {
-        const { email, password, role, username, tier } = req.body;
+        const { email, password, role, username, tier } = RegisterSchema.parse(req.body);
 
         // Check if user exists
         const existingUser = await prisma.user.findUnique({ where: { email } });
@@ -58,7 +58,20 @@ export const register = async (req: Request, res: Response) => {
 
     } catch (error: any) {
         console.error('Registration Error:', error);
-        res.status(400).json({ error: error.errors || 'Registration failed' });
+
+        // Handle Zod validation errors
+        if (error.errors) {
+            return res.status(400).json({
+                error: 'Validation failed',
+                details: error.errors.map((e: any) => ({ path: e.path, message: e.message }))
+            });
+        }
+
+        // Handle database or other errors
+        res.status(500).json({
+            error: 'Internal server error during registration',
+            message: error.message || 'Registration failed'
+        });
     }
 };
 
