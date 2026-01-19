@@ -201,6 +201,7 @@ const StudentDashboard: React.FC = () => {
         return lessonsByDayIso.get(selectedDayIso) || [];
     }, [lessonsByDayIso, selectedDayIso]);
 
+
     if (loading) return <DashboardLayout><div>Loading Dashboard...</div></DashboardLayout>;
 
     return (
@@ -224,42 +225,8 @@ const StudentDashboard: React.FC = () => {
                         <StatsCard icon={<BookOpen className="w-5 h-5" />} label="Total Courses" value={totalCourses} />
                     </div>
 
-                    <Card className="p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <div>
-                                <h2 className="text-lg font-bold text-gray-900">Upcoming Sessions</h2>
-                                <p className="text-sm text-gray-500">Your next booked sessions.</p>
-                            </div>
-                            <Button variant="outline" onClick={() => navigate('/dashboard')}>View Calendar</Button>
-                        </div>
 
-                        {busy ? (
-                            <div className="text-sm text-gray-600">Loading...</div>
-                        ) : upcomingSessions.length === 0 ? (
-                            <div className="text-sm text-gray-600">No upcoming sessions yet.</div>
-                        ) : (
-                            <div className="space-y-3">
-                                {upcomingSessions.slice(0, 5).map((l) => (
-                                    <div key={l.id} className="flex items-center justify-between gap-4 border border-gray-200 rounded-lg px-4 py-3">
-                                        <div>
-                                            <div className="font-semibold text-gray-900">{l.tutor?.username || 'Mentor'}</div>
-                                            <div className="text-sm text-gray-600">
-                                                {new Date(l.start_time).toLocaleString()} — {new Date(l.end_time).toLocaleTimeString()}
-                                            </div>
-                                        </div>
-                                        <div className="flex gap-2">
-                                            {l.meeting_link && (
-                                                <Button variant="outline" onClick={() => window.open(l.meeting_link as string, '_blank')}>Join</Button>
-                                            )}
-                                            {l.google_calendar_html_link && (
-                                                <Button variant="outline" onClick={() => window.open(l.google_calendar_html_link as string, '_blank')}>Calendar</Button>
-                                            )}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </Card>
+
 
                     <Card className="p-6">
                         <div className="flex items-center justify-between mb-4">
@@ -473,6 +440,38 @@ const StudentDashboard: React.FC = () => {
                                 </div>
                             </div>
                         </div>
+                    </Card>
+
+                    <Card className="p-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <div>
+                                <h2 className="text-sm font-bold text-gray-900">Upcoming Sessions</h2>
+                            </div>
+                        </div>
+
+                        {busy ? (
+                            <div className="text-xs text-gray-600">Loading...</div>
+                        ) : upcomingSessions.length === 0 ? (
+                            <div className="text-xs text-gray-600">No upcoming sessions yet.</div>
+                        ) : (
+                            <div className="space-y-3">
+                                {upcomingSessions.slice(0, 3).map((l) => (
+                                    <div key={l.id} className="border border-gray-200 rounded-lg px-3 py-2">
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <div className="text-sm font-semibold text-gray-900">{l.tutor?.username || 'Mentor'}</div>
+                                                <div className="text-xs text-gray-600">
+                                                    {new Date(l.start_time).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} • {new Date(l.start_time).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
+                                                </div>
+                                            </div>
+                                            {l.meeting_link && (
+                                                <Button variant="outline" size="sm" className="h-6 text-xs px-2" onClick={() => window.open(l.meeting_link as string, '_blank')}>Join</Button>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </Card>
 
                     <Card className="p-6">

@@ -123,7 +123,20 @@ export const computeTutorAvailabilitySlots = async (args: {
         }
 
         const dayOfWeek = zoned.dayOfWeek;
-        const minutesOfDay = zoned.minutesOfDay;
+        let minutesOfDay = zoned.minutesOfDay;
+
+        // Align to step boundary relative to midnight in tutor timezone
+        const remainder = minutesOfDay % args.stepMinutes;
+        if (remainder !== 0) {
+            const advance = args.stepMinutes - remainder;
+            cursor.setTime(cursor.getTime() + advance * 60 * 1000);
+            // recompute zoned values after advancing
+            const z2 = getZonedDayAndMinutes(cursor, timeZone);
+            if (!z2) {
+                continue;
+            }
+            minutesOfDay = z2.minutesOfDay;
+        }
 
         for (const rule of availabilityRules) {
             if (rule.day_of_week !== dayOfWeek) continue;

@@ -24,6 +24,7 @@ import TutorStudentsPage from './pages/TutorStudentsPage';
 import TutorSessionsPage from './pages/TutorSessionsPage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import PaymentsPage from './pages/PaymentsPage';
+import TutorNotesPage from './pages/TutorNotesPage';
 import CoursesPage from './pages/CoursesPage';
 import CourseCreatePage from './pages/CourseCreatePage';
 import SubscriptionSettingsPage from './pages/SubscriptionSettingsPage';
@@ -42,6 +43,7 @@ import StudentMentorResultsPage from './pages/StudentMentorResultsPage';
 import StudentMentorPublicProfilePage from './pages/StudentMentorPublicProfilePage';
 import StudentBookMentorPage from './pages/StudentBookMentorPage';
 import StudentBookingConfirmationPage from './pages/StudentBookingConfirmationPage';
+import TutorAIAssistPage from './pages/TutorAIAssistPage';
 
 const DashboardRouter = () => {
   const { user } = useAuth();
@@ -216,6 +218,14 @@ function App() {
             }
           />
           <Route
+            path="/tutor/notes"
+            element={
+              <ProtectedRoute>
+                <TutorNotesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/sessions"
             element={
               <ProtectedRoute>
@@ -276,6 +286,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <PublicProfilePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/tutor/ai-assist"
+            element={
+              <ProtectedRoute>
+                <TutorAIAssistPage />
               </ProtectedRoute>
             }
           />

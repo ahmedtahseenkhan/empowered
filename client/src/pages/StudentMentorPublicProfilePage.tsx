@@ -177,8 +177,8 @@ const StudentMentorPublicProfilePage: React.FC = () => {
                     params: {
                         from: from.toISOString(),
                         to: to.toISOString(),
-                        durationMinutes: 50,
-                        stepMinutes: 30,
+                        durationMinutes: 60,
+                        stepMinutes: 60,
                     }
                 });
 
@@ -263,7 +263,7 @@ const StudentMentorPublicProfilePage: React.FC = () => {
                                     <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
                                         <div className="text-xs text-gray-600">Price</div>
                                         <div className="text-lg font-extrabold text-gray-900">${mentor.hourly_rate}</div>
-                                        <div className="text-xs text-gray-500">per 50 min</div>
+                                        <div className="text-xs text-gray-500">per 60 min</div>
                                     </div>
                                     <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
                                         <div className="text-xs text-gray-600">Students</div>

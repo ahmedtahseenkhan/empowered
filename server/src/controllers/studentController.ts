@@ -29,6 +29,11 @@ export const getMyMentors = async (req: AuthRequest, res: Response) => {
                         review_count: true,
                         is_verified: true,
                         tier: true,
+                        user: {
+                            select: {
+                                email: true
+                            }
+                        }
                     }
                 }
             },
@@ -50,6 +55,7 @@ export const getMyMentors = async (req: AuthRequest, res: Response) => {
                     review_count: number | null;
                     is_verified: boolean;
                     tier: string | null;
+                    email: string | null;
                 };
                 totalLessons: number;
                 nextSessionStart: Date | null;
@@ -64,7 +70,10 @@ export const getMyMentors = async (req: AuthRequest, res: Response) => {
 
             if (!existing) {
                 byTutor.set(tid, {
-                    tutor: l.tutor,
+                    tutor: {
+                        ...l.tutor,
+                        email: l.tutor.user.email
+                    },
                     totalLessons: 1,
                     nextSessionStart: start > now ? start : null,
                     lastSessionStart: start <= now ? start : null,
@@ -88,6 +97,10 @@ export const getMyMentors = async (req: AuthRequest, res: Response) => {
         const mentors = Array.from(byTutor.values())
             .map((m) => ({
                 ...m,
+                tutor: {
+                    ...m.tutor,
+                    email: m.tutor.email
+                },
                 nextSessionStart: m.nextSessionStart ? m.nextSessionStart.toISOString() : null,
                 lastSessionStart: m.lastSessionStart ? m.lastSessionStart.toISOString() : null,
             }))

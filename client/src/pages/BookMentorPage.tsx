@@ -19,6 +19,12 @@ type PublicTutorLite = {
 
 type Frequency = 'ONCE' | 'WEEKLY' | 'TWICE_WEEKLY' | 'THRICE_WEEKLY';
 
+const requiredWeeklySlotsForFrequency = (frequency: Frequency) => {
+    if (frequency === 'TWICE_WEEKLY') return 2;
+    if (frequency === 'THRICE_WEEKLY') return 3;
+    return 1;
+};
+
 const BookMentorPage: React.FC = () => {
     const { id } = useParams();
     const [searchParams] = useSearchParams();
@@ -32,7 +38,7 @@ const BookMentorPage: React.FC = () => {
     const [slotsBusy, setSlotsBusy] = useState(false);
     const [slots, setSlots] = useState<Array<{ start: string; end: string }>>([]);
     const [selectedDay, setSelectedDay] = useState<string>('');
-    const [selectedSlotStart, setSelectedSlotStart] = useState<string>('');
+    const [selectedSlotStarts, setSelectedSlotStarts] = useState<string[]>([]);
     const [frequency, setFrequency] = useState<Frequency>((searchParams.get('frequency') as Frequency) || 'WEEKLY');
 
     const formatDayKey = (iso: string, timeZone: string) => {
@@ -69,14 +75,7 @@ const BookMentorPage: React.FC = () => {
 
     const availableDays = useMemo(() => Array.from(slotsByDay.keys()).sort(), [slotsByDay]);
 
-    const weeklyTotal = useMemo(() => {
-        if (!mentor) return 0;
-        if (frequency === 'ONCE') return mentor.hourly_rate;
-        if (frequency === 'WEEKLY') return mentor.hourly_rate;
-        if (frequency === 'TWICE_WEEKLY') return mentor.hourly_rate * 2;
-        if (frequency === 'THRICE_WEEKLY') return mentor.hourly_rate * 3;
-        return mentor.hourly_rate;
-    }, [frequency, mentor]);
+    const requiredWeeklySlots = useMemo(() => requiredWeeklySlotsForFrequency(frequency), [frequency]);
 
     useEffect(() => {
         const fetchMentor = async () => {
@@ -118,8 +117,8 @@ const BookMentorPage: React.FC = () => {
                     params: {
                         from: from.toISOString(),
                         to: to.toISOString(),
-                        durationMinutes: 50,
-                        stepMinutes: 30,
+                        durationMinutes: 60,
+                        stepMinutes: 60,
                     }
                 });
 
@@ -139,14 +138,14 @@ const BookMentorPage: React.FC = () => {
                 const resolvedDay = (paramDay && dayKeys.includes(paramDay)) ? paramDay : (selectedDay || initialDay);
                 setSelectedDay(resolvedDay);
 
-                if (paramSlotStart && fetched.some((s: any) => s.start === paramSlotStart)) {
-                    setSelectedSlotStart(paramSlotStart);
-                } else {
-                    const daySlots = fetched
+                setSelectedSlotStarts((prev) => {
+                    if (prev.length) return prev;
+                    if (paramSlotStart && fetched.some((s: any) => s.start === paramSlotStart)) return [paramSlotStart];
+                    const first = fetched
                         .filter((s: any) => formatDayKey(s.start, mentor.timezone || 'UTC') === resolvedDay)
-                        .sort((a: any, b: any) => new Date(a.start).getTime() - new Date(b.start).getTime());
-                    setSelectedSlotStart(daySlots[0]?.start || '');
-                }
+                        .sort((a: any, b: any) => new Date(a.start).getTime() - new Date(b.start).getTime())[0]?.start;
+                    return first ? [first] : [];
+                });
             } catch (e: any) {
                 console.error('Failed to fetch availability slots', e);
                 setSlots([]);
@@ -158,6 +157,26 @@ const BookMentorPage: React.FC = () => {
         fetchSlots();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [mentor?.id, searchParams]);
+
+    useEffect(() => {
+        // When frequency changes, clamp selected slots to required count.
+        setSelectedSlotStarts((prev) => prev.slice(0, requiredWeeklySlotsForFrequency(frequency)));
+    }, [frequency]);
+
+    const isSlotSelected = (startIso: string) => selectedSlotStarts.includes(startIso);
+
+    const toggleSlot = (startIso: string) => {
+        setSelectedSlotStarts((prev) => {
+            if (prev.includes(startIso)) return prev.filter((s) => s !== startIso);
+            const required = requiredWeeklySlotsForFrequency(frequency);
+            if (prev.length >= required) return prev; // must remove one first
+            return [...prev, startIso].sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+        });
+    };
+
+    const removeSelectedSlot = (startIso: string) => {
+        setSelectedSlotStarts((prev) => prev.filter((s) => s !== startIso));
+    };
 
     const onContinue = async () => {
         if (!mentor) return;
@@ -174,19 +193,20 @@ const BookMentorPage: React.FC = () => {
             return;
         }
 
-        if (!selectedSlotStart) {
-            setError('Please choose an available time slot.');
+        if (selectedSlotStarts.length !== requiredWeeklySlots) {
+            setError(`Please select ${requiredWeeklySlots} weekly time slot${requiredWeeklySlots === 1 ? '' : 's'} to proceed.`);
             return;
         }
 
-        const isoStartDate = selectedSlotStart;
+        const isoStartDate = selectedSlotStarts[0];
 
         try {
             setError('');
             const res = await api.post('/bookings', {
                 tutorId: mentor.id,
                 startDate: isoStartDate,
-                durationMinutes: 50,
+                slotStarts: selectedSlotStarts,
+                durationMinutes: 60,
                 frequency,
             });
 
@@ -199,12 +219,12 @@ const BookMentorPage: React.FC = () => {
     return (
         <PageLayout>
             <section className="section-container">
-                <div className="max-w-3xl mx-auto">
+                <div className="max-w-6xl mx-auto">
                     {loading && <div className="p-8 text-center">Loading...</div>}
                     {!loading && mentor && (
                         <>
                             <div className="mb-6">
-                                <h1 className="heading-lg mb-2">Book {mentor.username}</h1>
+                                <h1 className="heading-lg mb-2">Book a Session</h1>
                                 {mentor.tagline && <p className="text-gray-600">{mentor.tagline}</p>}
                             </div>
 
@@ -212,95 +232,129 @@ const BookMentorPage: React.FC = () => {
                                 <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6 text-sm">{error}</div>
                             )}
 
-                            <Card className="p-6 space-y-6">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Frequency</label>
-                                        <select
-                                            className="w-full border border-gray-300 rounded-lg p-3 bg-white"
-                                            value={frequency}
-                                            onChange={(e) => setFrequency(e.target.value as Frequency)}
-                                        >
-                                            <option value="WEEKLY">Once a week</option>
-                                            <option value="TWICE_WEEKLY">Twice a week</option>
-                                            <option value="THRICE_WEEKLY">Three times a week</option>
-                                            <option value="ONCE">One-time session</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Choose a day</label>
-                                        <select
-                                            className="w-full border border-gray-300 rounded-lg p-3 bg-white"
-                                            value={selectedDay}
-                                            onChange={(e) => {
-                                                const day = e.target.value;
-                                                setSelectedDay(day);
-                                                const first = (slotsByDay.get(day) || [])[0];
-                                                setSelectedSlotStart(first?.start || '');
-                                            }}
-                                        >
-                                            <option value="">Select day</option>
-                                            {availableDays.map((d) => (
-                                                <option key={d} value={d}>{formatDayLabel(d)}</option>
-                                            ))}
-                                        </select>
-                                        <div className="text-xs text-gray-500 mt-1">Times shown in tutor timezone: {mentor.timezone}</div>
-                                    </div>
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                <div className="lg:col-span-2">
+                                    <Card className="p-6 space-y-6">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">Frequency</label>
+                                            <select
+                                                className="w-full border border-gray-300 rounded-lg p-3 bg-white"
+                                                value={frequency}
+                                                onChange={(e) => setFrequency(e.target.value as Frequency)}
+                                            >
+                                                <option value="WEEKLY">Once a week (4 Sessions)</option>
+                                                <option value="TWICE_WEEKLY">Twice a week (8 Sessions)</option>
+                                                <option value="THRICE_WEEKLY">Three times a week (12 Sessions)</option>
+                                                <option value="ONCE">One-time session (1 Session)</option>
+                                            </select>
+                                            <div className="text-xs text-gray-500 mt-2">
+                                                Choose {requiredWeeklySlots} day{requiredWeeklySlots === 1 ? '' : 's'} & time{requiredWeeklySlots === 1 ? '' : 's'}. They’ll auto-repeat weekly for 1 month.
+                                            </div>
+                                        </div>
+
+                                        <div className="rounded-lg bg-[#4A1D96] text-white text-sm font-semibold px-4 py-3">
+                                            View your mentor's available days and times below.
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Choose a day</label>
+                                            <select
+                                                className="w-full border border-gray-300 rounded-lg p-3 bg-white"
+                                                value={selectedDay}
+                                                onChange={(e) => {
+                                                    const day = e.target.value;
+                                                    setSelectedDay(day);
+                                                }}
+                                            >
+                                                <option value="">Select day</option>
+                                                {availableDays.map((d) => (
+                                                    <option key={d} value={d}>{formatDayLabel(d)}</option>
+                                                ))}
+                                            </select>
+                                            <div className="text-xs text-gray-500 mt-1">Times shown in tutor timezone: {mentor.timezone}</div>
+                                        </div>
+
+                                        <div>
+                                            <div className="text-sm font-medium text-gray-700 mb-2">Available time slots</div>
+                                            {slotsBusy ? (
+                                                <div className="text-sm text-gray-600">Loading availability...</div>
+                                            ) : !selectedDay ? (
+                                                <div className="text-sm text-gray-600">Pick a day to see available slots.</div>
+                                            ) : (slotsByDay.get(selectedDay) || []).length === 0 ? (
+                                                <div className="text-sm text-gray-600">No slots available for this day.</div>
+                                            ) : (
+                                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                                    {(slotsByDay.get(selectedDay) || []).map((s) => {
+                                                        const active = isSlotSelected(s.start);
+                                                        const label = formatTimeLabel(s.start, mentor.timezone);
+                                                        return (
+                                                            <button
+                                                                key={s.start}
+                                                                type="button"
+                                                                onClick={() => toggleSlot(s.start)}
+                                                                className={`px-3 py-2 rounded-lg text-sm border transition-colors ${active
+                                                                    ? 'bg-purple-600 text-white border-purple-600'
+                                                                    : 'bg-white text-gray-900 border-gray-300 hover:bg-gray-50'}`}
+                                                            >
+                                                                {label}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="flex gap-3">
+                                            <Button className="flex-1" onClick={onContinue} disabled={selectedSlotStarts.length !== requiredWeeklySlots}>Continue</Button>
+                                            <Link to={`/mentors/${mentor.id}?frequency=${encodeURIComponent(frequency)}`} className="flex-1">
+                                                <Button variant="outline" className="w-full">Back</Button>
+                                            </Link>
+                                        </div>
+
+                                        {!user && (
+                                            <div className="text-xs text-gray-500">
+                                                You’ll be asked to login or create a student account before confirming your booking.
+                                            </div>
+                                        )}
+                                    </Card>
                                 </div>
 
                                 <div>
-                                    <div className="text-sm font-medium text-gray-700 mb-2">Available time slots</div>
-                                    {slotsBusy ? (
-                                        <div className="text-sm text-gray-600">Loading availability...</div>
-                                    ) : !selectedDay ? (
-                                        <div className="text-sm text-gray-600">Pick a day to see available slots.</div>
-                                    ) : (slotsByDay.get(selectedDay) || []).length === 0 ? (
-                                        <div className="text-sm text-gray-600">No slots available for this day.</div>
-                                    ) : (
-                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                            {(slotsByDay.get(selectedDay) || []).map((s) => {
-                                                const active = selectedSlotStart === s.start;
-                                                const label = formatTimeLabel(s.start, mentor.timezone);
-                                                return (
-                                                    <button
-                                                        key={s.start}
-                                                        type="button"
-                                                        onClick={() => setSelectedSlotStart(s.start)}
-                                                        className={`px-3 py-2 rounded-lg text-sm border transition-colors ${active
-                                                            ? 'bg-purple-600 text-white border-purple-600'
-                                                            : 'bg-white text-gray-900 border-gray-300 hover:bg-gray-50'}`}
-                                                    >
-                                                        {label}
-                                                    </button>
-                                                );
-                                            })}
+                                    <Card className="p-6">
+                                        <div className="text-sm font-bold text-gray-900 mb-3">
+                                            Selected Time Slots ({selectedSlotStarts.length}/{requiredWeeklySlots})
                                         </div>
-                                    )}
-                                </div>
 
-                                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                                    <div className="flex items-center justify-between">
-                                        <div className="text-sm text-gray-600">Weekly total</div>
-                                        <div className="text-xl font-extrabold text-gray-900">${weeklyTotal}</div>
-                                    </div>
-                                    <div className="mt-2 text-xs text-gray-600">
-                                        Sessions may only be rescheduled if 24 or more hours remain before the scheduled start time. You can stop upcoming weekly payments before your next billing date.
-                                    </div>
-                                </div>
+                                        {selectedSlotStarts.length === 0 ? (
+                                            <div className="text-sm text-gray-600">No slots selected yet.</div>
+                                        ) : (
+                                            <div className="space-y-3">
+                                                {selectedSlotStarts.map((s) => (
+                                                    <div key={s} className="flex items-center justify-between gap-3 border border-purple-100 bg-purple-50/40 rounded-lg p-3">
+                                                        <div>
+                                                            <div className="text-xs text-gray-600">Every {formatDayLabel(formatDayKey(s, mentor.timezone)).split(',')[0]}</div>
+                                                            <div className="text-sm font-semibold text-gray-900">{formatTimeLabel(s, mentor.timezone)}</div>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => removeSelectedSlot(s)}
+                                                            className="text-gray-400 hover:text-gray-600"
+                                                        >
+                                                            ×
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
 
-                                <div className="flex gap-3">
-                                    <Button className="flex-1" onClick={onContinue}>Continue</Button>
-                                    <Link to={`/mentors/${mentor.id}?frequency=${encodeURIComponent(frequency)}`} className="flex-1">
-                                        <Button variant="outline" className="w-full">Back</Button>
-                                    </Link>
+                                        {selectedSlotStarts.length !== requiredWeeklySlots && (
+                                            <div className="mt-4 bg-yellow-50 border border-yellow-200 text-yellow-800 text-sm rounded-lg p-3">
+                                                Please select {requiredWeeklySlots - selectedSlotStarts.length} more slot{requiredWeeklySlots - selectedSlotStarts.length === 1 ? '' : 's'} to proceed
+                                            </div>
+                                        )}
+                                    </Card>
                                 </div>
-
-                                {!user && (
-                                    <div className="text-xs text-gray-500">
-                                        You’ll be asked to login or create a student account before confirming your booking.
-                                    </div>
-                                )}
-                            </Card>
+                            </div>
                         </>
                     )}
                     {!loading && !mentor && error && (

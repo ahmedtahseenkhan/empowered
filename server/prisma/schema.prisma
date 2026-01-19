@@ -33,6 +33,18 @@ enum TutorTier {
   PREMIUM
 }
 
+ enum MarketingVideoSubmissionStatus {
+   DRAFT
+   LINK_SUBMITTED
+   EMAIL_REQUESTED
+ }
+
+ enum VerificationStatus {
+   PENDING
+   APPROVED
+   REJECTED
+ }
+
 enum LessonStatus {
   PENDING
   BOOKED
@@ -54,12 +66,16 @@ model User {
   password_hash String
   role          Role     @default(STUDENT)
   is_verified   Boolean  @default(false) // For email verification
+  is_suspended  Boolean  @default(false)
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
 
   // Relationships
   student_profile StudentProfile?
   tutor_profile   TutorProfile?
+  admin_profile   AdminProfile?
+
+  support_tickets SupportTicket[]
 }
 
 model StudentProfile {
@@ -79,6 +95,10 @@ model StudentProfile {
   subscriptions    Subscription[]
   mentor_status    StudentTutorStatus[]
   course_purchases CoursePurchase[]
+
+  progress_notes      ProgressNote[]
+  homework_tasks      HomeworkTask[]
+  homework_submissions HomeworkSubmission[]
 }
 
 model TutorProfile {
@@ -122,7 +142,38 @@ model TutorProfile {
   subscriptions    Subscription[]
   student_status   StudentTutorStatus[]
   external_reviews TutorExternalReview[]
+
+  progress_notes ProgressNote[]
+  homework_tasks HomeworkTask[]
+
+  marketing_video_submission TutorMarketingVideoSubmission?
 }
+
+model AdminProfile {
+  id            String   @id @default(uuid())
+  user_id       String   @unique
+  user          User     @relation(fields: [user_id], references: [id])
+  username      String
+  profile_photo String?
+  department    String?
+}
+
+ model TutorMarketingVideoSubmission {
+   id          String   @id @default(uuid())
+   tutor_id    String   @unique
+   tutor       TutorProfile @relation(fields: [tutor_id], references: [id], onDelete: Cascade)
+
+   video_url    String?
+   instructions String? @db.Text
+
+   status MarketingVideoSubmissionStatus @default(DRAFT)
+
+   link_submitted_at   DateTime?
+   email_requested_at  DateTime?
+
+   created_at DateTime @default(now())
+   updated_at DateTime @updatedAt
+ }
 
 model GoogleCalendarConnection {
   id              String      @id @default(uuid())
@@ -175,6 +226,13 @@ model TutorExternalReview {
   comment     String?
   date        DateTime?
   is_verified Boolean      @default(false)
+
+  verification_status VerificationStatus @default(PENDING)
+  rejection_reason    String?
+  reviewed_at         DateTime?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 }
 
 // ... existing TutorEducation, TutorExperience, TutorCertification, TutorLanguage ... 
@@ -211,6 +269,13 @@ model TutorCertification {
   year        Int
   image_url   String?
   is_verified Boolean      @default(false)
+
+  verification_status VerificationStatus @default(PENDING)
+  rejection_reason    String?
+  reviewed_at         DateTime?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 }
 
 model TutorLanguage {
@@ -280,6 +345,8 @@ model Lesson {
   updated_at DateTime @updatedAt
 
   review Review?
+
+  progress_notes ProgressNote[]
 }
 
 model PaymentSchedule {
@@ -398,4 +465,140 @@ model StudentTutorStatus {
   status          String
 
   @@id([student_id, tutor_id])
+}
+
+enum NoteVisibility {
+  PRIVATE_TO_TUTOR
+  SHARED_WITH_STUDENT
+}
+
+enum NoteAuthorRole {
+  TUTOR
+  STUDENT
+}
+
+enum HomeworkStatus {
+  ASSIGNED
+  SUBMITTED
+  REVIEWED
+  COMPLETED
+}
+
+model ProgressNote {
+  id          String         @id @default(uuid())
+  tutor_id    String
+  tutor       TutorProfile   @relation(fields: [tutor_id], references: [id])
+  student_id  String
+  student     StudentProfile @relation(fields: [student_id], references: [id])
+  lesson_id   String?
+  lesson      Lesson?        @relation(fields: [lesson_id], references: [id])
+
+  author_role NoteAuthorRole
+  visibility  NoteVisibility @default(SHARED_WITH_STUDENT)
+  body        String         @db.Text
+
+  attachments Attachment[]   @relation("NoteAttachments")
+
+  created_at DateTime @default(now())
+
+  @@index([tutor_id, student_id])
+}
+
+model HomeworkTask {
+  id           String         @id @default(uuid())
+  tutor_id     String
+  tutor        TutorProfile   @relation(fields: [tutor_id], references: [id])
+  student_id   String
+  student      StudentProfile @relation(fields: [student_id], references: [id])
+
+  title        String
+  instructions String @db.Text
+  due_at       DateTime?
+  status       HomeworkStatus @default(ASSIGNED)
+
+  attachments Attachment[]      @relation("TaskAttachments")
+  submissions HomeworkSubmission[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([tutor_id, student_id])
+}
+
+model HomeworkSubmission {
+  id         String         @id @default(uuid())
+  task_id    String
+  task       HomeworkTask   @relation(fields: [task_id], references: [id], onDelete: Cascade)
+  student_id String
+  student    StudentProfile @relation(fields: [student_id], references: [id])
+
+  message     String? @db.Text
+  attachments Attachment[] @relation("SubmissionAttachments")
+
+  created_at DateTime @default(now())
+
+  @@index([task_id, student_id])
+}
+
+model Attachment {
+  id            String @id @default(uuid())
+
+  note_id       String?
+  note          ProgressNote? @relation("NoteAttachments", fields: [note_id], references: [id], onDelete: Cascade)
+  task_id       String?
+  task          HomeworkTask? @relation("TaskAttachments", fields: [task_id], references: [id], onDelete: Cascade)
+  submission_id String?
+  submission    HomeworkSubmission? @relation("SubmissionAttachments", fields: [submission_id], references: [id], onDelete: Cascade)
+
+  file_url  String
+  file_name String
+  mime_type String
+  size      Int
+
+  created_at DateTime @default(now())
+
+  @@index([note_id])
+  @@index([task_id])
+  @@index([submission_id])
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model SupportTicket {
+  id          String         @id @default(uuid())
+  user_id     String
+  user        User           @relation(fields: [user_id], references: [id])
+  
+  subject     String
+  message     String         @db.Text
+  status      TicketStatus   @default(OPEN)
+  priority    TicketPriority @default(MEDIUM)
+  
+  admin_notes String?        @db.Text
+  
+  created_at  DateTime       @default(now())
+  updated_at  DateTime       @updatedAt
+
+  admin_replies AdminReply[]
+}
+
+model AdminReply {
+  id        String   @id @default(uuid())
+  ticket_id String
+  ticket    SupportTicket @relation(fields: [ticket_id], references: [id])
+  
+  message   String   @db.Text
+  sent_at   DateTime @default(now())
 }

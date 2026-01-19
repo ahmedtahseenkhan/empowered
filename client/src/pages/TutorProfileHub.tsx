@@ -3,16 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { User, Book, Layers, DollarSign, ChevronRight } from 'lucide-react';
+import { User, Book, Layers, DollarSign, ChevronRight, Video } from 'lucide-react';
 // Will import section components here later
 import { BioSection } from '../components/tutor-profile/BioSection';
 import { EducationSection } from '../components/tutor-profile/EducationSection';
 import { ServicesSection } from '../components/tutor-profile/ServicesSection';
 import { PricingSection } from '../components/tutor-profile/PricingSection';
 import { SchedulingSection } from '../components/tutor-profile/SchedulingSection';
+import { MarketingVideoSection } from '../components/tutor-profile/MarketingVideoSection';
 import api from '../api/axios';
 
-type Section = 'overview' | 'bio' | 'education' | 'services' | 'pricing' | 'scheduling';
+type Section = 'overview' | 'bio' | 'education' | 'services' | 'pricing' | 'scheduling' | 'marketingVideo';
 
 const TutorProfileHub: React.FC = () => {
     const [activeSection, setActiveSection] = useState<Section>('overview');
@@ -79,6 +80,7 @@ const TutorProfileHub: React.FC = () => {
             case 'services': return <ServicesSection onBack={() => setActiveSection('overview')} />;
             case 'pricing': return <PricingSection onBack={() => setActiveSection('overview')} />;
             case 'scheduling': return <SchedulingSection onBack={() => setActiveSection('overview')} />;
+            case 'marketingVideo': return <MarketingVideoSection onBack={() => setActiveSection('overview')} tutorUsername={profile?.username} />;
             default: return renderOverview();
         }
     };
@@ -267,6 +269,31 @@ const TutorProfileHub: React.FC = () => {
                         <ChevronRight className="w-5 h-5 text-gray-400" />
                     </div>
                 </Card>
+
+                {['PRO', 'PREMIUM'].includes(profile?.tier) && (
+                    <Card
+                        className="p-6 cursor-pointer hover:shadow-md transition-shadow flex items-center justify-between"
+                        onClick={() => setActiveSection('marketingVideo')}
+                    >
+                        <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center text-gray-600">
+                                <Video className="w-6 h-6" />
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-gray-900 flex items-center gap-2">
+                                    Marketing Video Submission
+                                    <span className="text-[10px] bg-purple-50 text-purple-700 px-2 py-0.5 rounded-full border border-purple-100">Pro/Premium</span>
+                                </h3>
+                                <p className="text-sm text-gray-500 max-w-lg mt-1">
+                                    Submit your marketing video link and preferences for campaigns. Not part of profile completion.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <ChevronRight className="w-5 h-5 text-gray-400" />
+                        </div>
+                    </Card>
+                )}
             </div>
         </div>
     );

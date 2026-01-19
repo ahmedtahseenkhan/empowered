@@ -21,8 +21,8 @@ export const getTutorAvailabilitySlots = async (req: Request, res: Response) => 
         const durationMinutesRaw = req.query.durationMinutes as string | undefined;
         const stepMinutesRaw = req.query.stepMinutes as string | undefined;
 
-        const durationMinutes = durationMinutesRaw ? Math.max(15, parseInt(durationMinutesRaw, 10)) : 50;
-        const stepMinutes = stepMinutesRaw ? Math.max(5, parseInt(stepMinutesRaw, 10)) : 15;
+        const durationMinutes = durationMinutesRaw ? Math.max(15, parseInt(durationMinutesRaw, 10)) : 60;
+        const stepMinutes = stepMinutesRaw ? Math.max(5, parseInt(stepMinutesRaw, 10)) : 60;
 
         const from = parseISO(fromStr);
         const to = parseISO(toStr);

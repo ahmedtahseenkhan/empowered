@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Booking Confirmation</title>
+</head>
+
+<body style="margin: 0; padding: 0; font-family: 'Arial', sans-serif; background-color: #f4f4f4;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f4f4f4; padding: 20px 0;">
+        <tr>
+            <td align="center">
+                <table width="600" cellpadding="0" cellspacing="0"
+                    style="background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    <!-- Header -->
+                    <tr>
+                        <td
+                            style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 30px; text-align: center;">
+                            <h1 style="color: #ffffff; margin: 0; font-size: 28px;">🎉 Your Session is Booked!</h1>
+                        </td>
+                    </tr>
+
+                    <!-- Content -->
+                    <tr>
+                        <td style="padding: 40px 30px;">
+                            <p style="font-size: 16px; color: #333333; line-height: 1.6; margin: 0 0 20px;">
+                                Hi <strong>{{studentName}}</strong>,
+                            </p>
+                            <p style="font-size: 16px; color: #333333; line-height: 1.6; margin: 0 0 20px;">
+                                Congratulations! You've successfully booked a <strong>Free Trial</strong> session with
+                                <strong>{{mentorName}}</strong>. 🎉
+                            </p>
+
+                            <!-- Session Details Box -->
+                            <table width="100%" cellpadding="0" cellspacing="0"
+                                style="background-color: #f8f9fa; border-radius: 8px; padding: 20px; margin: 20px 0;">
+                                <tr>
+                                    <td>
+                                        <p style="margin: 0 0 10px; font-size: 14px; color: #666;">📅 <strong>Date &
+                                                Time:</strong> {{sessionDate}} at {{sessionTime}}</p>
+                                        <p style="margin: 0; font-size: 14px; color: #666;">🔗 <strong>Meeting
+                                                Link:</strong> <a href="{{meetingLink}}"
+                                                style="color: #667eea; text-decoration: none;">Join Session</a></p>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <p style="font-size: 16px; color: #333333; line-height: 1.6; margin: 20px 0;">
+                                <strong>Tips for your first session:</strong>
+                            </p>
+                            <ul
+                                style="font-size: 14px; color: #666; line-height: 1.8; margin: 0 0 20px; padding-left: 20px;">
+                                <li>Find a quiet space with no distractions</li>
+                                <li>Test your audio/video before joining</li>
+                                <li>Bring any materials you'd like to review</li>
+                            </ul>
+
+                            <p style="font-size: 16px; color: #333333; line-height: 1.6; margin: 20px 0;">
+                                We're excited for your learning journey!
+                            </p>
+
+                            <!-- CTA Button -->
+                            <table width="100%" cellpadding="0" cellspacing="0" style="margin: 30px 0;">
+                                <tr>
+                                    <td align="center">
+                                        <a href="{{meetingLink}}"
+                                            style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; text-decoration: none; padding: 15px 40px; border-radius: 6px; font-size: 16px; font-weight: bold;">Join
+                                            Your Session</a>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td
+                            style="background-color: #f8f9fa; padding: 30px; text-align: center; border-top: 1px solid #e0e0e0;">
+                            <p style="margin: 0 0 10px; font-size: 14px; color: #666;">
+                                Best Regards,<br>
+                                <strong>Team EmpowerEd Learnings</strong>
+                            </p>
+                            <p style="margin: 10px 0 0; font-size: 12px; color: #999;">
+                                © 2026 EmpowerEd Learnings. All rights reserved.
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+
+</html>

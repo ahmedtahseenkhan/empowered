@@ -5,6 +5,7 @@ interface User {
     email: string;
     role: 'STUDENT' | 'TUTOR' | 'ADMIN';
     username: string;
+    tier?: string;
 }
 
 interface AuthContextType {

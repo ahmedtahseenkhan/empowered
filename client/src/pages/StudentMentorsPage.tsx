@@ -1,38 +1,38 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
-import { Card } from '../components/ui/Card';
-import { Button } from '../components/ui/Button';
+import { ScheduledMentorCard } from '../components/student/ScheduledMentorCard';
+import { ReviewModal } from '../components/reviews/ReviewModal';
 import api from '../api/axios';
 
-type MyMentor = {
+interface MyMentor {
     tutor: {
         id: string;
         username: string;
         tagline: string | null;
-        hourly_rate: string | number | null;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        hourly_rate: any;
         rating: number | null;
         review_count: number | null;
         is_verified: boolean;
         tier: string | null;
+        email: string | null;
     };
     totalLessons: number;
     nextSessionStart: string | null;
     lastSessionStart: string | null;
-};
+}
 
 const StudentMentorsPage: React.FC = () => {
-    const [loading, setLoading] = useState(true);
     const [mentors, setMentors] = useState<MyMentor[]>([]);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const fetchMentors = async () => {
             try {
                 const res = await api.get('/student/mentors');
                 setMentors(res.data?.mentors || []);
-            } catch (e) {
-                console.error('Failed to fetch mentors', e);
-                setMentors([]);
+            } catch (err) {
+                console.error('Failed to fetch mentors', err);
             } finally {
                 setLoading(false);
             }
@@ -41,76 +41,105 @@ const StudentMentorsPage: React.FC = () => {
         fetchMentors();
     }, []);
 
-    const hasMentors = useMemo(() => mentors.length > 0, [mentors.length]);
-
-    const formatWhen = (iso: string | null) => {
-        if (!iso) return '—';
-        const d = new Date(iso);
-        if (Number.isNaN(d.getTime())) return '—';
-        return d.toLocaleString();
+    const handleEmailMentor = (email: string) => {
+        if (email && email !== 'N/A') {
+            window.location.href = `mailto:${email}`;
+        } else {
+            alert('No email address available for this mentor.');
+        }
     };
+
+    const handleStopPayments = (id: string) => {
+        // Implement stop payments logic
+        if (confirm('Are you sure you want to stop upcoming payments for this mentor?')) {
+            console.log('Stop payments for:', id);
+            // call api...
+        }
+    };
+
+    const [reviewModalOpen, setReviewModalOpen] = useState(false);
+    const [selectedMentorForReview, setSelectedMentorForReview] = useState<{ id: string; name: string } | null>(null);
+
+    const handleReviewMentor = (mentorId: string) => {
+        const mentor = mentors.find(m => m.tutor.id === mentorId);
+        if (mentor) {
+            setSelectedMentorForReview({
+                id: mentor.tutor.id,
+                name: mentor.tutor.username
+            });
+            setReviewModalOpen(true);
+        }
+    };
+
+    const submitReview = async (rating: number, comment: string) => {
+        if (!selectedMentorForReview) return;
+
+        try {
+            await api.post('/reviews', {
+                tutorId: selectedMentorForReview.id,
+                rating,
+                comment
+            });
+            alert('Review submitted successfully!');
+        } catch (error) {
+            console.error('Failed to submit review:', error);
+            alert('Failed to submit review. Please try again.');
+        }
+    };
+
+    if (loading) {
+        return <DashboardLayout><div>Loading Mentors...</div></DashboardLayout>;
+    }
 
     return (
         <DashboardLayout>
-            <div className="w-full">
-                <h1 className="text-3xl font-bold text-gray-900 mb-4">My Mentors</h1>
-                {loading ? (
-                    <Card className="p-6">
-                        <div className="text-sm text-gray-600">Loading mentors...</div>
-                    </Card>
-                ) : !hasMentors ? (
-                    <Card className="p-6">
-                        <div className="text-sm text-gray-700 font-semibold">No mentors yet</div>
-                        <div className="text-sm text-gray-600 mt-1">Book a session to start working with a mentor.</div>
-                        <div className="mt-4">
-                            <Link to="/student/mentors"><Button>Find a Mentor</Button></Link>
-                        </div>
-                    </Card>
+            <div className="max-w-7xl mx-auto space-y-8">
+                <div>
+                    <h1 className="text-3xl font-bold text-gray-900">My Mentors</h1>
+                    <p className="text-gray-600 mt-2">View mentors you have booked sessions with and manage your enrollments.</p>
+                </div>
+
+                {mentors.length === 0 ? (
+                    <div className="text-center py-12 text-gray-500 bg-gray-50 rounded-lg border border-gray-100">
+                        No mentors found. Book a session to see them here!
+                    </div>
                 ) : (
-                    <div className="space-y-4">
-                        {mentors.map((m) => (
-                            <Card key={m.tutor.id} className="p-6">
-                                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-                                    <div>
-                                        <div className="flex items-center gap-2">
-                                            <div className="text-lg font-bold text-gray-900">{m.tutor.username}</div>
-                                            {m.tutor.is_verified ? (
-                                                <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Verified</span>
-                                            ) : null}
-                                        </div>
-                                        {m.tutor.tagline ? (
-                                            <div className="text-sm text-gray-600 mt-1">{m.tutor.tagline}</div>
-                                        ) : null}
+                    <div className="grid gap-6">
+                        {mentors.map((m) => {
+                            // Formatting dates
+                            const formatDate = (dateStr: string | null) =>
+                                dateStr ? new Date(dateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : undefined;
 
-                                        <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-                                            <div>
-                                                <div className="text-xs text-gray-500">Next session</div>
-                                                <div className="text-gray-800">{formatWhen(m.nextSessionStart)}</div>
-                                            </div>
-                                            <div>
-                                                <div className="text-xs text-gray-500">Last session</div>
-                                                <div className="text-gray-800">{formatWhen(m.lastSessionStart)}</div>
-                                            </div>
-                                            <div>
-                                                <div className="text-xs text-gray-500">Total sessions</div>
-                                                <div className="text-gray-800">{m.totalLessons}</div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex gap-2 sm:flex-col">
-                                        <Link to={`/student/mentors/${m.tutor.id}`}>
-                                            <Button variant="outline" className="w-full">View Profile</Button>
-                                        </Link>
-                                        <Link to={`/student/book/${m.tutor.id}`}>
-                                            <Button className="w-full">Book Again</Button>
-                                        </Link>
-                                    </div>
-                                </div>
-                            </Card>
-                        ))}
+                            return (
+                                <ScheduledMentorCard
+                                    key={m.tutor.id}
+                                    mentor={{
+                                        id: m.tutor.id,
+                                        name: m.tutor.username,
+                                        username: m.tutor.username,
+                                        profilePhoto: undefined, // Add if API returns it
+                                        isVerified: m.tutor.is_verified,
+                                        enrolledDate: formatDate(m.lastSessionStart) || 'Recent',
+                                        totalSessions: m.totalLessons,
+                                        pendingSessions: 0, // Placeholder
+                                        lastSessionDate: formatDate(m.lastSessionStart),
+                                        nextSessionDate: formatDate(m.nextSessionStart)
+                                    }}
+                                    onEmailMentor={() => handleEmailMentor(m.tutor.email || '')}
+                                    onStopPayments={handleStopPayments}
+                                    onReviewMentor={handleReviewMentor}
+                                />
+                            );
+                        })}
                     </div>
                 )}
+
+                <ReviewModal
+                    isOpen={reviewModalOpen}
+                    onClose={() => setReviewModalOpen(false)}
+                    onSubmit={submitReview}
+                    mentorName={selectedMentorForReview?.name || 'Mentor'}
+                />
             </div>
         </DashboardLayout>
     );

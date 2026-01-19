@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import prisma from '../config/db';
 import { hashPassword, comparePassword, generateToken } from '../utils/auth';
 import { RegisterSchema, LoginSchema } from '../utils/validation';
+import { AuthRequest } from '../middleware/authMiddleware';
 
 export const register = async (req: Request, res: Response) => {
     try {
@@ -75,6 +76,50 @@ export const register = async (req: Request, res: Response) => {
     }
 };
 
+export const me = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user?.id;
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            include: { tutor_profile: true, student_profile: true },
+        });
+
+        if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+        let userProfile: any = null;
+        switch (user.role) {
+            case 'STUDENT':
+                userProfile = user.student_profile;
+                break;
+            case 'TUTOR':
+                userProfile = user.tutor_profile;
+                break;
+            case 'ADMIN':
+                const adminProfile = await prisma.adminProfile.findUnique({ where: { user_id: user.id } });
+                userProfile = adminProfile;
+                break;
+        }
+
+        return res.json({
+            user: {
+                id: user.id,
+                email: user.email,
+                role: user.role,
+                is_suspended: user.is_suspended,
+                username: userProfile?.username,
+                tier: (userProfile as any)?.tier,
+                profile_photo: userProfile?.profile_photo,
+                department: (userProfile as any)?.department
+            },
+        });
+    } catch (error) {
+        console.error('Auth Me Error:', error);
+        return res.status(500).json({ error: 'Server error' });
+    }
+};
+
 export const login = async (req: Request, res: Response) => {
     try {
         const { email, password } = LoginSchema.parse(req.body);
@@ -93,11 +138,12 @@ export const login = async (req: Request, res: Response) => {
 
         const token = generateToken(user.id, user.role);
         const username = user.role === 'STUDENT' ? user.student_profile?.username : user.tutor_profile?.username;
+        const tier = user.role === 'TUTOR' ? user.tutor_profile?.tier : undefined;
 
         res.json({
             message: 'Login successful',
             token,
-            user: { id: user.id, email: user.email, role: user.role, username }
+            user: { id: user.id, email: user.email, role: user.role, username, tier }
         });
 
     } catch (error: any) {

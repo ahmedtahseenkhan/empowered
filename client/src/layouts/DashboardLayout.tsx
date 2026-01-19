@@ -12,7 +12,8 @@ import {
     CreditCard,
     LogOut,
     Settings,
-    HelpCircle
+    HelpCircle,
+    Bot
 } from 'lucide-react';
 
 export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -34,8 +35,15 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
             { icon: <BookOpen className="w-5 h-5" />, label: 'My Courses', path: '/courses' },
             { icon: <Calendar className="w-5 h-5" />, label: 'Sessions', path: '/sessions' },
             { icon: <Users className="w-5 h-5" />, label: 'Students', path: '/students' },
+            { icon: <BookOpen className="w-5 h-5" />, label: 'Notes', path: '/tutor/notes' },
             { icon: <BarChart className="w-5 h-5" />, label: 'Analytics', path: '/analytics' },
             { icon: <CreditCard className="w-5 h-5" />, label: 'Payment', path: '/payments' },
+            // AI Assist - Only for Pro and Premium
+            ...((user?.tier === 'PRO' || user?.tier === 'PREMIUM') ? [{
+                icon: <Bot className="w-5 h-5" />,
+                label: 'AI Assist',
+                path: '/tutor/ai-assist'
+            }] : [])
         ];
 
     const handleLogout = () => {
@@ -68,7 +76,7 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
                 <nav className="flex-1 px-4 space-y-2 mt-2">
                     {menuItems.map((item) => (
                         <Link
-                            key={item.path}
+                            key={item.label}
                             to={item.path}
                             className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${location.pathname === item.path
                                 ? 'bg-primary-50 text-primary-900'

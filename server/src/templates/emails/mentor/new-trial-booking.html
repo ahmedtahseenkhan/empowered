@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>New Trial Booking</title>
+</head>
+
+<body style="margin: 0; padding: 0; font-family: 'Arial', sans-serif; background-color: #f4f4f4;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f4f4f4; padding: 20px 0;">
+        <tr>
+            <td align="center">
+                <table width="600" cellpadding="0" cellspacing="0"
+                    style="background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    <tr>
+                        <td
+                            style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 40px 30px; text-align: center;">
+                            <h1 style="color: #ffffff; margin: 0; font-size: 28px;">🎓 New Free Trial Session</h1>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td style="padding: 40px 30px;">
+                            <p style="font-size: 16px; color: #333333; line-height: 1.6; margin: 0 0 20px;">
+                                Hello <strong>{{mentorName}}</strong>,
+                            </p>
+                            <p style="font-size: 16px; color: #333333; line-height: 1.6; margin: 0 0 20px;">
+                                A free trial session has been scheduled with <strong>{{studentName}}</strong>.
+                            </p>
+
+                            <table width="100%" cellpadding="0" cellspacing="0"
+                                style="background-color: #d1fae5; border-left: 4px solid #10b981; padding: 20px; margin: 20px 0;">
+                                <tr>
+                                    <td>
+                                        <p style="margin: 0 0 10px; font-size: 14px; color: #065f46;">
+                                            <strong>Details:</strong></p>
+                                        <p style="margin: 0 0 10px; font-size: 14px; color: #065f46;">📅 <strong>Date &
+                                                Time:</strong> {{sessionDate}} at {{sessionTime}}</p>
+                                        <p style="margin: 0; font-size: 14px; color: #065f46;">🔗 <strong>Meeting
+                                                Link:</strong> <a href="{{meetingLink}}"
+                                                style="color: #10b981; text-decoration: none;">{{meetingLink}}</a></p>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <p style="font-size: 16px; color: #333333; line-height: 1.6; margin: 20px 0;">
+                                You can manage or reschedule this session anytime in your dashboard.
+                            </p>
+
+                            <p style="font-size: 16px; color: #333333; line-height: 1.6; margin: 20px 0;">
+                                Thank you for being part of EmpowerEd Learnings!
+                            </p>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td
+                            style="background-color: #f8f9fa; padding: 30px; text-align: center; border-top: 1px solid #e0e0e0;">
+                            <p style="margin: 0 0 10px; font-size: 14px; color: #666;">
+                                Best regards,<br>
+                                <strong>Team EmpowerEd</strong>
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+
+</html>

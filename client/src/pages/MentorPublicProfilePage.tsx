@@ -57,6 +57,8 @@ const MentorPublicProfilePage: React.FC = () => {
 
     const [profileTab, setProfileTab] = useState<'EXPERIENCE' | 'EDUCATION' | 'CERTIFICATIONS'>('EXPERIENCE');
 
+    const [reviews, setReviews] = useState<any[]>([]);
+
     useEffect(() => {
         const fetchMentor = async () => {
             try {
@@ -64,6 +66,10 @@ const MentorPublicProfilePage: React.FC = () => {
                 setError('');
                 const res = await api.get(`/tutor/public/${id}`);
                 setMentor(res.data.mentor);
+
+                // Fetch Reviews
+                const reviewRes = await api.get(`/reviews/tutor/${id}`);
+                setReviews(reviewRes.data.reviews || []);
             } catch (err: any) {
                 setError(err.response?.data?.error || 'Failed to load mentor profile');
             } finally {
@@ -177,8 +183,8 @@ const MentorPublicProfilePage: React.FC = () => {
                     params: {
                         from: from.toISOString(),
                         to: to.toISOString(),
-                        durationMinutes: 50,
-                        stepMinutes: 30,
+                        durationMinutes: 60,
+                        stepMinutes: 60,
                     }
                 });
 
@@ -264,7 +270,7 @@ const MentorPublicProfilePage: React.FC = () => {
                                         <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
                                             <div className="text-xs text-gray-600">Price</div>
                                             <div className="text-lg font-extrabold text-gray-900">${mentor.hourly_rate}</div>
-                                            <div className="text-xs text-gray-500">per 50 min</div>
+                                            <div className="text-xs text-gray-500">per 60 min</div>
                                         </div>
                                         <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
                                             <div className="text-xs text-gray-600">Students</div>
@@ -321,12 +327,49 @@ const MentorPublicProfilePage: React.FC = () => {
                                         </div>
 
                                         <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-6 text-center">
-                                            <div className="font-semibold text-gray-900">No Reviews Yet</div>
-                                            <div className="text-sm text-gray-600 mt-1">
-                                                {tab === 'REVIEWS'
-                                                    ? 'This tutor doesn\'t have any reviews yet.'
-                                                    : 'No external reviews available yet.'}
-                                            </div>
+                                            {tab === 'REVIEWS' ? (
+                                                <div className="space-y-4">
+                                                    {reviews && reviews.length > 0 ? (
+                                                        reviews.map((review: any) => (
+                                                            <div key={review.id} className="border-b border-gray-100 pb-4 last:border-0 text-left">
+                                                                <div className="flex items-center justify-between mb-2">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-600">
+                                                                            {review.student.username.charAt(0).toUpperCase()}
+                                                                        </div>
+                                                                        <div className="text-sm font-semibold text-gray-900">{review.student.username}</div>
+                                                                    </div>
+                                                                    <div className="text-xs text-gray-500">
+                                                                        {new Date(review.created_at).toLocaleDateString()}
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex items-center gap-1 mb-2">
+                                                                    {[...Array(5)].map((_, i) => (
+                                                                        <span key={i} className={`text-sm ${i < review.rating ? 'text-yellow-400' : 'text-gray-300'}`}>★</span>
+                                                                    ))}
+                                                                </div>
+                                                                {review.comment && (
+                                                                    <p className="text-sm text-gray-700">{review.comment}</p>
+                                                                )}
+                                                            </div>
+                                                        ))
+                                                    ) : (
+                                                        <div className="text-center py-4">
+                                                            <div className="font-semibold text-gray-900">No Reviews Yet</div>
+                                                            <div className="text-sm text-gray-600 mt-1">
+                                                                This tutor doesn't have any reviews yet.
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <div className="text-center py-4">
+                                                    <div className="font-semibold text-gray-900">No External Reviews</div>
+                                                    <div className="text-sm text-gray-600 mt-1">
+                                                        No external reviews available yet.
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     </Card>
 
@@ -585,8 +628,8 @@ const MentorPublicProfilePage: React.FC = () => {
                         </>
                     )}
                 </div>
-            </section>
-        </PageLayout>
+            </section >
+        </PageLayout >
     );
 };
 

@@ -203,7 +203,8 @@ export const getProfile = async (req: AuthenticatedRequest, res: Response) => {
                 languages: true,
                 availabilities: true,
                 google_calendar_connection: true,
-                external_reviews: true
+                external_reviews: true,
+                marketing_video_submission: true
             }
         });
 
@@ -213,6 +214,88 @@ export const getProfile = async (req: AuthenticatedRequest, res: Response) => {
     } catch (error) {
         console.error('Get Profile Error:', error);
         res.status(500).json({ error: 'Server error' });
+    }
+};
+
+export const getMarketingVideoSubmission = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+        const userId = req.user?.id;
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+        const profile = await prisma.tutorProfile.findUnique({
+            where: { user_id: userId },
+            select: { id: true, tier: true, marketing_video_submission: true, username: true }
+        });
+
+        if (!profile) return res.status(404).json({ error: 'Profile not found' });
+        if (!['PRO', 'PREMIUM'].includes(profile.tier)) {
+            return res.status(403).json({ error: 'This feature is available for Pro and Premium users only' });
+        }
+
+        return res.json({ submission: profile.marketing_video_submission });
+    } catch (error) {
+        console.error('Get Marketing Video Submission Error:', error);
+        return res.status(500).json({ error: 'Server error' });
+    }
+};
+
+export const upsertMarketingVideoSubmission = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+        const userId = req.user?.id;
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+        const profile = await prisma.tutorProfile.findUnique({
+            where: { user_id: userId },
+            select: { id: true, tier: true, username: true }
+        });
+
+        if (!profile) return res.status(404).json({ error: 'Profile not found' });
+        if (!['PRO', 'PREMIUM'].includes(profile.tier)) {
+            return res.status(403).json({ error: 'This feature is available for Pro and Premium users only' });
+        }
+
+        const { video_url, instructions, action } = req.body as {
+            video_url?: string;
+            instructions?: string;
+            action?: 'save_link' | 'request_email';
+        };
+
+        if (video_url !== undefined && typeof video_url !== 'string') {
+            return res.status(400).json({ error: 'video_url must be a string' });
+        }
+        if (instructions !== undefined && typeof instructions !== 'string') {
+            return res.status(400).json({ error: 'instructions must be a string' });
+        }
+
+        const now = new Date();
+
+        const data: any = {
+            video_url: video_url ?? null,
+            instructions: instructions ?? null,
+        };
+
+        if (action === 'request_email') {
+            data.status = 'EMAIL_REQUESTED';
+            data.email_requested_at = now;
+        } else if (action === 'save_link') {
+            data.status = 'LINK_SUBMITTED';
+            data.link_submitted_at = now;
+        }
+
+        const submission = await prisma.tutorMarketingVideoSubmission.upsert({
+            where: { tutor_id: profile.id },
+            create: {
+                tutor_id: profile.id,
+                ...data,
+                status: data.status || 'DRAFT',
+            },
+            update: data,
+        });
+
+        return res.json({ submission });
+    } catch (error) {
+        console.error('Upsert Marketing Video Submission Error:', error);
+        return res.status(500).json({ error: 'Server error' });
     }
 };
 
@@ -237,6 +320,11 @@ export const getMyStudents = async (req: AuthRequest, res: Response) => {
                         username: true,
                         profile_photo: true,
                         grade_level: true,
+                        user: {
+                            select: {
+                                email: true
+                            }
+                        }
                     }
                 }
             },
@@ -254,6 +342,7 @@ export const getMyStudents = async (req: AuthRequest, res: Response) => {
                     username: string;
                     profile_photo: string | null;
                     grade_level: string | null;
+                    email: string | null;
                 };
                 totalLessons: number;
                 nextSessionStart: Date | null;
@@ -268,7 +357,10 @@ export const getMyStudents = async (req: AuthRequest, res: Response) => {
 
             if (!existing) {
                 byStudent.set(sid, {
-                    student: l.student,
+                    student: {
+                        ...l.student,
+                        email: l.student.user.email
+                    },
                     totalLessons: 1,
                     nextSessionStart: start > now ? start : null,
                     lastSessionStart: start <= now ? start : null,
@@ -292,6 +384,10 @@ export const getMyStudents = async (req: AuthRequest, res: Response) => {
         const students = Array.from(byStudent.values())
             .map((s) => ({
                 ...s,
+                student: {
+                    ...s.student,
+                    email: s.student.email
+                },
                 nextSessionStart: s.nextSessionStart ? s.nextSessionStart.toISOString() : null,
                 lastSessionStart: s.lastSessionStart ? s.lastSessionStart.toISOString() : null,
             }))
@@ -401,7 +497,14 @@ export const updateEducation = async (req: AuthenticatedRequest, res: Response) 
                 await tx.tutorCertification.deleteMany({ where: { tutor_id: tutorId } });
                 if (certifications.length > 0) {
                     await tx.tutorCertification.createMany({
-                        data: certifications.map((cert: any) => ({ ...cert, tutor_id: tutorId }))
+                        data: certifications.map((cert: any) => ({
+                            ...cert,
+                            tutor_id: tutorId,
+                            is_verified: false,
+                            verification_status: 'PENDING',
+                            rejection_reason: null,
+                            reviewed_at: null,
+                        }))
                     });
                 }
             }
@@ -500,7 +603,14 @@ export const updateExternalReviews = async (req: AuthenticatedRequest, res: Resp
             await prisma.tutorExternalReview.deleteMany({ where: { tutor_id: tutorId } });
             if (external_reviews.length > 0) {
                 await prisma.tutorExternalReview.createMany({
-                    data: external_reviews.map((rev: any) => ({ ...rev, tutor_id: tutorId }))
+                    data: external_reviews.map((rev: any) => ({
+                        ...rev,
+                        tutor_id: tutorId,
+                        is_verified: false,
+                        verification_status: 'PENDING',
+                        rejection_reason: null,
+                        reviewed_at: null,
+                    }))
                 });
             }
         }

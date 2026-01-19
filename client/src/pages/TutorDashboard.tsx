@@ -33,6 +33,9 @@ const TutorDashboard: React.FC = () => {
     const [studentsBusy, setStudentsBusy] = useState(false);
     const [studentsCount, setStudentsCount] = useState(0);
 
+    const [activityBusy, setActivityBusy] = useState(false);
+    const [activityItems, setActivityItems] = useState<Array<{ type: 'NOTE' | 'TASK' | 'SUBMISSION'; created_at: string; data: any }>>([]);
+
     const [viewMode, setViewMode] = useState<'week' | 'month'>('week');
     const [weekStartDate, setWeekStartDate] = useState<Date>(() => {
         const now = new Date();
@@ -121,6 +124,23 @@ const TutorDashboard: React.FC = () => {
         fetchStudentsCount();
     }, []);
 
+    useEffect(() => {
+        const fetchActivity = async () => {
+            try {
+                setActivityBusy(true);
+                const res = await api.get('/progress/tutor/activity', { params: { limit: 10 } });
+                setActivityItems(res.data?.items || []);
+            } catch (e) {
+                console.error('Failed to fetch activity feed', e);
+                setActivityItems([]);
+            } finally {
+                setActivityBusy(false);
+            }
+        };
+
+        fetchActivity();
+    }, []);
+
     const weekStartMs = weekStartDate.getTime();
     const monthCursorMs = monthCursor.getTime();
 
@@ -148,8 +168,8 @@ const TutorDashboard: React.FC = () => {
                         params: {
                             from: from.toISOString(),
                             to: to.toISOString(),
-                            durationMinutes: 50,
-                            stepMinutes: 30,
+                            durationMinutes: 60,
+                            stepMinutes: 60,
                         }
                     })
                     : Promise.resolve({ data: { slots: [] } } as any)
@@ -755,6 +775,76 @@ const TutorDashboard: React.FC = () => {
 
                 {/* Right Column: Profile Status Checklist */}
                 <div className="w-full lg:w-80 space-y-6">
+                    <Card className="p-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-sm font-bold text-gray-900">Upcoming Sessions</h2>
+                        </div>
+
+                        {lessonsBusy ? (
+                            <div className="text-xs text-gray-600">Loading...</div>
+                        ) : lessons.filter(l => new Date(l.start_time) > new Date()).length === 0 ? (
+                            <div className="text-xs text-gray-600">No upcoming sessions.</div>
+                        ) : (
+                            <div className="space-y-3">
+                                {lessons
+                                    .filter(l => new Date(l.start_time) > new Date())
+                                    .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+                                    .slice(0, 3)
+                                    .map((l) => (
+                                        <div key={l.id} className="border border-gray-200 rounded-lg px-3 py-2">
+                                            <div className="flex justify-between items-start">
+                                                <div>
+                                                    <div className="text-sm font-semibold text-gray-900">{l.student?.username || 'Student'}</div>
+                                                    <div className="text-xs text-gray-600">
+                                                        {new Date(l.start_time).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} • {new Date(l.start_time).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
+                                                    </div>
+                                                </div>
+                                                {l.meeting_link && (
+                                                    <Button variant="outline" size="sm" className="h-6 text-xs px-2" onClick={() => window.open(l.meeting_link as string, '_blank')}>Join</Button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                            </div>
+                        )}
+                    </Card>
+
+                    <Card className="p-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-sm font-bold text-gray-900">Recent Notes & Homework</h2>
+                            <Button variant="outline" size="sm" className="h-7 text-xs px-3" onClick={() => navigate('/tutor/notes')}>View</Button>
+                        </div>
+
+                        {activityBusy ? (
+                            <div className="text-xs text-gray-600">Loading...</div>
+                        ) : activityItems.length === 0 ? (
+                            <div className="text-xs text-gray-600">No recent activity.</div>
+                        ) : (
+                            <div className="space-y-3">
+                                {activityItems.slice(0, 6).map((it) => (
+                                    <div key={`${it.type}:${it.data?.id || it.created_at}`} className="border border-gray-200 rounded-lg px-3 py-2">
+                                        <div className="flex items-center justify-between">
+                                            <div className="text-xs font-semibold text-gray-900">
+                                                {it.type === 'NOTE' ? 'Note' : it.type === 'TASK' ? 'Homework' : 'Submission'}
+                                                {it.data?.student?.username ? ` • ${it.data.student.username}` : ''}
+                                            </div>
+                                            <div className="text-[10px] text-gray-500">{new Date(it.created_at).toLocaleDateString()}</div>
+                                        </div>
+                                        {it.type === 'NOTE' && (
+                                            <div className="text-xs text-gray-700 mt-1 line-clamp-2">{it.data?.body || ''}</div>
+                                        )}
+                                        {it.type === 'TASK' && (
+                                            <div className="text-xs text-gray-700 mt-1 line-clamp-2">{it.data?.title || ''}</div>
+                                        )}
+                                        {it.type === 'SUBMISSION' && (
+                                            <div className="text-xs text-gray-700 mt-1 line-clamp-2">{it.data?.task?.title || 'Submission'}</div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </Card>
+
                     <Card className="p-6">
                         <div className="flex justify-between items-center mb-4">
                             <h3 className="font-bold text-gray-900">Profile Status</h3>

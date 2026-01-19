@@ -10,7 +10,9 @@ import {
     updatePricing,
     getCategories,
     updateExternalReviews,
-    updateTier
+    updateTier,
+    getMarketingVideoSubmission,
+    upsertMarketingVideoSubmission
 } from '../controllers/tutorController';
 import { authenticateToken } from '../middleware/authMiddleware'; // Assuming mock or real middleware
 
@@ -30,5 +32,7 @@ router.put('/me/services', authenticateToken, updateServices);
 router.put('/me/pricing', authenticateToken, updatePricing);
 router.put('/me/tier', authenticateToken, updateTier);
 router.put('/me/external-reviews', authenticateToken, updateExternalReviews);
+router.get('/me/marketing-video', authenticateToken, getMarketingVideoSubmission);
+router.put('/me/marketing-video', authenticateToken, upsertMarketingVideoSubmission);
 
 export default router;
