@@ -13,7 +13,7 @@ import {
     LogOut,
     Settings,
     HelpCircle,
-    Bot
+    Bot,
 } from 'lucide-react';
 
 export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -24,20 +24,22 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
     const menuItems = user?.role === 'STUDENT'
         ? [
             { icon: <User className="w-5 h-5" />, label: 'Dashboard', path: '/dashboard' },
-            { icon: <Users className="w-5 h-5" />, label: 'Find a Mentor', path: '/student/mentors' },
+            { icon: <Calendar className="w-5 h-5" />, label: 'Sessions', path: '/student/sessions' },
+            { icon: <BookOpen className="w-5 h-5" />, label: 'My Courses', path: '/student/my-courses' },
             { icon: <Users className="w-5 h-5" />, label: 'My Mentors', path: '/student/my-mentors' },
             { icon: <BookOpen className="w-5 h-5" />, label: 'Notes from Mentor', path: '/student/notes' },
-            { icon: <BookOpen className="w-5 h-5" />, label: 'My Courses', path: '/student/my-courses' },
-            { icon: <BookOpen className="w-5 h-5" />, label: 'Buy a New Course', path: '/student/mentors' },
+            { icon: <Users className="w-5 h-5" />, label: 'Find a Mentor', path: '/student/mentors' },
         ]
         : [
-            { icon: <User className="w-5 h-5" />, label: 'Profile', path: '/dashboard' },
+            { icon: <User className="w-5 h-5" />, label: 'Dashboard', path: '/dashboard' },
             { icon: <BookOpen className="w-5 h-5" />, label: 'My Courses', path: '/courses' },
             { icon: <Calendar className="w-5 h-5" />, label: 'Sessions', path: '/sessions' },
             { icon: <Users className="w-5 h-5" />, label: 'Students', path: '/students' },
             { icon: <BookOpen className="w-5 h-5" />, label: 'Notes', path: '/tutor/notes' },
             { icon: <BarChart className="w-5 h-5" />, label: 'Analytics', path: '/analytics' },
             { icon: <CreditCard className="w-5 h-5" />, label: 'Payment', path: '/payments' },
+            { icon: <CreditCard className="w-5 h-5" />, label: 'Subscription', path: '/subscription-settings' },
+            { icon: <CreditCard className="w-5 h-5" />, label: 'Connect Account', path: '/connect-account' },
             // AI Assist - Only for Pro and Premium
             ...((user?.tier === 'PRO' || user?.tier === 'PREMIUM') ? [{
                 icon: <Bot className="w-5 h-5" />,
@@ -55,7 +57,7 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
         <div className="min-h-screen bg-gray-50 flex">
             {/* Sidebar */}
             <aside className="w-64 bg-white border-r border-gray-200 fixed h-full z-10 hidden md:flex flex-col">
-                <div className="p-6">
+                <div className="p-6 flex-shrink-0">
                     <Link to="/" className="flex items-center gap-2 mb-6">
                         {/* Logo Placeholder */}
                         <img src={logo} alt="EmpowerEd Learnings" className="h-40 w-auto" />
@@ -73,7 +75,7 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
                     </div>
                 </div>
 
-                <nav className="flex-1 px-4 space-y-2 mt-2">
+                <nav className="flex-1 px-4 space-y-2 mt-2 overflow-y-auto min-h-0">
                     {menuItems.map((item) => (
                         <Link
                             key={item.label}
@@ -89,21 +91,19 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
                     ))}
                 </nav>
 
-                <div className="p-4 border-t border-gray-100 space-y-1">
+                <div className="p-4 border-t border-gray-100 space-y-1 flex-shrink-0">
                     <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-600 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors">
                         <LogOut className="w-5 h-5" />
                         Log out
                     </button>
-                    <Link to="/help" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-lg">
+                    <Link to="/help" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-lg hidden">
                         <HelpCircle className="w-5 h-5" />
                         Help & Support
                     </Link>
-                    {user?.role !== 'STUDENT' && (
-                        <Link to="/subscription-settings" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-lg">
-                            <Settings className="w-5 h-5" />
-                            Settings
-                        </Link>
-                    )}
+                    <Link to="/settings" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-lg">
+                        <Settings className="w-5 h-5" />
+                        Settings
+                    </Link>
                 </div>
             </aside>
 

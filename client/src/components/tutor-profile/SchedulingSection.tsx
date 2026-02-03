@@ -34,7 +34,14 @@ export const SchedulingSection: React.FC<SchedulingSectionProps> = ({ onBack }) 
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
-    const [timezone, setTimezone] = useState('UTC');
+    const browserTimezone = useMemo(() => {
+        try {
+            return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+        } catch {
+            return 'UTC';
+        }
+    }, []);
+
     const [rules, setRules] = useState<WeeklyRule[]>([]);
 
     const [blocksLoading, setBlocksLoading] = useState(false);
@@ -50,26 +57,10 @@ export const SchedulingSection: React.FC<SchedulingSectionProps> = ({ onBack }) 
         };
     });
 
-    const timezones = useMemo(() => {
-        // Best-effort; not supported in all environments.
-        // If unavailable, keep a small curated list.
-        const fallback = ['UTC', 'Asia/Dubai', 'Asia/Karachi', 'Europe/London', 'America/New_York', 'America/Los_Angeles'];
-        const anyIntl: any = Intl as any;
-        if (typeof anyIntl?.supportedValuesOf === 'function') {
-            try {
-                return anyIntl.supportedValuesOf('timeZone');
-            } catch {
-                return fallback;
-            }
-        }
-        return fallback;
-    }, []);
-
     const fetchScheduling = async () => {
         setLoading(true);
         try {
             const res = await api.get('/scheduling/me');
-            setTimezone(res.data?.timezone || 'UTC');
             setRules(res.data?.availabilities || []);
 
             // Blocks are included in /scheduling/me but we also support listing.
@@ -115,7 +106,7 @@ export const SchedulingSection: React.FC<SchedulingSectionProps> = ({ onBack }) 
     const saveAll = async () => {
         setSaving(true);
         try {
-            await api.put('/scheduling/me/timezone', { timezone });
+            await api.put('/scheduling/me/timezone', { timezone: browserTimezone });
             await api.put('/scheduling/me/availability', { rules: rules.map(r => ({
                 day_of_week: r.day_of_week,
                 start_time: r.start_time,
@@ -163,21 +154,6 @@ export const SchedulingSection: React.FC<SchedulingSectionProps> = ({ onBack }) 
                 <Button variant="ghost" onClick={onBack}>&larr; Back</Button>
                 <h2 className="text-2xl font-bold text-gray-900">Scheduling</h2>
             </div>
-
-            <Card className="p-6">
-                <h3 className="font-bold text-lg mb-1">Timezone</h3>
-                <p className="text-sm text-gray-500 mb-4">This timezone will be used to display your schedule. (Slots are stored/processed in UTC for now.)</p>
-
-                <select
-                    className="w-full max-w-md border border-gray-300 rounded-lg px-3 py-2"
-                    value={timezone}
-                    onChange={(e) => setTimezone(e.target.value)}
-                >
-                    {timezones.map((tz: string) => (
-                        <option key={tz} value={tz}>{tz}</option>
-                    ))}
-                </select>
-            </Card>
 
             <Card className="p-6">
                 <div className="flex items-center justify-between gap-3 mb-4">

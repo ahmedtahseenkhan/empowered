@@ -9,41 +9,23 @@ import { useAuth } from '../context/AuthContext';
 
 type Frequency = 'ONCE' | 'WEEKLY' | 'TWICE_WEEKLY' | 'THRICE_WEEKLY';
 
-type Subject =
-    | 'Mathematics'
-    | 'Science'
-    | 'English & Literature'
-    | 'History & Social Studies'
-    | 'Test Prep & College Readiness'
-    | 'Other';
-
-type Goal =
-    | 'Improve grades'
-    | 'Prepare for exams'
-    | 'Standardized tests'
-    | 'Understand difficult concepts';
-
-const SUBJECT_OPTIONS: Subject[] = [
-    'Mathematics',
-    'Science',
-    'English & Literature',
-    'History & Social Studies',
-    'Test Prep & College Readiness',
-    'Other',
-];
-
-const GOAL_OPTIONS: Goal[] = [
-    'Improve grades',
-    'Prepare for exams',
-    'Standardized tests',
-    'Understand difficult concepts',
-];
+type CategoryNode = {
+    id: string;
+    name: string;
+    children?: CategoryNode[];
+};
 
 const FindMentorPage: React.FC = () => {
     const navigate = useNavigate();
-    const { login } = useAuth();
+    const { login, user } = useAuth();
 
-    const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1);
+    const [step, setStep] = useState<1 | 2 | 3 | 4 | 5 | 6>(1);
+
+    React.useEffect(() => {
+        if (user?.role === 'STUDENT' && step === 1) {
+            navigate('/student/mentors', { replace: true });
+        }
+    }, [navigate, step, user?.role]);
 
     const [formData, setFormData] = useState({
         firstName: '',
@@ -53,13 +35,17 @@ const FindMentorPage: React.FC = () => {
         confirmPassword: '',
         grade: '' as string,
         age: '' as string,
-        subjects: [] as Subject[],
-        goals: [] as Goal[],
         frequency: 'WEEKLY' as Frequency,
+        majorCategoryId: '' as string,
+        subcategoryId: '' as string,
+        areaIds: [] as string[],
     });
 
     const [error, setError] = useState<string>('');
     const [busy, setBusy] = useState(false);
+
+    const [catsBusy, setCatsBusy] = useState(false);
+    const [categories, setCategories] = useState<CategoryNode[]>([]);
 
     const canSubmit = useMemo(() => {
         const emailOk = /\S+@\S+\.\S+/.test(formData.email);
@@ -72,6 +58,34 @@ const FindMentorPage: React.FC = () => {
         if (arr.includes(value)) return arr.filter(v => v !== value);
         return [...arr, value];
     };
+
+    React.useEffect(() => {
+        const fetchCategories = async () => {
+            try {
+                setCatsBusy(true);
+                const res = await api.get('/tutor/categories');
+                setCategories(res.data || []);
+            } catch (e) {
+                console.error('Failed to load categories', e);
+                setCategories([]);
+            } finally {
+                setCatsBusy(false);
+            }
+        };
+        fetchCategories();
+    }, []);
+
+    const selectedMajor = useMemo(() => {
+        return categories.find((c) => c.id === formData.majorCategoryId) || null;
+    }, [categories, formData.majorCategoryId]);
+
+    const subcategories = useMemo(() => selectedMajor?.children || [], [selectedMajor]);
+
+    const selectedSubcategory = useMemo(() => {
+        return subcategories.find((c) => c.id === formData.subcategoryId) || null;
+    }, [formData.subcategoryId, subcategories]);
+
+    const areas = useMemo(() => selectedSubcategory?.children || [], [selectedSubcategory]);
 
     const onNext = () => {
         setError('');
@@ -104,11 +118,20 @@ const FindMentorPage: React.FC = () => {
         }
 
         if (step === 4) {
-            if (formData.subjects.length === 0) {
-                setError('Please select at least one subject.');
+            if (!formData.majorCategoryId) {
+                setError('Please select a major category.');
                 return;
             }
             setStep(5);
+            return;
+        }
+
+        if (step === 5) {
+            if (!formData.subcategoryId) {
+                setError('Please select a subcategory.');
+                return;
+            }
+            setStep(6);
             return;
         }
     };
@@ -117,7 +140,7 @@ const FindMentorPage: React.FC = () => {
         setError('');
         setStep((prev) => {
             if (prev === 1) return 1;
-            return (prev - 1) as 1 | 2 | 3 | 4 | 5;
+            return (prev - 1) as 1 | 2 | 3 | 4 | 5 | 6;
         });
     };
 
@@ -125,8 +148,8 @@ const FindMentorPage: React.FC = () => {
         const run = async () => {
             setError('');
 
-            if (formData.goals.length === 0) {
-                setError('Please select at least one goal.');
+            if (formData.areaIds.length === 0) {
+                setError('Please select at least one area of expertise.');
                 return;
             }
 
@@ -139,10 +162,11 @@ const FindMentorPage: React.FC = () => {
             params.set('frequency', formData.frequency);
             params.set('grade', formData.grade);
             params.set('age', formData.age);
-            params.set('subjects', formData.subjects.join(','));
-            params.set('goals', formData.goals.join(','));
+            params.set('majorCategoryId', formData.majorCategoryId);
+            params.set('subcategoryId', formData.subcategoryId);
+            params.set('areaIds', formData.areaIds.join(','));
 
-            const q = [...formData.subjects, ...formData.goals].join(' ');
+            const q = areas.filter((a) => formData.areaIds.includes(a.id)).map((a) => a.name).join(' ');
             if (q.trim()) params.set('q', q);
 
             const username = `${formData.firstName.trim()} ${formData.lastName.trim()}`.trim();
@@ -159,8 +183,9 @@ const FindMentorPage: React.FC = () => {
                 sessionStorage.setItem('assessmentAnswers', JSON.stringify({
                     grade: formData.grade,
                     age: formData.age,
-                    subjects: formData.subjects,
-                    goals: formData.goals,
+                    majorCategoryId: formData.majorCategoryId,
+                    subcategoryId: formData.subcategoryId,
+                    areaIds: formData.areaIds,
                     frequency: formData.frequency,
                 }));
 
@@ -320,22 +345,29 @@ const FindMentorPage: React.FC = () => {
                         {step === 4 && (
                             <div className="space-y-6">
                                 <div className="text-2xl md:text-3xl font-bold text-gray-900">
-                                    Which subject(s) do you need help with?
+                                    Choose a major category
                                 </div>
 
-                                <div className="space-y-3">
-                                    {SUBJECT_OPTIONS.map((s) => (
-                                        <label key={s} className="flex items-center gap-3 text-lg text-gray-900">
-                                            <input
-                                                type="checkbox"
-                                                className="h-5 w-5"
-                                                checked={formData.subjects.includes(s)}
-                                                onChange={() => setFormData({ ...formData, subjects: toggleArrayValue(formData.subjects, s) })}
-                                            />
-                                            {s}
-                                        </label>
-                                    ))}
-                                </div>
+                                {catsBusy ? (
+                                    <div className="text-sm text-gray-600">Loading categories...</div>
+                                ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                        {categories.map((c) => {
+                                            const active = formData.majorCategoryId === c.id;
+                                            return (
+                                                <button
+                                                    key={c.id}
+                                                    type="button"
+                                                    onClick={() => setFormData({ ...formData, majorCategoryId: c.id, subcategoryId: '', areaIds: [] })}
+                                                    className={`p-4 rounded-lg border text-left transition-colors ${active ? 'border-purple-600 bg-purple-50' : 'border-gray-200 hover:bg-gray-50'}`}
+                                                >
+                                                    <div className="font-semibold text-gray-900">{c.name}</div>
+                                                    <div className="text-xs text-gray-600 mt-1">{(c.children || []).length} subcategories</div>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                )}
 
                                 <div className="flex items-center gap-3 justify-center">
                                     <Button variant="outline" onClick={onBack}>Back</Button>
@@ -347,26 +379,68 @@ const FindMentorPage: React.FC = () => {
                         {step === 5 && (
                             <div className="space-y-6">
                                 <div className="text-2xl md:text-3xl font-bold text-gray-900">
-                                    What is your main goal for hiring a Mentor? (select all that apply)
+                                    Choose a subcategory
                                 </div>
 
-                                <div className="space-y-3">
-                                    {GOAL_OPTIONS.map((g) => (
-                                        <label key={g} className="flex items-center gap-3 text-lg text-gray-900">
-                                            <input
-                                                type="checkbox"
-                                                className="h-5 w-5"
-                                                checked={formData.goals.includes(g)}
-                                                onChange={() => setFormData({ ...formData, goals: toggleArrayValue(formData.goals, g) })}
-                                            />
-                                            {g}
-                                        </label>
-                                    ))}
-                                </div>
+                                {!selectedMajor ? (
+                                    <div className="text-sm text-gray-600">Please select a major category first.</div>
+                                ) : subcategories.length === 0 ? (
+                                    <div className="text-sm text-gray-600">No subcategories found for this category.</div>
+                                ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        {subcategories.map((sc) => {
+                                            const active = formData.subcategoryId === sc.id;
+                                            return (
+                                                <button
+                                                    key={sc.id}
+                                                    type="button"
+                                                    onClick={() => setFormData({ ...formData, subcategoryId: sc.id, areaIds: [] })}
+                                                    className={`p-4 rounded-lg border text-left transition-colors ${active ? 'border-purple-600 bg-purple-50' : 'border-gray-200 hover:bg-gray-50'}`}
+                                                >
+                                                    <div className="font-semibold text-gray-900">{sc.name}</div>
+                                                    <div className="text-xs text-gray-600 mt-1">{(sc.children || []).length} areas</div>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                )}
 
                                 <div className="flex items-center gap-3 justify-center">
                                     <Button variant="outline" onClick={onBack}>Back</Button>
-                                    <Button onClick={handleFinish} disabled={busy}>Continue</Button>
+                                    <Button onClick={onNext} disabled={busy}>Continue</Button>
+                                </div>
+                            </div>
+                        )}
+
+                        {step === 6 && (
+                            <div className="space-y-6">
+                                <div className="text-2xl md:text-3xl font-bold text-gray-900">
+                                    Select area(s) of expertise (choose all that apply)
+                                </div>
+
+                                {!selectedSubcategory ? (
+                                    <div className="text-sm text-gray-600">Please select a subcategory first.</div>
+                                ) : areas.length === 0 ? (
+                                    <div className="text-sm text-gray-600">No areas found for this subcategory.</div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {areas.map((a) => (
+                                            <label key={a.id} className="flex items-center gap-3 text-lg text-gray-900">
+                                                <input
+                                                    type="checkbox"
+                                                    className="h-5 w-5"
+                                                    checked={formData.areaIds.includes(a.id)}
+                                                    onChange={() => setFormData({ ...formData, areaIds: toggleArrayValue(formData.areaIds, a.id) })}
+                                                />
+                                                {a.name}
+                                            </label>
+                                        ))}
+                                    </div>
+                                )}
+
+                                <div className="flex items-center gap-3 justify-center">
+                                    <Button variant="outline" onClick={onBack}>Back</Button>
+                                    <Button onClick={handleFinish} disabled={busy}>Create account & see mentors</Button>
                                 </div>
                             </div>
                         )}

@@ -20,11 +20,18 @@ import schedulingRoutes from './routes/schedulingRoutes';
 import studentRoutes from './routes/studentRoutes';
 import reviewRoutes from './routes/reviewRoutes';
 import progressRoutes from './routes/progressRoutes';
+
 import uploadRoutes from './routes/uploadRoutes';
 import adminRoutes from './routes/adminRoutes';
+import paymentRoutes from './routes/paymentRoutes';
+import webhookRoutes from './routes/webhookRoutes';
 
 // Middleware
 app.use(cors());
+
+// Webhooks must be mounted BEFORE express.json() to consume raw body
+app.use('/api/stripe', webhookRoutes);
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
@@ -41,8 +48,10 @@ app.use('/api/scheduling', schedulingRoutes);
 app.use('/api/student', studentRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/progress', progressRoutes);
+
 app.use('/api/uploads', uploadRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/payments', paymentRoutes);
 
 // Health Check
 app.get('/', (req, res) => {

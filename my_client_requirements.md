@@ -605,6 +605,7 @@ Makeup session credits instead of refunds (From mentors) New!
 
 
 Direct messages with mentor
+Notes received from Mentor, show history of receive and sent messages.
 
 
 Secure payments & reminders
@@ -839,7 +840,7 @@ Our holistic approach goes beyond just academic and professional development. We
 
 
 
-Tutor Dashboard 
+Mentor  Dashboard 
 Step-by-Step Process to the Dashboard
 Click on work with us 
 Select plan 
@@ -857,40 +858,125 @@ Academic Tutoring
 Skill Development
 Life Coaching
 Subcategories: To provide a more tailored experience for students, each main category contains specialized subcategories: (select one subcategory, mandatory step) Standard Plan.
-
-premium members can select Two major Categories and up to Three subcategories)  
-
-Academic Tutoring: (Major)
-
-Subcategories
-
-1️⃣ Subcategories: Mathematics (Algebra, Geometry, Calculus, Trigonometry, Statistics)
-2️⃣ Science (Biology, Chemistry, Physics, Environmental Science, Anatomy & Physiology)
-3️⃣ English & Literature (Grammar, Essay Writing, Reading Comprehension, Creative Writing, AP English)
-4️⃣ History & Social Studies (World History, U.S. History, Civics & Government, Geography, Economics)
-5️⃣ Test Prep & College Readiness (SAT, ACT, AP Exams, GED, College Application Essays)
+Category Selection System — Functional Spec
+1️⃣ Category Hierarchy (3-Level Structure)
+Level 1: Major Category
+ Mentors choose from:
+Academic Tutoring
 
 
-Skill Development: (Major)
+Skill Development
 
-Subcategories: 
 
-1️⃣ Coding  (Python, Java, C++, JavaScript, Swift, App Development)
-2️⃣ Business & Entrepreneurship (Marketing, Business Strategy, Sales, E-commerce, Startups)
-3️⃣ Financial Literacy (Budgeting, Investing, Taxes, Credit Management, Wealth Building)
-4️⃣ Music & Arts  (Instrumental Lessons, Vocal Training, Music Production, painting, drawing, digital art)
+Life Coaching
 
-5️⃣Public Speaking & Communication (Presentation Skills, Storytelling, Debate, Speech Writing, Persuasion)
 
-Life Coaching: (Major)
+Level 2: Subcategory
+ Each Major Category contains multiple Subcategories.
+Level 3: Area of Expertise
+ Each Subcategory contains predefined Areas of Expertise.
+ ➡️ Mentors may select unlimited Areas of Expertise within a chosen Subcategory.
 
-Subcategories: 
+2️⃣ Plan-Based Selection Rules (Hard Limits)
+Standard Plan
+Major Categories: 1
 
-1️⃣ Confidence Building  (Boosting Self-Esteem, Overcoming Self-Doubt, Building Resilience, Assertiveness)
-2️⃣ Emotional Intelligence (Managing Emotions, Stress Reduction, Self-Awareness, Mindful Living)
-3️⃣ Productivity (Time Management, Habit Formation, Prioritization, Motivation, Actionable Goal Setting)
-4️⃣ Leadership Development ( Decision-Making, Ethical Leadership, Conflict Resolution, Networking, Influence)
-5️⃣ Social Skills (Overcoming Social Anxiety, Effective Communication, Persuasion, Relationship Building)
+
+Subcategories: 1 (under the selected Major)
+
+
+Areas of Expertise: Unlimited (within the selected Subcategory)
+
+
+❌ Cannot list in multiple Major Categories
+
+
+❌ Cannot select multiple Subcategories
+
+
+Pro Plan
+Major Categories: 1
+
+
+Subcategories: Up to 3 (under the same Major)
+
+
+Areas of Expertise: Unlimited (within each selected Subcategory)
+
+
+❌ Cannot list in multiple Major Categories
+
+
+Premium Plan
+Major Categories: Up to 3
+
+
+Subcategories: Up to 3 per Major Category
+
+
+Areas of Expertise: Unlimited (within each selected Subcategory)
+
+
+
+3️⃣ Category Definitions
+Academic Tutoring (Major Category)
+Subcategories & Areas of Expertise
+Mathematics (Subcategory)
+ Areas of Expertise (multi-select): Algebra • Geometry • Calculus • Trigonometry • Statistics
+Science
+Biology • Chemistry • Physics • Environmental Science • Anatomy & Physiology
+English & Literature
+Grammar • Essay Writing • Reading Comprehension • Creative Writing • AP English
+History & Social Studies
+World History • U.S. History • Civics & Government • Geography • Economics
+Test Prep & College Readiness
+SAT • ACT • AP Exams • GED • College Application Essays
+
+Skill Development (Major Category)
+Subcategories & Areas of Expertise
+Coding
+ Python • Java • C++ • JavaScript • Swift • App Development
+Business & Entrepreneurship
+ Marketing • Business Strategy • Sales • E-commerce • Startups
+Financial Literacy
+ Budgeting • Investing • Taxes • Credit Management • Wealth Building
+Music & Arts
+ Instrumental Lessons • Vocal Training • Music Production • Painting • Drawing • Digital Art
+Public Speaking & Communication
+ Presentation Skills • Storytelling • Debate • Speech Writing • Persuasion
+
+Life Coaching (Major Category)
+Subcategories & Areas of Expertise
+Confidence Building
+ Boosting Self-Esteem • Overcoming Self-Doubt • Building Resilience • Assertiveness
+Emotional Intelligence
+ Managing Emotions • Stress Reduction • Self-Awareness • Mindful Living
+Productivity
+ Time Management • Habit Formation • Prioritization • Motivation • Actionable Goal Setting
+
+4️⃣ UX / Logic Notes for Development
+Subcategories are locked until a Major Category is selected
+
+
+Area of Expertise checkboxes appear only after Subcategory selection
+
+
+Plan limits must be validated at selection time, not submission
+
+
+Upgrade CTA triggers when user attempts to exceed plan limits
+
+
+Category selections directly affect:
+
+
+Marketplace discoverability
+
+
+Search filters
+
+
+Visibility eligibility (Pro / Premium)
 
 
 4. Dashboard Acces
@@ -913,7 +999,7 @@ Thank you for reaching out to our Help & Support team. We’ve received your mes
 
 
 
-Dashboard Buttons and Features: 
+Mentor Dashboard Buttons and Features: 
 
 Profile
 Section to share a personal introduction.
@@ -954,12 +1040,13 @@ Add Featured Review Option (Pro and Premium Plans Only):
 Featured Highlight: Pro and Premium plan users can select one review to highlight at the top of their profile. This review will appear prominently, with a "Featured" label for added emphasis.
 The featured review should appear at the top of the reviews section, with a visual distinction (e.g., different background color or border) to draw attention.
 Boost Visibility: Profiles with a featured review can be moved higher in search results or filtered lists, giving them greater exposure.
+AI Asisst: Add this button in Mentor Dasboard (Pro and Premium Plans Only
 Class Scheduling: Add a dedicated section for "Class Scheduling" where tutors can view upcoming and past scheduled sessions. Optionally, include a "Copy Link" feature for tutors to quickly copy the meeting link if they need to share it.
 Calendar Integration: Sync calendar with scheduling tools for easy booking and rescheduling. Allow for setting blackout dates and availability.
 Rescheduling Policy: Include a text option where teachers can put details on how and when lessons can be rescheduled.
 Students Enrolled: Displays the total number of students enrolled.
 Payment Information: Displays payment status for each student. Tutors can click to view details, such as payment history or upcoming payments.
-Student Progress Tracking (put it in the students tab) Add notes and track each student’s progress to better personalize future sessions.Show history of sent notes on the dashboard. 
+Student Progress Tracking (put it in the students tab) Add notes and track each student’s progress to better personalize future sessions.Show history of sent and received notes on the dashboard. 
 Support: Include an easy way to contact support for technical help or onboarding assistance via email only. 
 Account Settings: Include account information and subscription plan details with the option to upgrade, downgrade, or cancel.
 Mobile-Friendly Design: Ensure the dashboard is responsive and works seamlessly on mobile devices, with all key features easily accessible.
@@ -974,7 +1061,7 @@ Add Course Details: Include fields for tutors to enter the course title, descrip
 Pricing Setup: Provide an option to set a price for the course.
 Integrate with a payment gateway (such as Stripe) to enable smooth and secure course payments.
 Course Preview Option: Allow tutors to upload a preview video/image (short introductory clip) that potential students can see before purchasing.
-Sale Tracking: Enable tutors to track course sales through the dashboard.
+Sale Tracking: Enable Mentors to track course sales through the dashboard.
 Student Access: Once a student purchases a course, they should receive an automated email with access instructions and a link to the course content.
 
 
@@ -1107,8 +1194,10 @@ This policy may be updated periodically. We will notify you of significant chang
 Student Dashboard 
 Bio info of their Teacher/coach/instructor
 Classes they enrolled in 
+Mentors
 Courses they bought 
 Teacher calendar and rescheduling option 
+Notes receive from Mentor, Show history of receive and sent messages 
 Put it on the top of the calendars: Rescheduling policy Notice on the website: Sessions may only be rescheduled if 24 or more hours remain before the scheduled start time. Kindly ensure any rescheduling is done at least 24 hours in advance.
 
 Teacher NotesThank you for reaching out! Our Help & Support team is on it and will get back to you within one business day.
@@ -1121,11 +1210,11 @@ Courses Purchased: Display any pre-recorded courses or tutorials the student has
 Provide access to the course link.
 Calendar + Payment: Show a calendar view with scheduled classes. Allow students to schedule or reschedule classes by clicking on available time slots. Include a color-coded system to differentiate between scheduled, rescheduled, and completed classes.
 Email Your Mentor: A button that opens a default email client (e.g., Google or Outlook) to compose a new email to the assigned teacher's email address. For convenience, the email subject line can be pre-filled with the course name.
-Notes from the Mentor(s): Display any notes or feedback provided by the teacher for each class and each Mentor
+Notes from the Mentor(s): Display any notes or feedback provided by the teacher for each class and each Mentor. Show history of sent and received notes 
 Upcoming Notifications Panel: Display a small section for notifications about upcoming classes.
 Support Button: A quick link to contact customer support for any issues or queries related to the platform.
 Mobile-Friendly Design: Ensure the dashboard is responsive and works seamlessly on mobile devices, with all key features easily accessible.
-My Mentors: Display all selected mentors, and put a button to cancel payment for the mentor for the upcoming session(s). 
+My Mentors: Display all selected mentors, and put a button to cancel payment for the mentor for the upcoming session(s). (Weekly payments). Give a button to Review Mentor Under Mentors Name to Review Mentor after completely One session Free Tral/ Regular Session . 
 Booking Window: When they select the mentor and select their session frequency (once, twice, thrice week) Show the total payment as weekly payment. 
 Add Note: You will be charged weekly based on your selected time slots. You can cancel your weekly payments anytime before the next billing cycle.
 
@@ -1135,6 +1224,27 @@ Add Note: To avoid being charged for the next week, please stop before your next
 
 Rescheduling Policy:
 Sessions can only be rescheduled 24 hours or more in advance. Rescheduling must be coordinated directly with your mentor based on their available time slots. EmpowerED Learnings does not facilitate or mediate rescheduling — it is solely between the student and the mentor.
+
+
+My Mentor(s) card: 
+Mentor Name] – ![Verified Badge Icon] (hover: “Credentials reviewed & verified by EmpowerED Learnings”)
+ 📅 Enrolled: [MM/DD/YYYY]
+ 📊 Progress: ![Progress Badge Color] [Good / Excellent / Needs Improvement]
+ 📚 Total Sessions: [X] | ⏳ Pending Sessions: [X]
+ 🕒 Last Session: [Date] | 📅 Next Session: [Date]
+Profile Link: View Mentor Profile → (Opens full profile page)
+Actions:
+📧 Email Mentor — Ask questions or share files.
+Notes From Mentor- Sent and receive notes.
+Review Mentor: 
+
+
+📅 Book a Session — Reserve your next time slot.
+
+
+⛔ Stop Upcoming Payments — End payments for this mentor.
+
+
 
 
 
@@ -1178,16 +1288,8 @@ You might want a "Dashboard / Home" item so students can always jump back to thi
 
 
 
-Main Panel
-"Authorize" button — function is clear, but button label could be more descriptive:
 
 
-"Authorize Google Calendar"
- “Authorize this platform with your Google account to sync your events so you stay updated and get the most from your calendar.”
-
-Mentor Card Layout
-
-"Mentors You’ve Scheduled Sessions With"
 Mentor Name] – ![Verified Badge Icon] (hover: “Credentials reviewed & verified by EmpowerED Learnings”)
  📅 Enrolled: [MM/DD/YYYY]
  📊 Progress: ![Progress Badge Color] [Good / Excellent / Needs Improvement]
@@ -1196,6 +1298,8 @@ Mentor Name] – ![Verified Badge Icon] (hover: “Credentials reviewed & verifi
 Profile Link: View Mentor Profile → (Opens full profile page)
 Actions:
 📧 Email Mentor — Ask questions or share files.
+Notes From Mentor- Sent and receive notes.
+Review Mentor: 
 
 
 📅 Book a Session — Reserve your next time slot.
@@ -1206,18 +1310,9 @@ Actions:
 
 
 
-Visual Elements to Add:
-Verified Badge: Small shield/checkmark icon next to mentor’s name with hover tooltip:
-
-
- "Credentials reviewed & verified by EmpowerED Learnings"
 
 
 
-Progress Bar: Under “Progress” badge, a thin color-coded bar showing completion % of booked lessons.
-
-
-Profile Photo: Circle crop for a clean, professional look.
 
 Color-Coded Progress Badges
 Status
@@ -1262,25 +1357,13 @@ Payments Schedule: A section showing the payment schedule for each tutor, detail
 The amount charged, Next payment date, and Payment status (e.g., Completed, Pending, Failed), Include an export feature to download payment data for reporting purposes.
 Student Enrollment Metrics: Display the total number of students enrolled on the platform. Include a button that provides detailed information on the student's name, Courses enrolled, and Payment information (if relevant and secure to share).
 An option to export this data for analysis.
-Queries and Complaints: A button that opens a section for viewing queries and complaints submitted by tutors/coaches and students. Features to include: Filter by date, urgency, tutor name, or student’s name. 
-Follow-Up Response Template for Queries and Complaints: 
-Subject: Re: Your Support Request at EmpowerED Learnings
-Hi [Name],
-Thanks for reaching out to EmpowerED Learnings! We’ve reviewed your query and here’s what we found:
-[Insert personalized response here — answer their question, provide steps, or let them know it's being escalated.]
-If you have any more questions or need further assistance, feel free to reply to this email. We’re always here to help.
-Warm regards,
- The EmpowerED Learnings Support Team
- [Support Email Address] | [Website URL]
-
-
-
+Queries and Complaints: A button that opens a section for viewing queries and complaints submitted by tutors/coaches and students. Features to include: Filter by date, urgency, tutor name, or student’s name.
 
 
 Admin approve/verified button for certificates and external reviews: 
 
 Course Sales Overview: Display sales metrics for pre-recorded courses or tutorials sold through the platform. Include the Total sales amount,  Number of courses, and sold Popular courses based on sales data.
-Mentor Account Management: A section to manage tutor accounts effectively, with options to:
+Mentor Account Management: A section to manage Mentor accounts effectively, with options to:
 Deactivate/Suspend Accounts: Provide a simple toggle or button for suspending a tutor's account temporarily.
 Remove Mentor from the Platform: Include a button to remove a tutor entirely when they cancel their subscription, with a confirmation prompt to prevent accidental removals.
 Notifications Panel: A small section for alerts regarding upcoming subscription renewals, upcoming demo call. pending payments, or unresolved queries to ensure timely actions.
@@ -1399,13 +1482,6 @@ Area of Expertise
 
 
 
-Content Changes for Mentor Dashboard 
-
-Under Profile Completion Status:
-“Your profile must be 100% complete and verified before it goes live to the public.”
-
-Under Current Plan 
-“You are currently on a free trial . After your trial ends, you will be charged X amount 
 Cancel Subscription
  Are you sure you want to cancel your subscription?
  Upcoming Payment: $390 (billed every 6 months)   Next Billing Date: [Show date here dynamically]
@@ -1861,4 +1937,292 @@ You can view or manage your sessions anytime in your dashboard:
 Get ready to make the most of your session — your mentor is excited to guide you today!
 Best Regards,
 EmpowerEd Learnings Team
+
+
+
+
+
+
+
+
+
+
+
+
+Stripe Payment Structure 
+
+
+Students pay a small booking fee (lower when billed every 4 weeks). Mentors pay a small payout processing fee. Payouts are batched to reduce fees and protect unit economics
+
+Student Dashboard — Payments & Bookings (MVP)
+
+1) Book a Mentor Flow (checkout-ready)
+Step 1: Choose a Mentor
+
+
+Step 2: Start with a Free Trial (25 minutes session)  (strongly encouraged)
+A) Free Trial Checkout
+ Text: “Try your mentor first. No long-term commitment.”
+ Price: $0.00
+ What you get: 1 trial session scheduled
+Button: Book Free Trial
+
+B) (Pay Weekly per Invoice)
+Header: Pay Weekly (Most Flexible)
+Line items (example: $30 session):
+Session (1x weekly): $30.00
+
+
+EmpowerED Platform Fee (10%): $3.00 (“Platform fee covers secure payments, scheduling tools, support, and booking protection.”)
+
+ Total due today: $33.00
+
+
+Recurring billing note (under total):
+ “You will be billed $33.00 every week. Your next billing date is [date].”
+ Policies (small text, but visible):
+Cancel upcoming payments anytime before your next billing cycle.
+
+
+Payments cannot be canceled if your next session is less than 24 hours away.
+
+
+If a session is canceled due to unforeseen circumstances, you receive a full-session credit you can use anytime with this mentor.
+
+
+Button: Confirm Weekly Plan
+
+C) Monthly Plan Checkout (Pay for Next 4 Sessions) (Per Invoice) (FUTURE FEATURE)
+Header: Pay Monthly (Lower Platform Fee) Monthly billing has a lower platform fee than weekly
+Line items (example: $/session × 4 sessions):
+Sessions (4): 
+
+
+EmpowerED Platform Fee (5%):  (“Platform fee covers secure payments, scheduling tools, support, and booking protection.”)
+
+ Total due today: $126.00
+
+
+Renewal note:
+ “You will be billed $126.00 every 4 weeks to cover your next 4 scheduled sessions.”
+Policies:
+Cancel upcoming payments anytime before your next billing cycle.
+
+
+Payments cannot be canceled if your next session is less than 24 hours away.
+
+
+If a session is canceled due to unforeseen circumstances, you receive a full-session credit you can use anytime with this mentor.
+
+
+Button: Confirm Monthly Plan
+
+
+
+2) Scheduling Logic (auto-generated rebooking)
+After the student confirms payment plan:
+Weekly Plan
+The system auto-schedules the next 3 sessions (same day/time) to keep a 4-week runway:
+
+
+Session #1 (this week)
+
+
+Session #2 (next week)
+
+
+Session #3
+
+
+Session #4
+
+
+After each weekly successful payment, the system adds one more session ahead.
+
+
+Monthly Plan (4 sessions)
+The system schedules the next 4 sessions immediately.
+
+
+Monthly renews every 4 sessions.
+
+
+
+3) Student Payments Page (what they see)
+Payment Plan Card
+Current plan: Weekly or Monthly
+
+
+Mentor rate: $X/session
+
+
+Platform fee:
+
+
+Weekly: 10%
+
+
+Monthly: 5%
+
+
+Next billing date
+
+
+Amount due next billing date
+
+
+Payment method on file (edit)
+
+
+Cancel / Manage Payments Button
+Button: “Cancel upcoming payments”
+Rules shown clearly:
+✅ “You can cancel future payments any time before your next billing cycle.”
+
+
+❌ “Payments cannot be canceled if there’s less than 24 hours remaining before your next scheduled session.”
+
+
+Copy:
+
+
+“If you cancel, you will not be billed again. Any already-scheduled session within the next 24 hours remains booked.”
+
+
+(Implementation note for your dev: your app controls this rule; Stripe won’t enforce the 24-hour rule automatically.)
+
+4) Booking Policy & Credits (student-facing)
+Cancellation Policy Card
+“You may cancel upcoming payments before the next billing cycle.”
+
+
+“You cannot cancel if your next session is less than 24 hours away.”
+
+
+“Missed/late cancellations may forfeit that session.”
+
+
+Credit Protection (Unforeseen cancellations) (FUTURE FEATURE)
+If a session is canceled due to unforeseen circumstances (mentor-side cancellation or approved exception):
+“You receive a full lesson credit.”
+
+
+“Credit can be used any time with the same mentor.”
+
+
+“Credits never expire (or set your policy: ‘valid for 90 days’).”
+
+
+Credits Wallet ((FUTURE FEATURE)
+Total credits available
+
+
+“Use credit” button when booking future sessions
+
+
+Credit history (earned / used)
+
+
+
+5) Student Session Timeline (simple)
+A timeline view:
+Next session (countdown + “Join session” button)
+
+
+Upcoming sessions (next 3 weeks)
+
+
+Past sessions
+
+
+Status tags: Scheduled / Completed / Canceled / Credited
+
+
+
+
+Mentor Dashboard — Earnings, Payouts & Booking Controls (MVP)
+1) Pricing & Offers (mentor controls)
+Set Your Rate
+Rate per session (e.g., $30)
+
+
+Available slots
+
+
+Free Trial toggle:
+
+
+“Enable a free trial session (recommended)”
+
+
+“Trial converts best into recurring sessions.”
+
+Earnings Summary (Top Card)
+This Month
+Sessions booked: [#]
+
+
+Student payments collected: $[total]
+
+
+Your estimated payout: $[payout]
+
+
+Next payout date: [date]
+
+
+Small line:
+ “EmpowerED collects a student platform fee separately. Your payout is based on your session rate minus the processing fee shown below.”
+This prevents “double charging” feelings by clearly separating student vs mentor.
+
+
+Payment Frequency & Processing Fee
+Choose how often you get paid. Less frequent payouts have a lower processing fee.
+Option 2: Monthly Invoice — 1% Processing Fee
+ “Get paid monthly and pay a lower processing fee.”
+Note (small text):
+ “Processing fee is deducted from your session earnings before payout. It helps cover payment handling and payout operations.”
+
+Payout Schedule (MVP = keep it simple)
+For MVP,  Weekly Invoice OR Monthly Invoice  Option
+ Option A: Weekly Invoice — 3% Processing Fee
+“Get paid weekly. Best for steady cash flow.”
+
+
+
+
+Option B:  Monthly Invoice — 1% Processing Fee
+“Get paid monthly and pay a lower processing fee.”
+
+
+Note (small text):
+“Processing fee is deducted from your session earnings before payout. It helps cover payment handling and payout operations.”
+
+
+Payout History
+Date
+
+
+Amount
+
+
+Status
+
+
+Sessions included
+
+Credits & Unforeseen Cancellation (Mentor-facing policy copy)
+Session Credit Policy
+ “If a session is canceled due to unforeseen circumstances on the mentor side, the student receives a full-session credit.”
+Mentor actions
+Button: Issue Credit
+
+
+Button: Reschedule Session
+
+
+Credit note
+ “Credits help protect trust and prevent disputes. Credits can be used anytime with you.”
+
+
 

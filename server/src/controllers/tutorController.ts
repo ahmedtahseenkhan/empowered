@@ -13,6 +13,9 @@ export const listPublicTutors = async (req: Request, res: Response) => {
     try {
         const q = (req.query.q as string | undefined)?.trim();
         const category = (req.query.category as string | undefined)?.trim();
+        const majorCategoryId = (req.query.majorCategoryId as string | undefined)?.trim();
+        const subcategoryId = (req.query.subcategoryId as string | undefined)?.trim();
+        const areaIdsRaw = (req.query.areaIds as string | undefined)?.trim();
 
         const where: any = {};
 
@@ -24,6 +27,8 @@ export const listPublicTutors = async (req: Request, res: Response) => {
                 { country: { contains: q, mode: 'insensitive' } },
             ];
         }
+
+        where.AND = [...(where.AND || [])];
 
         if (category) {
             // The assessment category values are: ACADEMIC | SKILL | PERSONAL_GROWTH.
@@ -39,6 +44,40 @@ export const listPublicTutors = async (req: Request, res: Response) => {
             where.categories = {
                 some: {
                     category: { name: { contains: mapped, mode: 'insensitive' } }
+                }
+            };
+        }
+
+        const parseCsv = (v: string | undefined) => {
+            if (!v) return [];
+            return v.split(',').map((x) => x.trim()).filter(Boolean);
+        };
+
+        const areaIds = parseCsv(areaIdsRaw);
+
+        // New hierarchical filter (Major -> Subcategory -> Area of Expertise)
+        if (areaIds.length > 0) {
+            where.categories = {
+                some: {
+                    category_id: { in: areaIds },
+                }
+            };
+        } else if (subcategoryId) {
+            // TutorCategory stores leaf category IDs, so subcategory filter matches categories whose parent is subcategoryId
+            where.categories = {
+                some: {
+                    category: { parent_id: subcategoryId },
+                }
+            };
+        } else if (majorCategoryId) {
+            // Leaf category -> parent (subcategory) -> parent (major)
+            where.categories = {
+                some: {
+                    category: {
+                        parent: {
+                            parent_id: majorCategoryId,
+                        }
+                    },
                 }
             };
         }
@@ -77,9 +116,9 @@ export const listPublicTutors = async (req: Request, res: Response) => {
             take: 50,
         });
 
-        // If your DB doesn't have tutor categories populated yet, the category filter can return 0.
-        // For MVP UX, fall back to returning all mentors (keeping keyword filter if present).
-        if (category && mentors.length === 0) {
+        // If your DB doesn't have tutor categories populated yet, legacy filter can return 0.
+        // For MVP UX, fall back to returning mentors (keeping keyword filter) ONLY when using the legacy `category` param.
+        if (category && !majorCategoryId && !subcategoryId && areaIds.length === 0 && mentors.length === 0) {
             const fallbackWhere: any = { ...where };
             delete fallbackWhere.categories;
 

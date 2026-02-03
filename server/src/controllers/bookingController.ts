@@ -104,7 +104,7 @@ export const createBooking = async (req: AuthRequest, res: Response) => {
             });
 
             const createdLessons = await Promise.all(
-                lessonsToCreate.map((l) => tx.lesson.create({
+                lessonsToCreate.map((l, idx) => tx.lesson.create({
                     data: {
                         tutor_id: tutorId,
                         student_id: student.id,
@@ -113,6 +113,9 @@ export const createBooking = async (req: AuthRequest, res: Response) => {
                         end_time: l.end,
                         duration: dur,
                         status: 'BOOKED',
+                        // Mark the very first lesson in the VERY first booking
+                        // between this student and tutor as a FREE_TRIAL.
+                        billing_type: idx === 0 ? 'FREE_TRIAL' : 'PAID',
                     }
                 }))
             );

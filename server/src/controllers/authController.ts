@@ -1,8 +1,10 @@
 import { Request, Response } from 'express';
+import crypto from 'crypto';
 import prisma from '../config/db';
 import { hashPassword, comparePassword, generateToken } from '../utils/auth';
 import { RegisterSchema, LoginSchema } from '../utils/validation';
 import { AuthRequest } from '../middleware/authMiddleware';
+import emailService from '../services/emailService';
 
 export const register = async (req: Request, res: Response) => {
     try {
@@ -73,6 +75,112 @@ export const register = async (req: Request, res: Response) => {
             error: 'Internal server error during registration',
             message: error.message || 'Registration failed'
         });
+    }
+};
+
+export const changePassword = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user?.id;
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+        const { currentPassword, newPassword } = req.body as { currentPassword?: string; newPassword?: string };
+        if (!currentPassword || !newPassword) return res.status(400).json({ error: 'currentPassword and newPassword are required' });
+        if (typeof currentPassword !== 'string' || typeof newPassword !== 'string') return res.status(400).json({ error: 'Invalid payload' });
+
+        const user = await prisma.user.findUnique({ where: { id: userId } });
+        if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+        const ok = await comparePassword(currentPassword, user.password_hash);
+        if (!ok) return res.status(400).json({ error: 'Current password is incorrect' });
+
+        const nextHash = await hashPassword(newPassword);
+        await prisma.user.update({ where: { id: userId }, data: { password_hash: nextHash } });
+
+        return res.json({ message: 'Password updated successfully' });
+    } catch (error) {
+        console.error('changePassword error:', error);
+        return res.status(500).json({ error: 'Server error' });
+    }
+};
+
+export const forgotPassword = async (req: Request, res: Response) => {
+    try {
+        const { email } = req.body as { email?: string };
+        if (!email || typeof email !== 'string') return res.status(400).json({ error: 'email is required' });
+
+        const user = await prisma.user.findUnique({ where: { email } });
+        if (!user) {
+            return res.json({ message: 'If an account exists for that email, a reset code has been sent.' });
+        }
+
+        const code = crypto.randomInt(0, 1000000).toString().padStart(6, '0');
+        const codeHash = await hashPassword(code);
+        const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+        await prisma.passwordResetCode.create({
+            data: {
+                user_id: user.id,
+                code_hash: codeHash,
+                expires_at: expiresAt,
+            },
+        });
+
+        const html = `
+            <div style="font-family:Arial,sans-serif;line-height:1.5">
+              <h2>Password Reset Code</h2>
+              <p>Your password reset code is:</p>
+              <div style="font-size:24px;font-weight:bold;letter-spacing:4px">${code}</div>
+              <p>This code expires in 15 minutes.</p>
+              <p>If you did not request this, you can ignore this email.</p>
+            </div>
+        `;
+
+        await emailService.sendEmail({
+            to: email,
+            subject: 'Your EmpowerEd password reset code',
+            html,
+        });
+
+        return res.json({ message: 'If an account exists for that email, a reset code has been sent.' });
+    } catch (error) {
+        console.error('forgotPassword error:', error);
+        return res.status(500).json({ error: 'Server error' });
+    }
+};
+
+export const resetPassword = async (req: Request, res: Response) => {
+    try {
+        const { email, code, newPassword } = req.body as { email?: string; code?: string; newPassword?: string };
+        if (!email || !code || !newPassword) return res.status(400).json({ error: 'email, code, and newPassword are required' });
+        if (typeof email !== 'string' || typeof code !== 'string' || typeof newPassword !== 'string') return res.status(400).json({ error: 'Invalid payload' });
+
+        const user = await prisma.user.findUnique({ where: { email } });
+        if (!user) return res.status(400).json({ error: 'Invalid code or email' });
+
+        const latest = await prisma.passwordResetCode.findFirst({
+            where: {
+                user_id: user.id,
+                used_at: null,
+                expires_at: { gt: new Date() },
+            },
+            orderBy: { created_at: 'desc' },
+        });
+
+        if (!latest) return res.status(400).json({ error: 'Invalid or expired code' });
+
+        const ok = await comparePassword(code, latest.code_hash);
+        if (!ok) return res.status(400).json({ error: 'Invalid or expired code' });
+
+        const nextHash = await hashPassword(newPassword);
+        await prisma.$transaction([
+            prisma.user.update({ where: { id: user.id }, data: { password_hash: nextHash } }),
+            prisma.passwordResetCode.update({ where: { id: latest.id }, data: { used_at: new Date() } }),
+        ]);
+
+        return res.json({ message: 'Password reset successfully' });
+    } catch (error) {
+        console.error('resetPassword error:', error);
+        return res.status(500).json({ error: 'Server error' });
     }
 };
 

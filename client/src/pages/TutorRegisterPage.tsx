@@ -19,8 +19,9 @@ const STEPS = [
 const TutorRegisterPage: React.FC = () => {
     const [searchParams] = useSearchParams();
     const planIdFromUrl = searchParams.get('planId');
+    const stepFromUrl = searchParams.get('step');
 
-    const [currentStep, setCurrentStep] = useState(1);
+    const [currentStep, setCurrentStep] = useState(stepFromUrl ? parseInt(stepFromUrl) : 1);
     const [formData, setFormData] = useState({
         username: '',
         email: '',
@@ -34,6 +35,7 @@ const TutorRegisterPage: React.FC = () => {
     const plans = [
         {
             id: 'STANDARD',
+            priceId: 'price_1StboAByCQ0ee0A8u7BMs9cl',
             name: 'Standard',
             priceLabel: '$35',
             billingLabel: '/month',
@@ -53,6 +55,7 @@ const TutorRegisterPage: React.FC = () => {
         },
         {
             id: 'PRO',
+            priceId: 'price_1StboXByCQ0ee0A8GeuDW77K',
             name: 'Pro',
             priceLabel: '$65',
             billingLabel: '/month',
@@ -70,6 +73,7 @@ const TutorRegisterPage: React.FC = () => {
         },
         {
             id: 'PREMIUM',
+            priceId: 'price_1StbozByCQ0ee0A8vJMmBvce',
             name: 'Premium',
             priceLabel: '$135',
             billingLabel: '/month',
@@ -113,16 +117,58 @@ const TutorRegisterPage: React.FC = () => {
         }
     };
 
-    // STEP 4: Plan Selection Submission
+
+
+
+    // STEP 4: Plan Selection -> Create Subscription Checkout
     const handlePlanSubmit = async () => {
         setLoading(true);
         setError('');
         try {
             await api.put('/tutor/me/tier', { tier: formData.plan });
-            setCurrentStep(5);
+
+            // Initiate Stripe Checkout
+            const selectedPlan = plans.find(p => p.id === formData.plan);
+            if (!selectedPlan?.priceId) {
+                // If checking out for free/beta, just move next. 
+                // But user wants payment now.
+                throw new Error("Plan not configured for payment");
+            }
+
+            const res = await api.post('/payments/mentor/subscription', {
+                priceId: selectedPlan.priceId,
+                tier: formData.plan, // Add tier to match CreateSubscriptionSchema
+                successUrl: `${window.location.origin}/tutor-register?step=5`, // Come back to Step 5
+                cancelUrl: window.location.href
+            });
+
+            if (res.data.url) {
+                window.location.href = res.data.url;
+            } else {
+                // If it was skipped/free (unlikely for these plans but safe guard)
+                setCurrentStep(5);
+            }
         } catch (err: any) {
             console.error(err);
-            setError(err.response?.data?.error || 'Failed to update plan.');
+            setError(err.response?.data?.error || 'Failed to initiate payment.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // STEP 5: Connect Stripe
+    const handleConnectStripe = async () => {
+        setLoading(true);
+        try {
+            const res = await api.post('/payments/mentor/onboard', {
+                refreshUrl: window.location.href,
+                returnUrl: `${window.location.origin}/dashboard`
+            });
+            if (res.data.url) {
+                window.location.href = res.data.url;
+            }
+        } catch (err: any) {
+            setError(err.response?.data?.error || 'Failed to connect Stripe.');
         } finally {
             setLoading(false);
         }
@@ -288,16 +334,12 @@ const TutorRegisterPage: React.FC = () => {
                         </p>
                         <Button
                             className="w-full bg-[#635BFF] hover:bg-[#5349E0] text-white"
-                            onClick={() => navigate('/tutor-onboarding')}
+                            onClick={handleConnectStripe}
+                            disabled={loading}
                         >
-                            Connect Stripe
+                            {loading ? 'Connecting...' : 'Connect Stripe'}
                         </Button>
-                        <button
-                            onClick={() => navigate('/tutor-onboarding')}
-                            className="text-sm text-gray-500 hover:text-gray-700 underline"
-                        >
-                            Skip for now
-                        </button>
+
                     </div>
                 );
             default:

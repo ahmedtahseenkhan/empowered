@@ -1,0 +1,210 @@
+import Stripe from 'stripe';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+if (!process.env.STRIPE_SECRET_KEY) {
+    console.warn("WARNING: STRIPE_SECRET_KEY is missing from environment variables.");
+}
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder', {
+    apiVersion: '2024-12-18.acacia' as any, // Use latest or matching version
+});
+
+export class StripeService {
+
+    /**
+     * Create a Connect Account for a Mentor
+     * @param email - Email address for the Connect account
+     * @param country - Country code (default: 'US')
+     */
+    static async createConnectAccount(email: string, country: string = 'US') {
+        try {
+            const capabilities: Stripe.AccountCreateParams.Capabilities = {
+                transfers: { requested: true },
+            };
+
+            // 'card_payments' is not supported for Express accounts in Oman (and some other regions)
+            // They primarily support 'transfers' (payouts) for Cross-Border or local setups.
+            if (country !== 'OM') {
+                capabilities.card_payments = { requested: true };
+            }
+
+            const account = await stripe.accounts.create({
+                type: 'express',
+                country,
+                email,
+                capabilities,
+            });
+            return account;
+        } catch (error: any) {
+            console.error('Error creating connect account:', error);
+
+            // Provide helpful error messages for common issues
+            if (error.code === 'country_unsupported') {
+                throw new Error(`Stripe Connect is not available in ${country}. Please contact support.`);
+            }
+
+            throw new Error(error.message || 'Failed to create Stripe Connect account');
+        }
+    }
+
+    /**
+     * Generate an Account Link for onboarding
+     */
+    static async createAccountLink(accountId: string, refreshUrl: string, returnUrl: string) {
+        try {
+            const accountLink = await stripe.accountLinks.create({
+                account: accountId,
+                refresh_url: refreshUrl,
+                return_url: returnUrl,
+                type: 'account_onboarding',
+            });
+            return accountLink.url;
+        } catch (error: any) {
+            console.error('Error creating account link:', error);
+            throw new Error(error.message || 'Failed to create onboarding link');
+        }
+    }
+
+    /**
+     * Get Connect Account details and status
+     */
+    static async getConnectAccount(accountId: string) {
+        try {
+            const account = await stripe.accounts.retrieve(accountId);
+            return account;
+        } catch (error: any) {
+            console.error('Error retrieving connect account:', error);
+            throw new Error(error.message || 'Failed to retrieve account details');
+        }
+    }
+
+    /**
+     * Create a Customer for a Student
+     */
+    static async createCustomer(email: string, name: string) {
+        try {
+            const customer = await stripe.customers.create({
+                email,
+                name,
+            });
+            return customer;
+        } catch (error) {
+            console.error('Error creating customer:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Create a Checkout Session for Mentor Subscription (Standard, Pro, Premium)
+     */
+    static async createSubscriptionCheckoutSession(
+        priceId: string,
+        customerId: string,
+        successUrl: string,
+        cancelUrl: string,
+        metadata: any = {}
+    ) {
+        try {
+            const session = await stripe.checkout.sessions.create({
+                customer: customerId,
+                mode: 'subscription',
+                payment_method_types: ['card'],
+                line_items: [
+                    {
+                        price: priceId,
+                        quantity: 1,
+                    },
+                ],
+                subscription_data: {
+                    trial_period_days: 30,
+                },
+                success_url: successUrl,
+                cancel_url: cancelUrl,
+                metadata,
+            });
+            return session;
+        } catch (error) {
+            console.error('Error creating subscription checkout session:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Create Checkout Session for Student Booking (Destination Charge)
+     */
+    static async createBookingCheckoutSession(
+        amount: number, // in cents
+        currency: string = 'usd',
+        customerId: string,
+        mentorConnectId: string,
+        platformFee: number, // in cents
+        successUrl: string,
+        cancelUrl: string,
+        metadata: any = {}
+    ) {
+        try {
+            const session = await stripe.checkout.sessions.create({
+                customer: customerId,
+                mode: 'payment', // Or 'subscription' if weekly recurring
+                payment_method_types: ['card'],
+                line_items: [
+                    {
+                        price_data: {
+                            currency: currency,
+                            product_data: {
+                                name: 'Mentorship Session',
+                            },
+                            unit_amount: amount,
+                        },
+                        quantity: 1,
+                    },
+                ],
+                payment_intent_data: {
+                    application_fee_amount: platformFee,
+                    transfer_data: {
+                        destination: mentorConnectId,
+                    },
+                },
+                success_url: successUrl,
+                cancel_url: cancelUrl,
+                metadata,
+            });
+            return session;
+        } catch (error) {
+            console.error('Error creating booking checkout session:', error);
+            throw error;
+        }
+    }
+
+    static async getSubscription(subscriptionId: string) {
+        return stripe.subscriptions.retrieve(subscriptionId);
+    }
+
+    static constructEvent(payload: string | Buffer, sig: string, endpointSecret: string) {
+        return stripe.webhooks.constructEvent(payload, sig, endpointSecret);
+    }
+
+    /**
+     * Update Subscription (Upgrade/Downgrade)
+     */
+    static async updateSubscription(subscriptionId: string, newPriceId: string) {
+        try {
+            const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+            const itemId = subscription.items.data[0].id;
+
+            const updatedSubscription = await stripe.subscriptions.update(subscriptionId, {
+                items: [{
+                    id: itemId,
+                    price: newPriceId,
+                }],
+                proration_behavior: 'create_prorations', // Default behavior usually fine
+            });
+            return updatedSubscription;
+        } catch (error) {
+            console.error('Error updating subscription:', error);
+            throw error;
+        }
+    }
+}

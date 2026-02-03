@@ -41,9 +41,9 @@ const StudentBookMentorPage: React.FC = () => {
     const [selectedSlotStarts, setSelectedSlotStarts] = useState<string[]>([]);
     const [frequency, setFrequency] = useState<Frequency>((searchParams.get('frequency') as Frequency) || 'WEEKLY');
 
-    const formatDayKey = (iso: string, timeZone: string) => {
+    const formatDayKey = (iso: string) => {
         const d = new Date(iso);
-        const fmt = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' });
+        const fmt = new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' });
         return fmt.format(d);
     };
 
@@ -53,16 +53,16 @@ const StudentBookMentorPage: React.FC = () => {
         return dt.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
     };
 
-    const formatTimeLabel = (iso: string, timeZone: string) => {
+    const formatTimeLabel = (iso: string) => {
         const d = new Date(iso);
-        return new Intl.DateTimeFormat(undefined, { timeZone, hour: 'numeric', minute: '2-digit' }).format(d);
+        return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(d);
     };
 
     const slotsByDay = useMemo(() => {
         if (!mentor) return new Map<string, Array<{ start: string; end: string }>>();
         const map = new Map<string, Array<{ start: string; end: string }>>();
         for (const s of slots) {
-            const key = formatDayKey(s.start, mentor.timezone || 'UTC');
+            const key = formatDayKey(s.start);
             map.set(key, [...(map.get(key) || []), s]);
         }
         for (const [k, arr] of map.entries()) {
@@ -129,7 +129,7 @@ const StudentBookMentorPage: React.FC = () => {
 
                 const dayKeys = (() => {
                     const s = new Set<string>();
-                    for (const slot of fetched) s.add(formatDayKey(slot.start, mentor.timezone || 'UTC'));
+                    for (const slot of fetched) s.add(formatDayKey(slot.start));
                     return Array.from(s).sort();
                 })();
 
@@ -140,7 +140,7 @@ const StudentBookMentorPage: React.FC = () => {
                 if (paramSlotStart && fetched.some((s: any) => s.start === paramSlotStart)) {
                 } else {
                     const daySlots = fetched
-                        .filter((s: any) => formatDayKey(s.start, mentor.timezone || 'UTC') === resolvedDay)
+                        .filter((s: any) => formatDayKey(s.start) === resolvedDay)
                         .sort((a: any, b: any) => new Date(a.start).getTime() - new Date(b.start).getTime());
                     void daySlots;
                 }
@@ -149,7 +149,7 @@ const StudentBookMentorPage: React.FC = () => {
                     if (prev.length) return prev;
                     if (paramSlotStart && fetched.some((s: any) => s.start === paramSlotStart)) return [paramSlotStart];
                     const first = fetched
-                        .filter((s: any) => formatDayKey(s.start, mentor.timezone || 'UTC') === resolvedDay)
+                        .filter((s: any) => formatDayKey(s.start) === resolvedDay)
                         .sort((a: any, b: any) => new Date(a.start).getTime() - new Date(b.start).getTime())[0]?.start;
                     return first ? [first] : [];
                 });
@@ -205,21 +205,28 @@ const StudentBookMentorPage: React.FC = () => {
             return;
         }
 
-        const isoStartDate = selectedSlotStarts[0];
-
         try {
             setError('');
-            const res = await api.post('/bookings', {
+            const baseUrl = window.location.origin;
+            const successUrl = `${baseUrl}/student/booking/confirmation`;
+            const cancelUrl = `${baseUrl}/student/mentors/${mentor.id}?frequency=${encodeURIComponent(frequency)}`;
+
+            const res = await api.post('/payments/student/booking', {
                 tutorId: mentor.id,
-                startDate: isoStartDate,
+                frequency,
                 slotStarts: selectedSlotStarts,
                 durationMinutes: 60,
-                frequency,
+                successUrl,
+                cancelUrl,
             });
 
-            navigate(`/student/booking/confirmation?bookingId=${encodeURIComponent(res.data.booking.id)}`);
+            if (res.data?.url) {
+                window.location.href = res.data.url;
+            } else {
+                setError('Failed to start payment – please try again.');
+            }
         } catch (err: any) {
-            setError(err.response?.data?.error || 'Failed to create booking');
+            setError(err.response?.data?.error || 'Failed to create payment session');
         }
     };
 
@@ -231,7 +238,18 @@ const StudentBookMentorPage: React.FC = () => {
                     <>
                         <div className="mb-6">
                             <h1 className="text-3xl font-bold text-gray-900 mb-2">Book a Session</h1>
-                            {mentor.tagline && <p className="text-gray-600">{mentor.tagline}</p>}
+                            <div className="text-sm text-gray-700">
+                                Mentor: <span className="font-semibold">{mentor.username}</span>
+                                <span className="text-gray-400"> · </span>
+                                <span className="font-semibold">${mentor.hourly_rate}</span>
+                                {mentor.is_verified && (
+                                    <>
+                                        <span className="text-gray-400"> · </span>
+                                        <span className="text-green-700 font-semibold">Verified</span>
+                                    </>
+                                )}
+                            </div>
+                            {mentor.tagline && <p className="text-gray-600 mt-1">{mentor.tagline}</p>}
                         </div>
 
                         {error && (
@@ -277,7 +295,6 @@ const StudentBookMentorPage: React.FC = () => {
                                                 <option key={d} value={d}>{formatDayLabel(d)}</option>
                                             ))}
                                         </select>
-                                        <div className="text-xs text-gray-500 mt-1">Times shown in tutor timezone: {mentor.timezone}</div>
                                     </div>
 
                                     <div>
@@ -292,7 +309,7 @@ const StudentBookMentorPage: React.FC = () => {
                                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                                 {(slotsByDay.get(selectedDay) || []).map((s) => {
                                                     const active = isSlotSelected(s.start);
-                                                    const label = formatTimeLabel(s.start, mentor.timezone);
+                                                    const label = formatTimeLabel(s.start);
                                                     return (
                                                         <button
                                                             key={s.start}
@@ -340,8 +357,8 @@ const StudentBookMentorPage: React.FC = () => {
                                             {selectedSlotStarts.map((s) => (
                                                 <div key={s} className="flex items-center justify-between gap-3 border border-purple-100 bg-purple-50/40 rounded-lg p-3">
                                                     <div>
-                                                        <div className="text-xs text-gray-600">Every {formatDayLabel(formatDayKey(s, mentor.timezone)).split(',')[0]}</div>
-                                                        <div className="text-sm font-semibold text-gray-900">{formatTimeLabel(s, mentor.timezone)}</div>
+                                                        <div className="text-xs text-gray-600">Every {formatDayLabel(formatDayKey(s)).split(',')[0]}</div>
+                                                        <div className="text-sm font-semibold text-gray-900">{formatTimeLabel(s)}</div>
                                                     </div>
                                                     <button
                                                         type="button"

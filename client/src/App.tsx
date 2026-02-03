@@ -1,6 +1,7 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useEffect, useMemo, useState } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import api from './api/axios';
 
 // Pages
 import HomePage from './pages/HomePage';
@@ -28,6 +29,8 @@ import TutorNotesPage from './pages/TutorNotesPage';
 import CoursesPage from './pages/CoursesPage';
 import CourseCreatePage from './pages/CourseCreatePage';
 import SubscriptionSettingsPage from './pages/SubscriptionSettingsPage';
+import AccountSettingsPage from './pages/AccountSettingsPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import HelpSupportPage from './pages/HelpSupportPage';
 import PublicProfilePage from './pages/PublicProfilePage';
 import FindMentorPage from './pages/FindMentorPage';
@@ -38,12 +41,13 @@ import BookingConfirmationPage from './pages/BookingConfirmationPage';
 import StudentCoursesPage from './pages/StudentCoursesPage';
 import StudentMentorsPage from './pages/StudentMentorsPage';
 import MentorNotesPage from './pages/MentorNotesPage';
-import StudentFindMentorPage from './pages/StudentFindMentorPage';
 import StudentMentorResultsPage from './pages/StudentMentorResultsPage';
 import StudentMentorPublicProfilePage from './pages/StudentMentorPublicProfilePage';
 import StudentBookMentorPage from './pages/StudentBookMentorPage';
 import StudentBookingConfirmationPage from './pages/StudentBookingConfirmationPage';
 import TutorAIAssistPage from './pages/TutorAIAssistPage';
+import StudentSessionsPage from './pages/StudentSessionsPage';
+import ConnectAccountPage from './pages/ConnectAccountPage';
 
 const DashboardRouter = () => {
   const { user } = useAuth();
@@ -53,6 +57,34 @@ const DashboardRouter = () => {
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
+  const location = useLocation();
+  const [subLoading, setSubLoading] = useState(false);
+  const [subStatus, setSubStatus] = useState<{ subscription_status?: string | null; subscription_end_date?: string | null } | null>(null);
+
+  const isTutor = user?.role !== 'STUDENT';
+  const isAllowedWithoutSubscription = useMemo(() => {
+    const p = location.pathname;
+    return p === '/subscription-settings' || p === '/settings' || p === '/help';
+  }, [location.pathname]);
+
+  useEffect(() => {
+    const run = async () => {
+      if (!user || !isTutor || isAllowedWithoutSubscription) return;
+
+      setSubLoading(true);
+      try {
+        const res = await api.get('/payments/mentor/status');
+        setSubStatus(res.data);
+      } catch (e) {
+        console.error('Failed to fetch subscription status', e);
+        setSubStatus({ subscription_status: null, subscription_end_date: null });
+      } finally {
+        setSubLoading(false);
+      }
+    };
+
+    run();
+  }, [user, isTutor, isAllowedWithoutSubscription]);
 
   if (loading) {
     return (
@@ -66,6 +98,32 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   }
 
   if (!user) return <Navigate to="/login" />;
+
+  if (isTutor && !isAllowedWithoutSubscription) {
+    if (subLoading) {
+      return (
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-center">
+            <div className="w-16 h-16 border-4 border-primary-200 border-t-primary-900 rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-gray-600">Checking subscription...</p>
+          </div>
+        </div>
+      );
+    }
+
+    const status = subStatus?.subscription_status;
+    const endDate = subStatus?.subscription_end_date ? new Date(subStatus.subscription_end_date) : null;
+    const hasValidEnd = !!endDate && !Number.isNaN(endDate.getTime());
+    const daysLeft = hasValidEnd ? Math.ceil((endDate!.getTime() - Date.now()) / (1000 * 3600 * 24)) : null;
+    const expired = daysLeft !== null && daysLeft <= 0;
+
+    const isActiveOrTrial = status === 'active' || status === 'trialing';
+
+    // Require an active/trialing subscription with a valid end date. Otherwise redirect to subscribe.
+    if (!isActiveOrTrial || !hasValidEnd || expired) {
+      return <Navigate to="/subscription-settings" replace />;
+    }
+  }
 
   return <>{children}</>;
 };
@@ -118,6 +176,7 @@ function App() {
           <Route path="/tutor-register" element={<TutorRegisterPage />} />
           <Route path="/register" element={<GuestRoute><RegisterPage /></GuestRoute>} />
           <Route path="/login" element={<GuestRoute><LoginPage /></GuestRoute>} />
+          <Route path="/forgot-password" element={<GuestRoute><ForgotPasswordPage /></GuestRoute>} />
 
           {/* Protected Routes */}
           <Route
@@ -125,6 +184,15 @@ function App() {
             element={
               <ProtectedRoute>
                 <DashboardRouter />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/settings"
+            element={
+              <ProtectedRoute>
+                <AccountSettingsPage />
               </ProtectedRoute>
             }
           />
@@ -141,7 +209,7 @@ function App() {
             path="/student/find-mentor"
             element={
               <ProtectedRoute>
-                <StudentFindMentorPage />
+                <Navigate to="/student/mentors" replace />
               </ProtectedRoute>
             }
           />
@@ -190,6 +258,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <MentorNotesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/student/sessions"
+            element={
+              <ProtectedRoute>
+                <StudentSessionsPage />
               </ProtectedRoute>
             }
           />
@@ -294,6 +370,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <TutorAIAssistPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/connect-account"
+            element={
+              <ProtectedRoute>
+                <ConnectAccountPage />
               </ProtectedRoute>
             }
           />

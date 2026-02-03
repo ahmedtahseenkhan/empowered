@@ -428,6 +428,16 @@ const TutorDashboard: React.FC = () => {
         setWeekStartDate(start);
     };
 
+    const getSubscriptionDaysLeft = () => {
+        if (!profile?.subscription_end_date) return null;
+        const end = new Date(profile.subscription_end_date);
+        const diff = end.getTime() - new Date().getTime();
+        return Math.max(0, Math.ceil(diff / (1000 * 3600 * 24)));
+    };
+
+    const subscriptionDaysLeft = getSubscriptionDaysLeft();
+    const subscriptionExpired = subscriptionDaysLeft !== null && subscriptionDaysLeft <= 0;
+
     if (isDashboardLoading) return <DashboardLayout><div>Loading Dashboard...</div></DashboardLayout>;
 
     const now = new Date();
@@ -773,48 +783,14 @@ const TutorDashboard: React.FC = () => {
                     )}
                 </Modal>
 
-                {/* Right Column: Profile Status Checklist */}
-                <div className="w-full lg:w-80 space-y-6">
-                    <Card className="p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-sm font-bold text-gray-900">Upcoming Sessions</h2>
-                        </div>
-
-                        {lessonsBusy ? (
-                            <div className="text-xs text-gray-600">Loading...</div>
-                        ) : lessons.filter(l => new Date(l.start_time) > new Date()).length === 0 ? (
-                            <div className="text-xs text-gray-600">No upcoming sessions.</div>
-                        ) : (
-                            <div className="space-y-3">
-                                {lessons
-                                    .filter(l => new Date(l.start_time) > new Date())
-                                    .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
-                                    .slice(0, 3)
-                                    .map((l) => (
-                                        <div key={l.id} className="border border-gray-200 rounded-lg px-3 py-2">
-                                            <div className="flex justify-between items-start">
-                                                <div>
-                                                    <div className="text-sm font-semibold text-gray-900">{l.student?.username || 'Student'}</div>
-                                                    <div className="text-xs text-gray-600">
-                                                        {new Date(l.start_time).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} • {new Date(l.start_time).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
-                                                    </div>
-                                                </div>
-                                                {l.meeting_link && (
-                                                    <Button variant="outline" size="sm" className="h-6 text-xs px-2" onClick={() => window.open(l.meeting_link as string, '_blank')}>Join</Button>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))}
-                            </div>
-                        )}
-                    </Card>
-
+                {/* Right Column: Profile & Quick Links */}
+                <div className="w-full lg:w-[340px] space-y-6">
+                    {/* Recent Notes & Homework */}
                     <Card className="p-6">
                         <div className="flex items-center justify-between mb-4">
                             <h2 className="text-sm font-bold text-gray-900">Recent Notes & Homework</h2>
                             <Button variant="outline" size="sm" className="h-7 text-xs px-3" onClick={() => navigate('/tutor/notes')}>View</Button>
                         </div>
-
                         {activityBusy ? (
                             <div className="text-xs text-gray-600">Loading...</div>
                         ) : activityItems.length === 0 ? (
@@ -845,6 +821,7 @@ const TutorDashboard: React.FC = () => {
                         )}
                     </Card>
 
+                    {/* Profile Status & Completion */}
                     <Card className="p-6">
                         <div className="flex justify-between items-center mb-4">
                             <h3 className="font-bold text-gray-900">Profile Status</h3>
@@ -887,11 +864,20 @@ const TutorDashboard: React.FC = () => {
                         </div>
 
                         <Button
-                            className="w-full bg-[#4A1D96] hover:bg-[#3b1778] text-white"
+                            className="w-full"
+                            variant="primary"
                             onClick={() => navigate('/tutor-onboarding')}
                         >
-                            {completionPercentage === 100 ? 'Edit Profile' : 'Complete Profile'}
+                            Complete Profile
                         </Button>
+                    </Card>
+
+                    <Card className="p-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-sm font-bold text-gray-900">Upcoming Sessions</h2>
+                        </div>
+
+                        <div className="text-xs text-gray-500">Coming soon</div>
                     </Card>
 
                     {/* Current Plan Widget */}
@@ -903,7 +889,55 @@ const TutorDashboard: React.FC = () => {
                             <div>
                                 <p className="text-xs text-gray-500">Current Plan</p>
                                 <h4 className="font-bold text-[#635BFF]">{profile?.tier || 'STANDARD'} Plan</h4>
-                                <span className="inline-block mt-1 text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded">Free Trial</span>
+
+                                {profile?.subscription_status === 'trialing' && (
+                                    <span className="inline-block mt-1 text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded">Free Trial</span>
+                                )}
+
+                                {subscriptionDaysLeft === null ? (
+                                    <p className="text-xs text-gray-500 mt-2">
+                                        Start your subscription to begin your 30-day trial.
+                                    </p>
+                                ) : subscriptionExpired ? (
+                                    <p className="text-xs text-red-600 mt-2">
+                                        Your trial/subscription period has ended. Please subscribe to continue using mentor features.
+                                    </p>
+                                ) : (
+                                    <p className="text-xs text-gray-500 mt-2">
+                                        <span className="font-bold text-gray-900">{subscriptionDaysLeft} days</span> left
+                                    </p>
+                                )}
+
+                                <div className="mt-4">
+                                    <Button
+                                        className="w-full"
+                                        variant={subscriptionExpired || subscriptionDaysLeft === null ? 'primary' : 'outline'}
+                                        onClick={() => (window.location.href = '/subscription-settings')}
+                                    >
+                                        Manage Subscription
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+                    </Card>
+
+                    {/* Help & Support Widget */}
+                    <Card className="p-6">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center text-green-600">
+                                <AlertCircle className="w-5 h-5" />
+                            </div>
+                            <div>
+                                <h4 className="font-bold text-gray-900">Need Help?</h4>
+                                <p className="text-xs text-gray-500 mt-1">Contact our support team for assistance.</p>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="mt-3 h-8 text-xs"
+                                    onClick={() => navigate('/help')}
+                                >
+                                    Help & Support
+                                </Button>
                             </div>
                         </div>
                     </Card>

@@ -52,8 +52,14 @@ export const getMyLessons = async (req: AuthRequest, res: Response) => {
                 start_time: true,
                 end_time: true,
                 status: true,
+                billing_type: true,
                 meeting_link: true,
                 google_calendar_html_link: true,
+                booking: {
+                    select: {
+                        frequency: true,
+                    },
+                },
                 student: { select: { username: true } },
                 tutor: { select: { username: true } },
             }

@@ -53,6 +53,11 @@ enum LessonStatus {
   MISSED
 }
 
+enum LessonBillingType {
+  FREE_TRIAL
+  PAID
+}
+
 enum BookingFrequency {
   ONCE
   WEEKLY
@@ -74,6 +79,8 @@ model User {
   student_profile StudentProfile?
   tutor_profile   TutorProfile?
   admin_profile   AdminProfile?
+
+  password_reset_codes PasswordResetCode[]
 
   support_tickets SupportTicket[]
 }
@@ -97,7 +104,14 @@ model StudentProfile {
   course_purchases CoursePurchase[]
 
   progress_notes      ProgressNote[]
+  
+  // Stripe & Credits
+  stripe_customer_id String?
+  credits_balance    Int     @default(0)
+  credit_history     CreditLedger[]
+
   homework_tasks      HomeworkTask[]
+
   homework_submissions HomeworkSubmission[]
 }
 
@@ -142,6 +156,12 @@ model TutorProfile {
   subscriptions    Subscription[]
   student_status   StudentTutorStatus[]
   external_reviews TutorExternalReview[]
+
+  // Stripe Connect & Subscription
+  stripe_account_id      String? // Connect Account ID (for payouts)
+  stripe_subscription_id String? // ID of their subscription to the platform (Standard/Pro/Premium)
+  subscription_status    String? // active, past_due, canceled
+  subscription_end_date  DateTime? // When their current paid period ends
 
   progress_notes ProgressNote[]
   homework_tasks HomeworkTask[]
@@ -194,6 +214,21 @@ model GoogleCalendarConnection {
   updated_at DateTime @updatedAt
 }
 
+model PasswordResetCode {
+  id        String   @id @default(uuid())
+  user_id   String
+  user      User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  code_hash String
+  expires_at DateTime
+  used_at   DateTime?
+
+  created_at DateTime @default(now())
+
+  @@index([user_id])
+  @@index([expires_at])
+}
+
 model OAuthState {
   state      String   @id
   tutor_id   String
@@ -224,6 +259,7 @@ model TutorExternalReview {
   reviewer    String
   rating      Int
   comment     String?
+  external_url String?
   date        DateTime?
   is_verified Boolean      @default(false)
 
@@ -336,6 +372,7 @@ model Lesson {
   end_time     DateTime
   duration     Int // in minutes
   status       LessonStatus @default(PENDING)
+  billing_type LessonBillingType @default(PAID)
   meeting_link String?
   google_calendar_event_id String? @unique
   google_calendar_html_link String?
@@ -594,6 +631,8 @@ model SupportTicket {
   admin_replies AdminReply[]
 }
 
+
+
 model AdminReply {
   id        String   @id @default(uuid())
   ticket_id String
@@ -601,4 +640,34 @@ model AdminReply {
   
   message   String   @db.Text
   sent_at   DateTime @default(now())
+}
+
+enum CreditTransactionType {
+  PURCHASE
+  CANCELLATION_REFUND
+  MANUAL_ADJUSTMENT
+  USAGE
+}
+
+model CreditLedger {
+  id          String   @id @default(uuid())
+  student_id  String
+  student     StudentProfile @relation(fields: [student_id], references: [id])
+  
+  amount      Int      // Positive for credit added, negative for used
+  type        CreditTransactionType
+  description String?
+  metadata    Json?    // Store booking_id, stripe_charge_id etc
+  
+  created_at  DateTime @default(now())
+
+  @@index([student_id])
+}
+
+model StripeEvent {
+  id          String   @id
+  type        String
+  data        Json
+  processed   Boolean  @default(false)
+  created_at  DateTime @default(now())
 }

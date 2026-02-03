@@ -6,7 +6,10 @@ import api from '../api/axios';
 
 interface TutorProfile {
     tier: 'STANDARD' | 'PRO' | 'PREMIUM';
-    username: string;
+    username?: string;
+    stripe_subscription_id?: string | null;
+    subscription_status?: string | null;
+    subscription_end_date?: string | null;
 }
 
 const plans = [
@@ -16,6 +19,7 @@ const plans = [
         price: '$35',
         billing: '/month (Billed annually)',
         description: 'For those seeking a strong online presence',
+        priceId: 'price_1StboAByCQ0ee0A8u7BMs9cl',
         features: [
             'Public mentor profile (searchable)',
             'Session scheduling & rescheduling',
@@ -43,6 +47,7 @@ const plans = [
         billing: '/month (Billed annually)',
         description: 'For the growing business ready to scale',
         popular: true,
+        priceId: 'price_1StboXByCQ0ee0A8GeuDW77K',
         features: [
             'Public mentor profile with intro video',
             'Session scheduling & rescheduling',
@@ -68,6 +73,7 @@ const plans = [
     },
     {
         id: 'PREMIUM',
+        priceId: 'price_1StbozByCQ0ee0A8vJMmBvce',
         name: 'Premium',
         price: '$135',
         billing: '/month (Billed annually)',
@@ -93,7 +99,14 @@ const plans = [
         ],
         notIncluded: [],
     },
+
 ];
+
+const planRank: Record<string, number> = {
+    'STANDARD': 1,
+    'PRO': 2,
+    'PREMIUM': 3,
+};
 
 const SubscriptionSettingsPage: React.FC = () => {
     const [profile, setProfile] = useState<TutorProfile | null>(null);
@@ -106,7 +119,7 @@ const SubscriptionSettingsPage: React.FC = () => {
 
     const fetchProfile = async () => {
         try {
-            const response = await api.get('/tutor/me');
+            const response = await api.get('/payments/mentor/status');
             setProfile(response.data);
         } catch (error) {
             console.error('Failed to fetch profile:', error);
@@ -115,12 +128,59 @@ const SubscriptionSettingsPage: React.FC = () => {
         }
     };
 
+    const status = profile?.subscription_status || null;
+    const endDate = profile?.subscription_end_date ? new Date(profile.subscription_end_date) : null;
+    const hasValidEnd = !!endDate && !Number.isNaN(endDate.getTime());
+    const daysLeft = hasValidEnd ? Math.ceil((endDate!.getTime() - Date.now()) / (1000 * 3600 * 24)) : null;
+    const expired = daysLeft !== null && daysLeft <= 0;
+
+    const hasStripeSubscription = !!profile?.stripe_subscription_id;
+    const isActiveOrTrial = status === 'active' || status === 'trialing';
+    const paymentRequired = !hasStripeSubscription || !isActiveOrTrial || !hasValidEnd || expired;
+
     const currentPlan = plans.find(p => p.id === profile?.tier);
     const otherPlans = plans.filter(p => p.id !== profile?.tier);
 
-    const handleChangePlan = (planId: string) => {
-        // TODO: Implement plan change logic with Stripe
-        alert(`Plan change to ${planId} will be implemented with Stripe integration`);
+    const handleChangePlan = async (planId: string, priceId: string | undefined) => {
+        if (!priceId) {
+            alert('Price ID missing for this plan.');
+            return;
+        }
+
+        try {
+            setLoading(true);
+            // If payment is required (no subscription, expired, inactive, missing end date), always route through checkout.
+            // Only use the update endpoint when the subscription is currently active/trialing.
+            if (!paymentRequired && profile?.stripe_subscription_id) {
+                await api.put('/payments/mentor/subscription', {
+                    newPriceId: priceId,
+                    tier: planId
+                });
+                await fetchProfile();
+                alert('Subscription updated successfully!');
+            } else {
+                const successUrl = `${window.location.origin}/subscription-settings`;
+                const cancelUrl = `${window.location.origin}/subscription-settings`;
+
+                const res = await api.post('/payments/mentor/subscription', {
+                    priceId,
+                    tier: planId,
+                    successUrl,
+                    cancelUrl
+                });
+
+                if (res.data?.url) {
+                    window.location.href = res.data.url;
+                    return;
+                }
+                alert('Unable to start checkout.');
+            }
+        } catch (error: any) {
+            console.error('Failed to update plan:', error);
+            alert(error.response?.data?.error || 'Failed to update subscription.');
+        } finally {
+            setLoading(false);
+        }
     };
 
     const handleCancelSubscription = () => {
@@ -155,6 +215,26 @@ const SubscriptionSettingsPage: React.FC = () => {
                     <p className="text-gray-600">Manage your subscription plan and billing</p>
                 </div>
 
+                {paymentRequired && (
+                    <div className="bg-red-50 border border-red-200 rounded-2xl p-6 mb-8">
+                        <h2 className="text-xl font-bold text-red-800">Subscription Required</h2>
+                        <p className="text-sm text-red-700 mt-1">
+                            {!hasStripeSubscription
+                                ? 'To use mentor features, start your subscription to activate your 30-day free trial.'
+                                : expired
+                                    ? 'Your trial/subscription period has ended. Please pay to continue using mentor features.'
+                                    : 'Your subscription is not active. Please pay to continue using mentor features.'}
+                        </p>
+                        <div className="text-xs text-red-700 mt-2">
+                            {hasValidEnd && (
+                                <span>
+                                    Access ended on {endDate!.toLocaleDateString()}.
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                )}
+
                 {/* Current Plan */}
                 <div className="bg-white rounded-2xl shadow-lg p-8 mb-8">
                     <div className="flex items-center justify-between mb-6">
@@ -175,6 +255,12 @@ const SubscriptionSettingsPage: React.FC = () => {
                             <div>
                                 <h3 className="text-2xl font-bold text-[#4A1D96] mb-1">{currentPlan?.name} Plan</h3>
                                 <p className="text-gray-700">{currentPlan?.description}</p>
+                                {isActiveOrTrial && daysLeft !== null && !expired && (
+                                    <p className="text-xs text-gray-600 mt-2">
+                                        <span className="font-semibold">{daysLeft} days</span> remaining
+                                        {status === 'trialing' ? ' in trial.' : '.'}
+                                    </p>
+                                )}
                             </div>
                             <div className="text-right">
                                 <div className="text-3xl font-bold text-[#4A1D96]">{currentPlan?.price}</div>
@@ -207,25 +293,27 @@ const SubscriptionSettingsPage: React.FC = () => {
                             </div>
                         </div>
 
-                        <div className="flex gap-4">
-                            <Button
-                                variant="outline"
-                                className="flex-1 border-red-300 text-red-600 hover:bg-red-50"
-                                onClick={handleCancelSubscription}
-                            >
-                                Cancel Subscription
-                            </Button>
-                        </div>
+                        {!paymentRequired && hasStripeSubscription && (
+                            <div className="flex gap-4">
+                                <Button
+                                    variant="outline"
+                                    className="flex-1 border-red-300 text-red-600 hover:bg-red-50"
+                                    onClick={handleCancelSubscription}
+                                >
+                                    Cancel Subscription
+                                </Button>
+                            </div>
+                        )}
                     </div>
                 </div>
 
-                {/* Other Plans */}
+                {/* Plans */}
                 <div className="mb-8">
                     <h2 className="text-2xl font-bold text-gray-900 mb-6">
-                        {currentPlan?.id === 'PREMIUM' ? 'Downgrade Options' : 'Upgrade Your Plan'}
+                        {paymentRequired ? 'Choose a Plan to Activate Access' : (currentPlan?.id === 'PREMIUM' ? 'Downgrade Options' : 'Upgrade Your Plan')}
                     </h2>
                     <div className="grid md:grid-cols-2 gap-6">
-                        {otherPlans.map((plan) => (
+                        {(paymentRequired ? plans : otherPlans).map((plan) => (
                             <div
                                 key={plan.id}
                                 className="bg-white rounded-2xl shadow-md hover:shadow-xl transition-shadow p-6 relative"
@@ -269,24 +357,24 @@ const SubscriptionSettingsPage: React.FC = () => {
                                         ? 'bg-gradient-to-r from-purple-600 to-purple-900'
                                         : 'bg-[#4A1D96]'
                                         } text-white`}
-                                    onClick={() => handleChangePlan(plan.id)}
+                                    onClick={() => handleChangePlan(plan.id, plan.priceId)}
                                 >
-                                    {plan.id > currentPlan?.id! ? 'Upgrade' : 'Downgrade'} to {plan.name}
+                                    {paymentRequired
+                                        ? (!hasStripeSubscription ? `Start Trial on ${plan.name}` : `Pay to Activate ${plan.name}`)
+                                        : ((planRank[plan.id] > planRank[currentPlan?.id || 'STANDARD']) ? 'Upgrade' : 'Downgrade') + ` to ${plan.name}`}
                                 </Button>
                             </div>
                         ))}
                     </div>
                 </div>
 
-                {/* Billing Info Notice */}
                 <div className="bg-blue-50 border-l-4 border-blue-500 p-6 rounded-lg">
                     <div className="flex items-start gap-3">
                         <AlertTriangle className="w-6 h-6 text-blue-600 flex-shrink-0" />
                         <div>
-                            <h3 className="font-semibold text-blue-900 mb-1">Payment Integration Coming Soon</h3>
+                            <h3 className="font-semibold text-blue-900 mb-1">Billing & Subscription</h3>
                             <p className="text-blue-800 text-sm">
-                                Stripe payment integration is currently in development. You'll be able to manage your
-                                subscription, update payment methods, and view billing history once it's live.
+                                Subscription status is synced from Stripe via webhook. If you just paid, refresh this page in a few seconds.
                             </p>
                         </div>
                     </div>

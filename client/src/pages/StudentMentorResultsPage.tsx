@@ -5,37 +5,12 @@ import api from '../api/axios';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 
-type Subject =
-    | 'Mathematics'
-    | 'Science'
-    | 'English & Literature'
-    | 'History & Social Studies'
-    | 'Test Prep & College Readiness'
-    | 'Other';
-
-type Goal =
-    | 'Improve grades'
-    | 'Prepare for exams'
-    | 'Standardized tests'
-    | 'Understand difficult concepts';
-
 type Frequency = 'ONCE' | 'WEEKLY' | 'TWICE_WEEKLY' | 'THRICE_WEEKLY';
-
-const SUBJECT_OPTIONS: Subject[] = [
-    'Mathematics',
-    'Science',
-    'English & Literature',
-    'History & Social Studies',
-    'Test Prep & College Readiness',
-    'Other',
-];
-
-const GOAL_OPTIONS: Goal[] = [
-    'Improve grades',
-    'Prepare for exams',
-    'Standardized tests',
-    'Understand difficult concepts',
-];
+type CategoryNode = {
+    id: string;
+    name: string;
+    children?: CategoryNode[];
+};
 
 type PublicTutor = {
     id: string;
@@ -55,10 +30,12 @@ const StudentMentorResultsPage: React.FC = () => {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const q = searchParams.get('q') || '';
-    const category = searchParams.get('category') || '';
     const frequency = (searchParams.get('frequency') || 'WEEKLY') as Frequency;
     const grade = searchParams.get('grade') || '';
     const age = searchParams.get('age') || '';
+    const majorCategoryId = searchParams.get('majorCategoryId') || '';
+    const subcategoryId = searchParams.get('subcategoryId') || '';
+    const areaIdsParam = searchParams.get('areaIds') || '';
 
     const parseCsv = (value: string | null) => {
         if (!value) return [];
@@ -67,16 +44,18 @@ const StudentMentorResultsPage: React.FC = () => {
             .map(v => v.trim())
             .filter(Boolean);
     };
-
-    const subjectsParam = parseCsv(searchParams.get('subjects'));
-    const goalsParam = parseCsv(searchParams.get('goals'));
+    const areaIdsParsed = parseCsv(areaIdsParam);
 
     const [filtersOpen, setFiltersOpen] = useState(true);
     const [draftGrade, setDraftGrade] = useState<string>(grade);
     const [draftAge, setDraftAge] = useState<string>(age);
-    const [draftSubjects, setDraftSubjects] = useState<Subject[]>(subjectsParam as Subject[]);
-    const [draftGoals, setDraftGoals] = useState<Goal[]>(goalsParam as Goal[]);
     const [draftFrequency, setDraftFrequency] = useState<Frequency>(frequency);
+    const [draftMajorCategoryId, setDraftMajorCategoryId] = useState<string>(majorCategoryId);
+    const [draftSubcategoryId, setDraftSubcategoryId] = useState<string>(subcategoryId);
+    const [draftAreaIds, setDraftAreaIds] = useState<string[]>(areaIdsParsed);
+
+    const [catsBusy, setCatsBusy] = useState(false);
+    const [categories, setCategories] = useState<CategoryNode[]>([]);
 
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -85,11 +64,33 @@ const StudentMentorResultsPage: React.FC = () => {
     useEffect(() => {
         setDraftGrade(grade);
         setDraftAge(age);
-        setDraftSubjects(subjectsParam as Subject[]);
-        setDraftGoals(goalsParam as Goal[]);
         setDraftFrequency(frequency);
+        setDraftMajorCategoryId(majorCategoryId);
+        setDraftSubcategoryId(subcategoryId);
+        setDraftAreaIds(areaIdsParsed);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [grade, age, frequency, searchParams.toString()]);
+    }, [grade, age, frequency, majorCategoryId, subcategoryId, areaIdsParam, searchParams.toString()]);
+
+    useEffect(() => {
+        const fetchCategories = async () => {
+            try {
+                setCatsBusy(true);
+                const res = await api.get('/tutor/categories');
+                setCategories(res.data || []);
+            } catch (e) {
+                console.error('Failed to load categories', e);
+                setCategories([]);
+            } finally {
+                setCatsBusy(false);
+            }
+        };
+        fetchCategories();
+    }, []);
+
+    const selectedMajor = useMemo(() => categories.find((c) => c.id === draftMajorCategoryId) || null, [categories, draftMajorCategoryId]);
+    const subcategories = useMemo(() => selectedMajor?.children || [], [selectedMajor]);
+    const selectedSubcategory = useMemo(() => subcategories.find((c) => c.id === draftSubcategoryId) || null, [subcategories, draftSubcategoryId]);
+    const areas = useMemo(() => selectedSubcategory?.children || [], [selectedSubcategory]);
 
     const toggleArrayValue = <T,>(arr: T[], value: T) => {
         if (arr.includes(value)) return arr.filter(v => v !== value);
@@ -105,15 +106,19 @@ const StudentMentorResultsPage: React.FC = () => {
         if (draftAge) params.set('age', draftAge);
         else params.delete('age');
 
-        if (draftSubjects.length) params.set('subjects', draftSubjects.join(','));
-        else params.delete('subjects');
-
-        if (draftGoals.length) params.set('goals', draftGoals.join(','));
-        else params.delete('goals');
-
         params.set('frequency', draftFrequency);
 
-        const generatedQ = [...draftSubjects, ...draftGoals].join(' ').trim();
+        if (draftMajorCategoryId) params.set('majorCategoryId', draftMajorCategoryId);
+        else params.delete('majorCategoryId');
+
+        if (draftSubcategoryId) params.set('subcategoryId', draftSubcategoryId);
+        else params.delete('subcategoryId');
+
+        if (draftAreaIds.length) params.set('areaIds', draftAreaIds.join(','));
+        else params.delete('areaIds');
+
+        // Optional keyword from selected areas (helps relevance ordering when q is used)
+        const generatedQ = areas.filter((a) => draftAreaIds.includes(a.id)).map((a) => a.name).join(' ').trim();
         if (generatedQ) params.set('q', generatedQ);
         else params.delete('q');
 
@@ -124,9 +129,10 @@ const StudentMentorResultsPage: React.FC = () => {
         const params = new URLSearchParams(searchParams);
         params.delete('grade');
         params.delete('age');
-        params.delete('subjects');
-        params.delete('goals');
         params.delete('q');
+        params.delete('majorCategoryId');
+        params.delete('subcategoryId');
+        params.delete('areaIds');
         params.set('frequency', 'WEEKLY');
         navigate(`/student/mentors?${params.toString()}`);
     };
@@ -137,7 +143,7 @@ const StudentMentorResultsPage: React.FC = () => {
                 setLoading(true);
                 setError('');
                 const res = await api.get('/tutor/public', {
-                    params: { q, category }
+                    params: { q, majorCategoryId, subcategoryId, areaIds: areaIdsParam }
                 });
                 setMentors(res.data.mentors || []);
             } catch (err: any) {
@@ -148,13 +154,12 @@ const StudentMentorResultsPage: React.FC = () => {
         };
 
         fetchMentors();
-    }, [q, category]);
+    }, [q, majorCategoryId, subcategoryId, areaIdsParam]);
 
     const title = useMemo(() => {
         if (q) return `Mentors for "${q}"`;
-        if (category) return 'Recommended Mentors';
         return 'Mentors';
-    }, [category, q]);
+    }, [q]);
 
     return (
         <DashboardLayout>
@@ -218,40 +223,6 @@ const StudentMentorResultsPage: React.FC = () => {
                                 </select>
                             </div>
 
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Subjects (select all that apply)</label>
-                                <div className="space-y-2">
-                                    {SUBJECT_OPTIONS.map((s) => (
-                                        <label key={s} className="flex items-center gap-2 text-sm text-gray-800">
-                                            <input
-                                                type="checkbox"
-                                                className="h-4 w-4"
-                                                checked={draftSubjects.includes(s)}
-                                                onChange={() => setDraftSubjects(toggleArrayValue(draftSubjects, s))}
-                                            />
-                                            {s}
-                                        </label>
-                                    ))}
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Goals (select all that apply)</label>
-                                <div className="space-y-2">
-                                    {GOAL_OPTIONS.map((g) => (
-                                        <label key={g} className="flex items-center gap-2 text-sm text-gray-800">
-                                            <input
-                                                type="checkbox"
-                                                className="h-4 w-4"
-                                                checked={draftGoals.includes(g)}
-                                                onChange={() => setDraftGoals(toggleArrayValue(draftGoals, g))}
-                                            />
-                                            {g}
-                                        </label>
-                                    ))}
-                                </div>
-                            </div>
-
                             <div className="md:col-span-2">
                                 <label className="block text-sm font-medium text-gray-700 mb-1">How often do you want to meet?</label>
                                 <select
@@ -264,6 +235,68 @@ const StudentMentorResultsPage: React.FC = () => {
                                     <option value="THRICE_WEEKLY">Three times a week (12 sessions)</option>
                                     <option value="ONCE">One-time session</option>
                                 </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Major Category</label>
+                                <select
+                                    className="w-full border border-gray-300 rounded-lg p-3 bg-white"
+                                    value={draftMajorCategoryId}
+                                    onChange={(e) => {
+                                        const v = e.target.value;
+                                        setDraftMajorCategoryId(v);
+                                        setDraftSubcategoryId('');
+                                        setDraftAreaIds([]);
+                                    }}
+                                    disabled={catsBusy}
+                                >
+                                    <option value="">{catsBusy ? 'Loading…' : 'Any'}</option>
+                                    {categories.map((c) => (
+                                        <option key={c.id} value={c.id}>{c.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Subcategory</label>
+                                <select
+                                    className="w-full border border-gray-300 rounded-lg p-3 bg-white"
+                                    value={draftSubcategoryId}
+                                    onChange={(e) => {
+                                        const v = e.target.value;
+                                        setDraftSubcategoryId(v);
+                                        setDraftAreaIds([]);
+                                    }}
+                                    disabled={!draftMajorCategoryId || catsBusy}
+                                >
+                                    <option value="">{!draftMajorCategoryId ? 'Select major first' : 'Any'}</option>
+                                    {subcategories.map((sc) => (
+                                        <option key={sc.id} value={sc.id}>{sc.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="md:col-span-2">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Areas of Expertise (select all that apply)</label>
+                                {!draftSubcategoryId ? (
+                                    <div className="text-sm text-gray-600">Select a subcategory to see areas.</div>
+                                ) : areas.length === 0 ? (
+                                    <div className="text-sm text-gray-600">No areas found.</div>
+                                ) : (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                        {areas.map((a) => (
+                                            <label key={a.id} className="flex items-center gap-2 text-sm text-gray-800">
+                                                <input
+                                                    type="checkbox"
+                                                    className="h-4 w-4"
+                                                    checked={draftAreaIds.includes(a.id)}
+                                                    onChange={() => setDraftAreaIds(toggleArrayValue(draftAreaIds, a.id))}
+                                                />
+                                                {a.name}
+                                            </label>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}
