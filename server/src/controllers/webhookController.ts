@@ -257,7 +257,19 @@ async function handleCheckoutSessionCompleted(session: any) {
 async function handleInvoicePaid(invoice: any) {
     // Handle Recurring Payments success
     console.log('[Stripe Webhook] Invoice Object:', JSON.stringify(invoice, null, 2));
-    const subscriptionId = invoice.subscription;
+
+    let subscriptionId = invoice.subscription;
+
+    // Fallback search for subscription ID (newer Stripe API versions nest it)
+    if (!subscriptionId && invoice.parent?.subscription_details?.subscription) {
+        subscriptionId = invoice.parent.subscription_details.subscription;
+    }
+
+    // Checking lines if still not found
+    if (!subscriptionId && invoice.lines?.data?.[0]?.subscription) {
+        subscriptionId = invoice.lines.data[0].subscription;
+    }
+
     console.log(`[Stripe Webhook] Invoice Paid for subscription: ${subscriptionId}`);
 
     // Check if it's a mentor
