@@ -23,6 +23,7 @@ export const handleStripeWebhook = async (req: Request, res: Response) => {
     }
 
     // Log event (optional, for debugging)
+    console.log(`[Stripe Webhook] Received event: ${event.type}`);
     // await prisma.stripeEvent.create({ data: { id: event.id, type: event.type, data: event.data.object as any } });
 
     try {
@@ -51,15 +52,24 @@ export const handleStripeWebhook = async (req: Request, res: Response) => {
 };
 
 async function handleCheckoutSessionCompleted(session: any) {
+    console.log(`[Stripe Webhook] Processing checkout.session.completed: ${session.id}`);
     const metadata = session.metadata;
-    if (!metadata) return;
+    console.log('[Stripe Webhook] Metadata:', metadata);
+    if (!metadata) {
+        console.warn('[Stripe Webhook] No metadata found in session');
+        return;
+    }
 
     if (metadata.type === 'mentor_subscription') {
-        // Handle Mentor Subscription
         const { tutorId, tier } = metadata as { tutorId?: string; tier?: string };
         const subscriptionId = session.subscription as string | null;
 
-        if (!tutorId || !subscriptionId) return;
+        console.log(`[Stripe Webhook] Mentor Subscription flow. TutorID: ${tutorId}, Tier: ${tier}, SubID: ${subscriptionId}`);
+
+        if (!tutorId || !subscriptionId) {
+            console.error('[Stripe Webhook] Missing tutorId or subscriptionId');
+            return;
+        }
 
         const subscription = await StripeService.getSubscription(subscriptionId);
         const trialEnd = (subscription as any).trial_end as number | null;
@@ -75,6 +85,7 @@ async function handleCheckoutSessionCompleted(session: any) {
                 tier: (tier === 'STANDARD' || tier === 'PRO' || tier === 'PREMIUM') ? (tier as any) : undefined,
             }
         });
+        console.log(`[Stripe Webhook] Successfully updated TutorProfile ${tutorId} for subscription.`);
     } else if (metadata.type === 'student_booking') {
         // Handle Student Booking payment success -> create Booking + Lessons atomically
         const tutorId = metadata.tutorId as string;
@@ -246,6 +257,7 @@ async function handleCheckoutSessionCompleted(session: any) {
 async function handleInvoicePaid(invoice: any) {
     // Handle Recurring Payments success
     const subscriptionId = invoice.subscription;
+    console.log(`[Stripe Webhook] Invoice Paid for subscription: ${subscriptionId}`);
 
     // Check if it's a mentor
     const tutor = await prisma.tutorProfile.findFirst({ where: { stripe_subscription_id: subscriptionId } });
