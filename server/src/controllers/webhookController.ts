@@ -279,6 +279,9 @@ async function handleInvoicePaid(invoice: any) {
             where: { id: tutor.id },
             data: { subscription_status: 'active', subscription_end_date: new Date(invoice.lines.data[0].period.end * 1000) }
         });
+        console.log(`[Stripe Webhook] Updated subscription for Tutor ${tutor.id}`);
+    } else {
+        console.warn(`[Stripe Webhook] No Tutor found with subscription ID: ${subscriptionId}. This is expected for the first invoice if 'checkout.session.completed' hasn't processed yet, OR if the subscription was created manually without metadata.`);
     }
 
     // Check if it's a student (if we implemented student subscriptions)
