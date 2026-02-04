@@ -256,6 +256,7 @@ async function handleCheckoutSessionCompleted(session: any) {
 
 async function handleInvoicePaid(invoice: any) {
     // Handle Recurring Payments success
+    console.log('[Stripe Webhook] Invoice Object:', JSON.stringify(invoice, null, 2));
     const subscriptionId = invoice.subscription;
     console.log(`[Stripe Webhook] Invoice Paid for subscription: ${subscriptionId}`);
 
