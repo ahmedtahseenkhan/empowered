@@ -107,6 +107,12 @@ export class StripeService {
         metadata: any = {}
     ) {
         try {
+            const normalizedMetadata: Record<string, string> = Object.fromEntries(
+                Object.entries(metadata || {})
+                    .filter(([, v]) => v !== undefined && v !== null)
+                    .map(([k, v]) => [k, String(v)])
+            );
+
             const session = await stripe.checkout.sessions.create({
                 customer: customerId,
                 mode: 'subscription',
@@ -119,10 +125,12 @@ export class StripeService {
                 ],
                 subscription_data: {
                     trial_period_days: 30,
+                    metadata: normalizedMetadata,
                 },
                 success_url: successUrl,
                 cancel_url: cancelUrl,
-                metadata,
+                metadata: normalizedMetadata,
+                client_reference_id: normalizedMetadata.tutorId,
             });
             return session;
         } catch (error) {

@@ -272,16 +272,79 @@ async function handleInvoicePaid(invoice: any) {
 
     console.log(`[Stripe Webhook] Invoice Paid for subscription: ${subscriptionId}`);
 
+    if (!subscriptionId) {
+        console.warn('[Stripe Webhook] invoice.paid received without subscription id. Skipping.');
+        return;
+    }
+
     // Check if it's a mentor
     const tutor = await prisma.tutorProfile.findFirst({ where: { stripe_subscription_id: subscriptionId } });
     if (tutor) {
+        const linePeriodEnd = invoice?.lines?.data?.[0]?.period?.end as number | undefined;
         await prisma.tutorProfile.update({
             where: { id: tutor.id },
-            data: { subscription_status: 'active', subscription_end_date: new Date(invoice.lines.data[0].period.end * 1000) }
+            data: {
+                subscription_status: 'active',
+                subscription_end_date: linePeriodEnd ? new Date(linePeriodEnd * 1000) : undefined
+            }
         });
         console.log(`[Stripe Webhook] Updated subscription for Tutor ${tutor.id}`);
     } else {
-        console.warn(`[Stripe Webhook] No Tutor found with subscription ID: ${subscriptionId}. This is expected for the first invoice if 'checkout.session.completed' hasn't processed yet, OR if the subscription was created manually without metadata.`);
+        // If checkout.session.completed didn't run (or ran late), reconcile from Subscription metadata.
+        try {
+            const subscription = await StripeService.getSubscription(subscriptionId);
+            const metadata = (subscription as any)?.metadata as Record<string, string> | undefined;
+            const metaTutorId = metadata?.tutorId;
+            const metaTier = metadata?.tier;
+
+            const trialEnd = (subscription as any).trial_end as number | null;
+            const currentPeriodEnd = (subscription as any).current_period_end as number | null;
+            const endEpoch = trialEnd || currentPeriodEnd;
+
+            if (metaTutorId) {
+                await prisma.tutorProfile.update({
+                    where: { id: metaTutorId },
+                    data: {
+                        stripe_subscription_id: subscriptionId,
+                        subscription_status: (subscription as any).status || 'active',
+                        subscription_end_date: endEpoch ? new Date(endEpoch * 1000) : undefined,
+                        tier: (metaTier === 'STANDARD' || metaTier === 'PRO' || metaTier === 'PREMIUM') ? (metaTier as any) : undefined,
+                    },
+                });
+                console.log(`[Stripe Webhook] Reconciled TutorProfile ${metaTutorId} from invoice.paid via subscription metadata.`);
+                return;
+            }
+
+            // Fallback: try mapping by email if metadata is missing.
+            const customerEmail = invoice.customer_email as string | undefined;
+            if (customerEmail) {
+                const tutorByEmail = await prisma.tutorProfile.findFirst({
+                    where: {
+                        user: {
+                            email: customerEmail,
+                        },
+                    },
+                });
+
+                if (tutorByEmail) {
+                    await prisma.tutorProfile.update({
+                        where: { id: tutorByEmail.id },
+                        data: {
+                            stripe_subscription_id: subscriptionId,
+                            subscription_status: (subscription as any).status || 'active',
+                            subscription_end_date: endEpoch ? new Date(endEpoch * 1000) : undefined,
+                        },
+                    });
+                    console.log(`[Stripe Webhook] Reconciled TutorProfile ${tutorByEmail.id} from invoice.paid via customer_email.`);
+                    return;
+                }
+            }
+
+            console.warn(`[Stripe Webhook] No Tutor found for subscription ${subscriptionId}. Missing metadata and no email match.`);
+        } catch (e) {
+            console.warn(`[Stripe Webhook] No Tutor found with subscription ID: ${subscriptionId}. This is expected for the first invoice if 'checkout.session.completed' hasn't processed yet, OR if the subscription was created manually without metadata.`);
+            console.error('[Stripe Webhook] invoice.paid reconcile failed:', e);
+        }
     }
 
     // Check if it's a student (if we implemented student subscriptions)
