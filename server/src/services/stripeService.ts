@@ -30,12 +30,22 @@ export class StripeService {
                 capabilities.card_payments = { requested: true };
             }
 
-            const account = await stripe.accounts.create({
+            const accountCreateParams: Stripe.AccountCreateParams = {
                 type: 'express',
                 country,
                 email,
                 capabilities,
-            });
+            };
+
+            // Oman requires the recipient service agreement when requesting transfers capability.
+            // https://stripe.com/docs/connect/service-agreement-types#choosing-type-with-api
+            if (country === 'OM') {
+                accountCreateParams.tos_acceptance = {
+                    service_agreement: 'recipient',
+                };
+            }
+
+            const account = await stripe.accounts.create(accountCreateParams);
             return account;
         } catch (error: any) {
             console.error('Error creating connect account:', error);

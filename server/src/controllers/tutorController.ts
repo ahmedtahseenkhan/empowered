@@ -537,19 +537,31 @@ export const updateEducation = async (req: AuthenticatedRequest, res: Response) 
                 if (certifications.length > 0) {
                     await tx.tutorCertification.createMany({
                         data: certifications.map((cert: any) => ({
-                            ...cert,
                             tutor_id: tutorId,
+                            name: cert?.name,
+                            issuer: cert?.issuer,
+                            year: cert?.year,
+                            image_url: cert?.image_url ?? null,
                             is_verified: false,
                             verification_status: 'PENDING',
                             rejection_reason: null,
                             reviewed_at: null,
-                        }))
+                        })),
                     });
                 }
             }
         });
 
-        res.json({ message: 'Professional details updated' });
+        const updated = await prisma.tutorProfile.findUnique({
+            where: { id: tutorId },
+            select: {
+                education: true,
+                experience: true,
+                certifications: true,
+            },
+        });
+
+        res.json({ message: 'Professional details updated', profile: updated });
 
     } catch (error) {
         console.error('Update Education Error:', error);
@@ -643,18 +655,30 @@ export const updateExternalReviews = async (req: AuthenticatedRequest, res: Resp
             if (external_reviews.length > 0) {
                 await prisma.tutorExternalReview.createMany({
                     data: external_reviews.map((rev: any) => ({
-                        ...rev,
                         tutor_id: tutorId,
+                        platform: rev?.platform,
+                        reviewer: rev?.reviewer,
+                        rating: rev?.rating,
+                        comment: rev?.comment ?? null,
+                        external_url: rev?.external_url ?? null,
+                        date: rev?.date ? new Date(rev.date) : null,
                         is_verified: false,
                         verification_status: 'PENDING',
                         rejection_reason: null,
                         reviewed_at: null,
-                    }))
+                    })),
                 });
             }
         }
 
-        res.json({ message: 'External reviews updated' });
+        const updated = await prisma.tutorProfile.findUnique({
+            where: { id: tutorId },
+            select: {
+                external_reviews: true,
+            },
+        });
+
+        res.json({ message: 'External reviews updated', profile: updated });
     } catch (error) {
         console.error('Update External Reviews Error:', error);
         res.status(500).json({ error: 'Server error' });

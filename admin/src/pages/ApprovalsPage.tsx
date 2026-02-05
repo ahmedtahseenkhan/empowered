@@ -23,7 +23,7 @@ interface ReviewRequest {
     reviewer: string;
     rating: number;
     comment: string | null;
-    proof_url?: string;
+    external_url?: string | null;
     created_at: string;
     tutor: {
         id: string;
@@ -234,8 +234,8 @@ const ApprovalsPage: React.FC = () => {
                                                 {rev.comment && <div className="text-xs text-gray-600 line-clamp-2 max-w-xs">{rev.comment}</div>}
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
-                                                {rev.proof_url ? (
-                                                    <a href={rev.proof_url} target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:text-primary-800 flex items-center gap-1 text-sm">
+                                                {rev.external_url ? (
+                                                    <a href={rev.external_url} target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:text-primary-800 flex items-center gap-1 text-sm">
                                                         Link <ExternalLink className="w-3 h-3" />
                                                     </a>
                                                 ) : (

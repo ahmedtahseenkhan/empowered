@@ -16,6 +16,7 @@ interface Certification {
     year: number;
     image_url?: string;
     is_verified?: boolean;
+    verification_status?: 'PENDING' | 'APPROVED' | 'REJECTED';
 }
 interface ExternalReview {
     id?: string;
@@ -23,7 +24,10 @@ interface ExternalReview {
     reviewer: string;
     rating: number;
     comment: string;
+    external_url?: string;
     date?: string;
+    is_verified?: boolean;
+    verification_status?: 'PENDING' | 'APPROVED' | 'REJECTED';
 }
 
 const YEARS = Array.from({ length: 40 }, (_, i) => new Date().getFullYear() - i);
@@ -125,19 +129,54 @@ export const EducationSection: React.FC<EducationSectionProps> = ({ onBack }) =>
         }
     };
 
+    const persistCertifications = async (nextCerts: Certification[]) => {
+        setSaving(true);
+        try {
+            await api.put('/tutor/me/education', {
+                education: degree && institution ? [{
+                    institution,
+                    degree,
+                    field_of_study: fieldOfStudy,
+                    year: parseInt(gradYear) || new Date().getFullYear()
+                }] : [],
+                certifications: nextCerts,
+            });
+        } catch (err) {
+            console.error('Failed to save certifications', err);
+            alert('Failed to save certifications.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const persistExternalReviews = async (nextReviews: ExternalReview[]) => {
+        setSaving(true);
+        try {
+            await api.put('/tutor/me/external-reviews', { external_reviews: nextReviews });
+        } catch (err) {
+            console.error('Failed to save external reviews', err);
+            alert('Failed to save external reviews.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
     // Helper functions for Certifications
     const handleAddCert = () => {
         if (newCert.name && newCert.issuer) {
-            setCertifications([...certifications, {
+            const next = [...certifications, {
                 name: newCert.name,
                 issuer: newCert.issuer,
                 year: newCert.year || new Date().getFullYear(),
                 image_url: newCert.image_url,
-                is_verified: false
-            }]);
+                is_verified: false,
+                verification_status: 'PENDING' as const
+            }];
+            setCertifications(next);
             setNewCert({ year: new Date().getFullYear() });
             setNewCertFileName(null);
             setIsAddingCert(false);
+            persistCertifications(next);
         }
     };
 
@@ -145,20 +184,26 @@ export const EducationSection: React.FC<EducationSectionProps> = ({ onBack }) =>
         const newCerts = [...certifications];
         newCerts.splice(index, 1);
         setCertifications(newCerts);
+        persistCertifications(newCerts);
     };
 
     // Helper functions for Reviews
     const handleAddReview = () => {
         if (newReview.reviewer && newReview.platform) {
-            setExternalReviews([...externalReviews, {
+            const next = [...externalReviews, {
                 platform: newReview.platform,
                 reviewer: newReview.reviewer,
                 rating: newReview.rating || 5,
                 comment: newReview.comment || '',
-                date: new Date().toISOString()
-            }]);
+                external_url: newReview.external_url || undefined,
+                date: new Date().toISOString(),
+                is_verified: false,
+                verification_status: 'PENDING' as const,
+            }];
+            setExternalReviews(next);
             setNewReview({ rating: 5 });
             setIsAddingReview(false);
+            persistExternalReviews(next);
         }
     };
 
@@ -166,6 +211,7 @@ export const EducationSection: React.FC<EducationSectionProps> = ({ onBack }) =>
         const newRevs = [...externalReviews];
         newRevs.splice(index, 1);
         setExternalReviews(newRevs);
+        persistExternalReviews(newRevs);
     };
 
     if (loading) return <div className="p-8 text-center">Loading...</div>;
@@ -277,7 +323,19 @@ export const EducationSection: React.FC<EducationSectionProps> = ({ onBack }) =>
                                         <p className="text-sm text-gray-500">{cert.issuer} ({cert.year})</p>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">Pending</span>
+                                        <span className={`text-xs px-2 py-1 rounded ${
+                                            (cert.verification_status || (cert.is_verified ? 'APPROVED' : 'PENDING')) === 'APPROVED'
+                                                ? 'bg-green-100 text-green-800'
+                                                : (cert.verification_status === 'REJECTED')
+                                                    ? 'bg-red-100 text-red-800'
+                                                    : 'bg-yellow-100 text-yellow-800'
+                                        }`}>
+                                            {(cert.verification_status || (cert.is_verified ? 'APPROVED' : 'PENDING')) === 'APPROVED'
+                                                ? 'Approved'
+                                                : (cert.verification_status === 'REJECTED')
+                                                    ? 'Rejected'
+                                                    : 'Pending'}
+                                        </span>
                                         <button onClick={() => handleRemoveCert(idx)} className="text-red-400 hover:text-red-600">
                                             <Trash2 className="w-4 h-4" />
                                         </button>
@@ -365,10 +423,11 @@ export const EducationSection: React.FC<EducationSectionProps> = ({ onBack }) =>
                 {/* 4. External Reviews */}
                 <Card className="p-6">
                     <h3 className="font-bold text-lg mb-4">External Reviews</h3>
-                    <div className="bg-white border invalid:border-red-500 border-gray-200 rounded-lg p-4 mb-4 flex gap-3 shadow-sm">
+                    <div className="bg-[#F3F0FF] border border-[#4A1D96] rounded-lg p-4 mb-4 flex gap-3">
                         <Star className="w-5 h-5 text-[#4A1D96] flex-shrink-0 mt-1" />
-                        <div className="text-xs text-gray-600">
-                            Pro & Premium feature: Members can add external reviews (Google, Facebook, etc.), which must be verified by our admin team.
+                        <div className="text-xs text-[#4A1D96]">
+                            <strong>Admin Verification Required</strong><br />
+                            External reviews must be verified by our admin team before they become visible to students. Items marked as "Pending" will not appear in your public profile until approved.
                         </div>
                     </div>
 
@@ -387,10 +446,35 @@ export const EducationSection: React.FC<EducationSectionProps> = ({ onBack }) =>
                                         <div>
                                             <span className="font-semibold block">{rev.reviewer}</span>
                                             <span className="text-xs text-gray-500">{rev.platform}</span>
+                                            {rev.external_url && (
+                                                <a
+                                                    href={rev.external_url}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="block text-xs text-[#4A1D96] underline mt-1"
+                                                >
+                                                    External Link
+                                                </a>
+                                            )}
                                         </div>
                                         <div className="flex items-center text-yellow-500 text-sm font-bold">
                                             {rev.rating} <Star className="w-3 h-3 ml-1 fill-current" />
                                         </div>
+                                    </div>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <span className={`text-xs px-2 py-1 rounded ${
+                                            (rev.verification_status || (rev.is_verified ? 'APPROVED' : 'PENDING')) === 'APPROVED'
+                                                ? 'bg-green-100 text-green-800'
+                                                : (rev.verification_status === 'REJECTED')
+                                                    ? 'bg-red-100 text-red-800'
+                                                    : 'bg-yellow-100 text-yellow-800'
+                                        }`}>
+                                            {(rev.verification_status || (rev.is_verified ? 'APPROVED' : 'PENDING')) === 'APPROVED'
+                                                ? 'Approved'
+                                                : (rev.verification_status === 'REJECTED')
+                                                    ? 'Rejected'
+                                                    : 'Pending'}
+                                        </span>
                                     </div>
                                     <p className="text-sm text-gray-600 italic">"{rev.comment}"</p>
                                 </div>
@@ -415,6 +499,12 @@ export const EducationSection: React.FC<EducationSectionProps> = ({ onBack }) =>
                                     placeholder="Client Name"
                                 />
                             </div>
+                            <Input
+                                label="External Link"
+                                value={newReview.external_url || ''}
+                                onChange={(e) => setNewReview({ ...newReview, external_url: e.target.value })}
+                                placeholder="https://..."
+                            />
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Rating</label>
                                 <div className="flex gap-2">
