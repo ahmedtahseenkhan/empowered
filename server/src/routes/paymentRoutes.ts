@@ -6,6 +6,7 @@ import {
     getConnectAccountStatus,
     getSubscriptionStatus,
     createStudentBookingCheckout,
+    payNextStudentBookingSession,
     updateMentorSubscription,
     disconnectStripeAccount
 } from '../controllers/paymentController';
@@ -28,5 +29,6 @@ router.delete('/mentor/connect-account', disconnectStripeAccount);
 
 // Student Booking
 router.post('/student/booking', createStudentBookingCheckout);
+router.post('/student/booking/pay-next', payNextStudentBookingSession);
 
 export default router;

@@ -21,6 +21,8 @@ const StudentSessionsPage: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [lessons, setLessons] = useState<Lesson[]>([]);
     const [tab, setTab] = useState<'upcoming' | 'past'>('upcoming');
+    const [joinBusyId, setJoinBusyId] = useState<string | null>(null);
+    const [joinError, setJoinError] = useState<string>('');
 
     useEffect(() => {
         const fetchLessons = async () => {
@@ -187,6 +189,11 @@ const StudentSessionsPage: React.FC = () => {
                     </Card>
                 ) : (
                     <div className="space-y-4">
+                        {joinError && (
+                            <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+                                {joinError}
+                            </div>
+                        )}
                         {sorted.map((l) => (
                             <Card key={l.id} className="p-6">
                                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
@@ -210,18 +217,30 @@ const StudentSessionsPage: React.FC = () => {
                                         </div>
                                     </div>
                                     <div className="flex gap-2 sm:flex-col">
-                                        {l.meeting_link ? (
-                                            <a href={l.meeting_link} target="_blank" rel="noreferrer">
-                                                <Button className="w-full flex items-center gap-2">
-                                                    <ExternalLink className="w-4 h-4" />
-                                                    Join Session
-                                                </Button>
-                                            </a>
-                                        ) : (
-                                            <Button className="w-full" disabled>
-                                                Join Session
-                                            </Button>
-                                        )}
+                                        <Button
+                                            className="w-full flex items-center gap-2"
+                                            disabled={joinBusyId === l.id}
+                                            onClick={async () => {
+                                                try {
+                                                    setJoinBusyId(l.id);
+                                                    setJoinError('');
+                                                    const res = await api.get(`/lessons/${l.id}/join`);
+                                                    const url = res.data?.meeting_link as string | undefined;
+                                                    if (url) {
+                                                        window.open(url, '_blank');
+                                                    } else {
+                                                        setJoinError('Meeting link is not available yet.');
+                                                    }
+                                                } catch (e: any) {
+                                                    setJoinError(e?.response?.data?.error || 'Unable to join session.');
+                                                } finally {
+                                                    setJoinBusyId(null);
+                                                }
+                                            }}
+                                        >
+                                            <ExternalLink className="w-4 h-4" />
+                                            {joinBusyId === l.id ? 'Joining…' : 'Join Session'}
+                                        </Button>
                                         {l.google_calendar_html_link ? (
                                             <a href={l.google_calendar_html_link} target="_blank" rel="noreferrer">
                                                 <Button variant="outline" className="w-full">

@@ -86,6 +86,24 @@ async function handleCheckoutSessionCompleted(session: any) {
             }
         });
         console.log(`[Stripe Webhook] Successfully updated TutorProfile ${tutorId} for subscription.`);
+    } else if (metadata.type === 'student_booking_payment') {
+        const paymentScheduleId = metadata.paymentScheduleId as string | undefined;
+        if (!paymentScheduleId) {
+            console.error('[Stripe Webhook] Missing paymentScheduleId for student_booking_payment');
+            return;
+        }
+
+        const amountTotal = session.amount_total as number | null;
+        await prisma.paymentSchedule.update({
+            where: { id: paymentScheduleId },
+            data: {
+                status: 'paid',
+                stripe_pi_id: session.payment_intent as string,
+                // store the amount paid in whole currency units if Stripe provides it
+                ...(amountTotal && !Number.isNaN(amountTotal) ? { amount: Math.round(amountTotal / 100) } : {}),
+            },
+        });
+        console.log(`[Stripe Webhook] Marked PaymentSchedule ${paymentScheduleId} as paid.`);
     } else if (metadata.type === 'student_booking') {
         // Handle Student Booking payment success -> create Booking + Lessons atomically
         const tutorId = metadata.tutorId as string;
@@ -194,25 +212,39 @@ async function handleCheckoutSessionCompleted(session: any) {
                             end_time: l.end,
                             duration: durationMinutes,
                             status: 'BOOKED',
-                            // First lesson is marked as FREE_TRIAL, rest as PAID
-                            billing_type: idx === 0 ? 'FREE_TRIAL' : 'PAID',
+                            billing_type: 'PAID',
                         },
                     })
                 )
             );
 
-            // Single payment schedule row to reflect Stripe payment (optional but useful for reporting)
+            // Payment schedule:
+            // - First lesson is paid immediately by this Checkout Session
+            // - Remaining lessons are due 48 hours before start
             const amountTotal = session.amount_total as number | null;
-            if (amountTotal && !Number.isNaN(amountTotal)) {
-                await tx.paymentSchedule.create({
-                    data: {
+            const paidAmount = amountTotal && !Number.isNaN(amountTotal) ? Math.round(amountTotal / 100) : tutor.hourly_rate;
+
+            const scheduleRows = createdLessons.map((lesson, idx) => {
+                const dueDate = new Date(lesson.start_time.getTime() - 48 * 60 * 60 * 1000);
+                if (idx === 0) {
+                    return {
                         booking_id: createdBooking.id,
-                        amount: Math.round(amountTotal / 100),
-                        due_date: new Date(),
+                        amount: paidAmount,
+                        due_date: dueDate,
                         status: 'paid',
                         stripe_pi_id: session.payment_intent as string,
-                    },
-                });
+                    };
+                }
+                return {
+                    booking_id: createdBooking.id,
+                    amount: tutor.hourly_rate,
+                    due_date: dueDate,
+                    status: 'pending',
+                };
+            });
+
+            if (scheduleRows.length > 0) {
+                await tx.paymentSchedule.createMany({ data: scheduleRows });
             }
 
             return { createdBooking, createdLessons };

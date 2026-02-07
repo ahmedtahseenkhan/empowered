@@ -290,6 +290,12 @@ const CreateBookingSchema = z.object({
     cancelUrl: z.string().url(),
 });
 
+const PayNextBookingSessionSchema = z.object({
+    bookingId: z.string().uuid().optional(),
+    successUrl: z.string().url(),
+    cancelUrl: z.string().url(),
+});
+
 const requiredWeeklySlotsForFrequency = (frequency: 'ONCE' | 'WEEKLY' | 'TWICE_WEEKLY' | 'THRICE_WEEKLY') => {
     if (frequency === 'TWICE_WEEKLY') return 2;
     if (frequency === 'THRICE_WEEKLY') return 3;
@@ -328,18 +334,13 @@ export const createStudentBookingCheckout = async (req: Request, res: Response) 
             return res.status(400).json({ error: 'One or more slotStarts are invalid' });
         }
 
-        // 3. Determine how many sessions will be created (matches bookingController logic)
-        const requiredWeeklySlots = requiredWeeklySlotsForFrequency(frequency);
-        const weeks = frequency === 'ONCE' ? 1 : 4;
-        const totalSessions = frequency === 'ONCE' ? 1 : weeks * requiredWeeklySlots;
+        // 3. Pricing: charge ONLY the first session now (pay-per-session model)
+        // hourly_rate is in whole currency units (e.g. dollars); Stripe needs cents
+        const sessionRate = tutor.hourly_rate;
+        const platformFeePercentage = 0.10; // 10% platform fee
 
-        // 4. Pricing: hourly_rate is in whole currency units (e.g. dollars); Stripe needs cents
-        const sessionRate = tutor.hourly_rate; // e.g. 30
-        const platformFeePercentage = 0.10; // 10% platform fee (you can tweak this)
-
-        const subTotal = sessionRate * totalSessions; // e.g. 30 * 4
-        const platformFee = subTotal * platformFeePercentage;
-        const totalAmount = subTotal + platformFee;
+        const platformFee = sessionRate * platformFeePercentage;
+        const totalAmount = sessionRate + platformFee;
 
         const amountInCents = Math.round(totalAmount * 100);
         const platformFeeInCents = Math.round(platformFee * 100);
@@ -356,7 +357,7 @@ export const createStudentBookingCheckout = async (req: Request, res: Response) 
             });
         }
 
-        // 6. Create Checkout Session (one-off payment for the full block)
+        // 6. Create Checkout Session (one-off payment for the FIRST session)
         const session = await StripeService.createBookingCheckoutSession(
             amountInCents,
             'usd',
@@ -382,5 +383,95 @@ export const createStudentBookingCheckout = async (req: Request, res: Response) 
             return res.status(400).json({ error: error.issues });
         }
         res.status(500).json({ error: 'Failed to create booking session' });
+    }
+};
+
+export const payNextStudentBookingSession = async (req: Request, res: Response) => {
+    try {
+        const studentUserId = (req as any).user.id;
+        const { bookingId, successUrl, cancelUrl } = PayNextBookingSessionSchema.parse(req.body);
+
+        const student = await prisma.studentProfile.findUnique({
+            where: { user_id: studentUserId },
+        });
+
+        if (!student) return res.status(404).json({ error: 'Student profile not found' });
+
+        const schedule = await prisma.paymentSchedule.findFirst({
+            where: {
+                status: 'pending',
+                booking: {
+                    student_id: student.id,
+                    ...(bookingId ? { id: bookingId } : {}),
+                },
+                // Only allow paying when the item is due (48h window opens at due_date)
+                due_date: {
+                    lte: new Date(),
+                },
+            },
+            orderBy: {
+                due_date: 'asc',
+            },
+            include: {
+                booking: {
+                    include: {
+                        tutor: true,
+                    },
+                },
+            },
+        });
+
+        if (!schedule) {
+            return res.status(404).json({ error: 'No due session payment found.' });
+        }
+
+        const tutor = schedule.booking?.tutor;
+        if (!tutor) return res.status(400).json({ error: 'Tutor not found for booking.' });
+        if (!tutor.stripe_account_id) return res.status(400).json({ error: 'This mentor is not yet set up to receive payments.' });
+
+        const stripeCustomerId =
+            student.stripe_customer_id ||
+            (await StripeService.createCustomer((req as any).user?.email || 'student@example.com', student.username)).id;
+
+        if (!student.stripe_customer_id) {
+            await prisma.studentProfile.update({
+                where: { id: student.id },
+                data: { stripe_customer_id: stripeCustomerId },
+            });
+        }
+
+        // Charge the student the session rate + platform fee (same as initial booking checkout)
+        const sessionRate = Number(tutor.hourly_rate);
+        const platformFeePercentage = 0.10;
+        const platformFee = sessionRate * platformFeePercentage;
+        const totalAmount = sessionRate + platformFee;
+
+        const amountInCents = Math.round(totalAmount * 100);
+        const platformFeeInCents = Math.round(platformFee * 100);
+
+        const session = await StripeService.createBookingCheckoutSession(
+            amountInCents,
+            'usd',
+            stripeCustomerId,
+            tutor.stripe_account_id,
+            platformFeeInCents,
+            successUrl,
+            cancelUrl,
+            {
+                type: 'student_booking_payment',
+                paymentScheduleId: schedule.id,
+                bookingId: schedule.booking_id,
+                tutorId: tutor.id,
+                studentId: student.id,
+            }
+        );
+
+        res.json({ url: session.url });
+    } catch (error: any) {
+        console.error('Pay next booking session error:', error);
+        if (error instanceof z.ZodError) {
+            return res.status(400).json({ error: error.issues });
+        }
+        res.status(500).json({ error: 'Failed to start payment session' });
     }
 };

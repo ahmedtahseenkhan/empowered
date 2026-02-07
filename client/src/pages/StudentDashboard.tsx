@@ -58,6 +58,9 @@ const StudentDashboard: React.FC = () => {
     });
 
     const [busy, setBusy] = useState(false);
+    const [payBusy, setPayBusy] = useState(false);
+    const [payError, setPayError] = useState<string>('');
+    const [joinBusyId, setJoinBusyId] = useState<string | null>(null);
 
     const weekStart = useMemo(() => {
         const now = new Date();
@@ -353,10 +356,41 @@ const StudentDashboard: React.FC = () => {
                                                     </div>
                                                     <div className="flex gap-2">
                                                         {l.meeting_link && (
-                                                            <Button variant="outline" onClick={() => window.open(l.meeting_link as string, '_blank')}>Join</Button>
+                                                            <Button
+                                                                variant="outline"
+                                                                size="sm"
+                                                                className="h-7 text-xs px-2"
+                                                                disabled={joinBusyId === l.id}
+                                                                onClick={async () => {
+                                                                    try {
+                                                                        setJoinBusyId(l.id);
+                                                                        setPayError('');
+                                                                        const res = await api.get(`/lessons/${l.id}/join`);
+                                                                        const url = res.data?.meeting_link as string | undefined;
+                                                                        if (url) {
+                                                                            window.open(url, '_blank');
+                                                                        } else {
+                                                                            setPayError('Meeting link is not available yet.');
+                                                                        }
+                                                                    } catch (e: any) {
+                                                                        setPayError(e?.response?.data?.error || 'Unable to join session.');
+                                                                    } finally {
+                                                                        setJoinBusyId(null);
+                                                                    }
+                                                                }}
+                                                            >
+                                                                {joinBusyId === l.id ? 'Joining…' : 'Join'}
+                                                            </Button>
                                                         )}
                                                         {l.google_calendar_html_link && (
-                                                            <Button variant="outline" onClick={() => window.open(l.google_calendar_html_link as string, '_blank')}>Calendar</Button>
+                                                            <Button
+                                                                variant="outline"
+                                                                size="sm"
+                                                                className="h-7 text-xs px-2"
+                                                                onClick={() => window.open(l.google_calendar_html_link as string, '_blank')}
+                                                            >
+                                                                Calendar
+                                                            </Button>
                                                         )}
                                                     </div>
                                                 </div>
@@ -447,7 +481,44 @@ const StudentDashboard: React.FC = () => {
                             <div>
                                 <h2 className="text-sm font-bold text-gray-900">Upcoming Sessions</h2>
                             </div>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={payBusy}
+                                onClick={async () => {
+                                    try {
+                                        setPayBusy(true);
+                                        setPayError('');
+                                        const baseUrl = window.location.origin;
+                                        const successUrl = `${baseUrl}/student/dashboard`;
+                                        const cancelUrl = `${baseUrl}/student/dashboard`;
+
+                                        const res = await api.post('/payments/student/booking/pay-next', {
+                                            successUrl,
+                                            cancelUrl,
+                                        });
+
+                                        if (res.data?.url) {
+                                            window.location.href = res.data.url;
+                                        } else {
+                                            setPayError('Failed to start payment – please try again.');
+                                        }
+                                    } catch (e: any) {
+                                        setPayError(e?.response?.data?.error || 'No due session payment found.');
+                                    } finally {
+                                        setPayBusy(false);
+                                    }
+                                }}
+                            >
+                                {payBusy ? 'Loading…' : 'Pay Next Session'}
+                            </Button>
                         </div>
+
+                        {payError && (
+                            <div className="mb-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                                {payError}
+                            </div>
+                        )}
 
                         {busy ? (
                             <div className="text-xs text-gray-600">Loading...</div>
@@ -465,7 +536,31 @@ const StudentDashboard: React.FC = () => {
                                                 </div>
                                             </div>
                                             {l.meeting_link && (
-                                                <Button variant="outline" size="sm" className="h-6 text-xs px-2" onClick={() => window.open(l.meeting_link as string, '_blank')}>Join</Button>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="h-6 text-xs px-2"
+                                                    disabled={joinBusyId === l.id}
+                                                    onClick={async () => {
+                                                        try {
+                                                            setJoinBusyId(l.id);
+                                                            setPayError('');
+                                                            const res = await api.get(`/lessons/${l.id}/join`);
+                                                            const url = res.data?.meeting_link as string | undefined;
+                                                            if (url) {
+                                                                window.open(url, '_blank');
+                                                            } else {
+                                                                setPayError('Meeting link is not available yet.');
+                                                            }
+                                                        } catch (e: any) {
+                                                            setPayError(e?.response?.data?.error || 'Unable to join session.');
+                                                        } finally {
+                                                            setJoinBusyId(null);
+                                                        }
+                                                    }}
+                                                >
+                                                    {joinBusyId === l.id ? 'Joining…' : 'Join'}
+                                                </Button>
                                             )}
                                         </div>
                                     </div>
