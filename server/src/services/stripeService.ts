@@ -200,6 +200,14 @@ export class StripeService {
         return stripe.subscriptions.retrieve(subscriptionId);
     }
 
+    static async getCheckoutSessionByPaymentIntent(paymentIntentId: string) {
+        const sessions = await stripe.checkout.sessions.list({
+            payment_intent: paymentIntentId,
+            limit: 1,
+        });
+        return sessions.data[0] || null;
+    }
+
     static constructEvent(payload: string | Buffer, sig: string, endpointSecret: string) {
         return stripe.webhooks.constructEvent(payload, sig, endpointSecret);
     }

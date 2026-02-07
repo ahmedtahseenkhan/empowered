@@ -31,6 +31,9 @@ export const handleStripeWebhook = async (req: Request, res: Response) => {
             case 'checkout.session.completed':
                 await handleCheckoutSessionCompleted(event.data.object);
                 break;
+            case 'payment_intent.succeeded':
+                await handlePaymentIntentSucceeded(event.data.object);
+                break;
             case 'invoice.paid':
                 await handleInvoicePaid(event.data.object);
                 break;
@@ -50,6 +53,21 @@ export const handleStripeWebhook = async (req: Request, res: Response) => {
 
     res.json({ received: true });
 };
+
+async function handlePaymentIntentSucceeded(paymentIntent: any) {
+    const piId = paymentIntent?.id as string | undefined;
+    if (!piId) return;
+
+    // If your Stripe webhook isn't configured to send `checkout.session.completed`,
+    // reconcile the booking by finding the associated Checkout Session.
+    const session = await StripeService.getCheckoutSessionByPaymentIntent(piId);
+    if (!session) {
+        console.warn(`[Stripe Webhook] payment_intent.succeeded ${piId} has no related checkout session.`);
+        return;
+    }
+
+    await handleCheckoutSessionCompleted(session);
+}
 
 async function handleCheckoutSessionCompleted(session: any) {
     console.log(`[Stripe Webhook] Processing checkout.session.completed: ${session.id}`);
@@ -106,6 +124,20 @@ async function handleCheckoutSessionCompleted(session: any) {
         console.log(`[Stripe Webhook] Marked PaymentSchedule ${paymentScheduleId} as paid.`);
     } else if (metadata.type === 'student_booking') {
         // Handle Student Booking payment success -> create Booking + Lessons atomically
+        const paymentIntentId = session.payment_intent as string | null;
+        if (paymentIntentId) {
+            const existing = await prisma.paymentSchedule.findFirst({
+                where: {
+                    stripe_pi_id: paymentIntentId,
+                },
+                select: { id: true },
+            });
+            if (existing) {
+                console.log(`[Stripe Webhook] student_booking already processed for PI ${paymentIntentId}. Skipping.`);
+                return;
+            }
+        }
+
         const tutorId = metadata.tutorId as string;
         const studentId = metadata.studentId as string;
         const frequency = metadata.frequency as 'ONCE' | 'WEEKLY' | 'TWICE_WEEKLY' | 'THRICE_WEEKLY';
