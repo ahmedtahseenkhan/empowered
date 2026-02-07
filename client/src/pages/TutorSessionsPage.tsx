@@ -84,7 +84,7 @@ const TutorSessionsPage: React.FC = () => {
         const s = new Date(startIso);
         const e = new Date(endIso);
         if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime())) return '—';
-        return `${s.toLocaleString()} – ${e.toLocaleTimeString()}`;
+        return `${s.toLocaleString()} – ${e.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12: true })}`;
     };
 
     return (

@@ -348,7 +348,7 @@ const StudentDashboard: React.FC = () => {
                                                     <div>
                                                         <div className="text-sm font-semibold text-gray-900">{l.tutor?.username || 'Mentor'}</div>
                                                         <div className="text-xs text-gray-600">
-                                                            {new Date(l.start_time).toLocaleTimeString()} — {new Date(l.end_time).toLocaleTimeString()}
+                                                            {new Date(l.start_time).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12: true })} — {new Date(l.end_time).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12: true })}
                                                         </div>
                                                     </div>
                                                     <div className="flex gap-2">
@@ -381,7 +381,7 @@ const StudentDashboard: React.FC = () => {
                                     <div className="border-r border-gray-200">
                                         {Array.from({ length: endHour - startHour }).map((_, i) => {
                                             const hour = startHour + i;
-                                            const label = new Date(new Date().setHours(hour, 0, 0, 0)).toLocaleTimeString(undefined, { hour: 'numeric' });
+                                            const label = new Date(new Date().setHours(hour, 0, 0, 0)).toLocaleTimeString(undefined, { hour: 'numeric', hour12: true });
                                             return (
                                                 <div key={hour} className="h-12 border-b border-gray-100 px-2 flex items-start justify-end">
                                                     <span className="text-[10px] text-gray-500 mt-1">{label}</span>
@@ -461,7 +461,7 @@ const StudentDashboard: React.FC = () => {
                                             <div>
                                                 <div className="text-sm font-semibold text-gray-900">{l.tutor?.username || 'Mentor'}</div>
                                                 <div className="text-xs text-gray-600">
-                                                    {new Date(l.start_time).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} • {new Date(l.start_time).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
+                                                    {new Date(l.start_time).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} • {new Date(l.start_time).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12: true })}
                                                 </div>
                                             </div>
                                             {l.meeting_link && (

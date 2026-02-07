@@ -105,7 +105,7 @@ const TutorAIAssistPage: React.FC = () => {
                                     }`}>
                                     {msg.text}
                                     <div className={`text-[10px] mt-2 opacity-70 ${msg.sender === 'user' ? 'text-primary-100' : 'text-gray-400'}`}>
-                                        {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        {msg.timestamp.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: true })}
                                     </div>
                                 </div>
                             </div>

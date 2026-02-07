@@ -617,7 +617,7 @@ const TutorDashboard: React.FC = () => {
                                         <div className="border-r border-gray-200">
                                             {Array.from({ length: endHour - startHour }).map((_, i) => {
                                                 const hour = startHour + i;
-                                                const label = new Date(new Date().setHours(hour, 0, 0, 0)).toLocaleTimeString(undefined, { hour: 'numeric' });
+                                                const label = new Date(new Date().setHours(hour, 0, 0, 0)).toLocaleTimeString(undefined, { hour: 'numeric', hour12: true });
                                                 return (
                                                     <div key={hour} className="h-12 border-b border-gray-100 px-2 flex items-start justify-end">
                                                         <span className="text-[10px] text-gray-500 mt-1">{label}</span>

@@ -55,7 +55,7 @@ const StudentBookMentorPage: React.FC = () => {
 
     const formatTimeLabel = (iso: string) => {
         const d = new Date(iso);
-        return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(d);
+        return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', hour12: true }).format(d);
     };
 
     const slotsByDay = useMemo(() => {
