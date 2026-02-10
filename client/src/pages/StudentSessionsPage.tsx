@@ -9,9 +9,13 @@ type Lesson = {
     id: string;
     start_time: string;
     end_time: string;
+    created_at?: string;
     status: string;
     billing_type?: 'FREE_TRIAL' | 'PAID';
-    booking?: { frequency?: 'ONCE' | 'WEEKLY' | 'TWICE_WEEKLY' | 'THRICE_WEEKLY' | string | null } | null;
+    booking?: {
+        frequency?: 'ONCE' | 'WEEKLY' | 'TWICE_WEEKLY' | 'THRICE_WEEKLY' | string | null;
+        created_at?: string;
+    } | null;
     meeting_link?: string | null;
     google_calendar_html_link?: string | null;
     tutor?: { username?: string | null };
@@ -58,15 +62,30 @@ const StudentSessionsPage: React.FC = () => {
             .map((l) => {
                 const start = new Date(l.start_time);
                 const end = new Date(l.end_time);
+                const bookedAtIso = l.created_at || l.booking?.created_at;
+                const bookedAt = bookedAtIso ? new Date(bookedAtIso) : null;
                 return {
                     ...l,
                     start,
                     end,
                     startMs: start.getTime(),
+                    bookedAt,
                 };
             })
             .filter((l) => !Number.isNaN(l.startMs));
     }, [lessons]);
+
+    const formatBookedOn = (d: Date | null | undefined) => {
+        if (!d || Number.isNaN(d.getTime())) return '';
+        return d.toLocaleString(undefined, {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true,
+        });
+    };
 
     const filtered = useMemo(() => {
         if (tab === 'upcoming') {
@@ -215,6 +234,11 @@ const StudentSessionsPage: React.FC = () => {
                                         <div className="text-sm text-gray-700 mt-1">
                                             {formatRange(l.start_time, l.end_time)}
                                         </div>
+                                        {l.bookedAt ? (
+                                            <div className="text-xs text-gray-500 mt-1">
+                                                Booked on {formatBookedOn(l.bookedAt)}
+                                            </div>
+                                        ) : null}
                                     </div>
                                     <div className="flex gap-2 sm:flex-col">
                                         <Button

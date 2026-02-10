@@ -11,10 +11,12 @@ type Lesson = {
     student_id?: string;
     start_time: string;
     end_time: string;
+    created_at?: string;
     status: string;
     meeting_link?: string | null;
     google_calendar_html_link?: string | null;
     student?: { username?: string | null };
+    booking?: { created_at?: string } | null;
 };
 
 const TutorSessionsPage: React.FC = () => {
@@ -87,6 +89,20 @@ const TutorSessionsPage: React.FC = () => {
         return `${s.toLocaleString()} – ${e.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12: true })}`;
     };
 
+    const formatBookedOn = (iso?: string | null) => {
+        if (!iso) return '';
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return '';
+        return d.toLocaleString(undefined, {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true,
+        });
+    };
+
     return (
         <DashboardLayout>
             <div className="w-full">
@@ -124,6 +140,11 @@ const TutorSessionsPage: React.FC = () => {
                                         <div className="text-sm text-gray-500">{l.status}</div>
                                         <div className="text-lg font-bold text-gray-900 mt-1">{l.student?.username || 'Student'}</div>
                                         <div className="text-sm text-gray-700 mt-2">{formatRange(l.start_time, l.end_time)}</div>
+                                        {(l.created_at || l.booking?.created_at) ? (
+                                            <div className="text-xs text-gray-500 mt-1">
+                                                Booked on {formatBookedOn(l.created_at || l.booking?.created_at || '')}
+                                            </div>
+                                        ) : null}
                                     </div>
                                     <div className="flex gap-2 sm:flex-col">
                                         {l.meeting_link ? (

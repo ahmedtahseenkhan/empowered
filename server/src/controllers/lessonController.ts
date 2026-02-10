@@ -55,9 +55,11 @@ export const getMyLessons = async (req: AuthRequest, res: Response) => {
                 billing_type: true,
                 meeting_link: true,
                 google_calendar_html_link: true,
+                created_at: true,
                 booking: {
                     select: {
                         frequency: true,
+                        created_at: true,
                     },
                 },
                 student: { select: { username: true } },
