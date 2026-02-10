@@ -332,9 +332,8 @@ const PaymentsPage: React.FC = () => {
                     </Card>
                 )}
 
-                {/* Payout Settings & Subscription Info */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {/* Payout Settings */}
+                {/* Payout Settings & Subscription Info - HIDDEN FOR NOW */}
+                {/* <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <Card className="p-6">
                         <h2 className="text-xl font-semibold text-gray-900 mb-4">🏦 Payout Settings</h2>
                         <div className="space-y-3">
@@ -352,7 +351,6 @@ const PaymentsPage: React.FC = () => {
                         </div>
                     </Card>
 
-                    {/* Subscription Info */}
                     {subscriptionInfo && (
                         <Card className="p-6">
                             <h2 className="text-xl font-semibold text-gray-900 mb-4">📱 My Subscription</h2>
@@ -383,7 +381,7 @@ const PaymentsPage: React.FC = () => {
                             </div>
                         </Card>
                     )}
-                </div>
+                </div> */}
             </div>
         </DashboardLayout>
     );
