@@ -104,7 +104,10 @@ const StudentSessionsPage: React.FC = () => {
         const s = new Date(startIso);
         const e = new Date(endIso);
         if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime())) return '—';
-        return `${s.toLocaleString()} – ${e.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12: true })}`;
+        const datePart = s.toLocaleDateString(undefined, { day: '2-digit', month: '2-digit', year: 'numeric' });
+        const startTime = s.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12: true });
+        const endTime = e.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12: true });
+        return `${datePart}, ${startTime} – ${endTime}`;
     };
 
     const mapStatusToBadge = (status: string) => {
