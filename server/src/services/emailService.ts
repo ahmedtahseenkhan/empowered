@@ -279,6 +279,35 @@ class EmailService {
             html,
         });
     }
+    /**
+     * WELCOME EMAILS
+     */
+
+    async sendVerificationEmail(data: {
+        username: string;
+        email: string;
+        verificationLink: string;
+    }): Promise<void> {
+        const html = this.renderTemplate('verify-email', { ...data, year: new Date().getFullYear() });
+        await this.sendEmail({
+            to: data.email,
+            subject: 'Verify Your Email - EmpowerEd Learnings',
+            html,
+        });
+    }
+
+    async sendWelcomeEmail(data: {
+        username: string;
+        email: string;
+        loginLink: string;
+    }): Promise<void> {
+        const html = this.renderTemplate('welcome', { ...data, year: new Date().getFullYear() });
+        await this.sendEmail({
+            to: data.email,
+            subject: 'Welcome to EmpowerEd Learnings!',
+            html,
+        });
+    }
 }
 
 export default new EmailService();

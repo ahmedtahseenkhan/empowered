@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import crypto from 'crypto';
 import prisma from '../config/db';
-import { hashPassword, comparePassword, generateToken } from '../utils/auth';
+import { hashPassword, comparePassword, generateToken, generateVerificationToken, verifyToken } from '../utils/auth';
 import { RegisterSchema, LoginSchema } from '../utils/validation';
 import { AuthRequest } from '../middleware/authMiddleware';
 import emailService from '../services/emailService';
@@ -53,8 +53,30 @@ export const register = async (req: Request, res: Response) => {
         // Generate Token
         const token = generateToken(result.id, result.role);
 
+        // Send Verification Email
+        try {
+            const verificationToken = generateVerificationToken(result.id);
+            const verificationLink = `${process.env.CLIENT_URL || 'http://localhost:5173'}/verify-email?token=${verificationToken}`;
+
+            await emailService.sendVerificationEmail({
+                username,
+                email,
+                verificationLink
+            });
+
+            // Also send welcome email (optional, or send after verification)
+            await emailService.sendWelcomeEmail({
+                username,
+                email,
+                loginLink: `${process.env.CLIENT_URL || 'http://localhost:5173'}/login`,
+            });
+
+        } catch (emailError) {
+            console.error('Failed to send emails:', emailError);
+        }
+
         res.status(201).json({
-            message: 'User registered successfully',
+            message: 'User registered successfully. Please check your email to verify your account.',
             token,
             user: { id: result.id, email: result.email, role: result.role, username }
         });
@@ -256,5 +278,65 @@ export const login = async (req: Request, res: Response) => {
 
     } catch (error: any) {
         res.status(400).json({ error: error.errors || 'Login failed' });
+    }
+};
+
+export const verifyEmail = async (req: Request, res: Response) => {
+    try {
+        const { token } = req.body;
+        if (!token) return res.status(400).json({ error: 'Token is required' });
+
+        const decoded = verifyToken(token);
+        if (!decoded || decoded.type !== 'email_verification') {
+            return res.status(400).json({ error: 'Invalid or expired verification token' });
+        }
+
+        const user = await prisma.user.findUnique({ where: { id: decoded.id } });
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        if (user.is_verified) {
+            return res.json({ message: 'Email already verified' });
+        }
+
+        await prisma.user.update({
+            where: { id: user.id },
+            data: { is_verified: true }
+        });
+
+        return res.json({ message: 'Email verified successfully' });
+    } catch (error) {
+        console.error('verifyEmail error:', error);
+        return res.status(500).json({ error: 'Server error' });
+    }
+};
+
+export const resendVerification = async (req: Request, res: Response) => {
+    try {
+        const { email } = req.body;
+        if (!email) return res.status(400).json({ error: 'Email is required' });
+
+        const user = await prisma.user.findUnique({
+            where: { email },
+            include: { student_profile: true, tutor_profile: true }
+        });
+
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        if (user.is_verified) return res.status(400).json({ error: 'Email already verified' });
+
+        const verificationToken = generateVerificationToken(user.id);
+        const verificationLink = `${process.env.CLIENT_URL || 'http://localhost:5173'}/verify-email?token=${verificationToken}`;
+
+        const username = user.role === 'STUDENT' ? user.student_profile?.username : user.tutor_profile?.username;
+
+        await emailService.sendVerificationEmail({
+            username: username || 'User',
+            email: user.email,
+            verificationLink
+        });
+
+        return res.json({ message: 'Verification email sent' });
+    } catch (error) {
+        console.error('resendVerification error:', error);
+        return res.status(500).json({ error: 'Server error' });
     }
 };
