@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { StripeService } from '../services/stripeService';
+import { PaymentAnalyticsService } from '../services/paymentAnalyticsService';
 import prisma from '../config/db';
 import { z } from 'zod';
 
@@ -475,3 +476,139 @@ export const payNextStudentBookingSession = async (req: Request, res: Response) 
         res.status(500).json({ error: 'Failed to start payment session' });
     }
 };
+
+// ============ TUTOR PAYMENT ANALYTICS ENDPOINTS ============
+
+/**
+ * Get tutor earnings overview
+ */
+export const getTutorEarningsOverview = async (req: Request, res: Response) => {
+    try {
+        const userId = (req as any).user.id;
+
+        const tutor = await prisma.tutorProfile.findUnique({
+            where: { user_id: userId },
+            select: { id: true },
+        });
+
+        if (!tutor) return res.status(404).json({ error: 'Tutor profile not found' });
+
+        const overview = await PaymentAnalyticsService.getTutorEarningsOverview(tutor.id);
+        res.json(overview);
+    } catch (error: any) {
+        console.error('Get earnings overview error:', error);
+        res.status(500).json({ error: 'Failed to retrieve earnings overview' });
+    }
+};
+
+/**
+ * Get tutor payment history with pagination
+ */
+export const getTutorPaymentHistory = async (req: Request, res: Response) => {
+    try {
+        const userId = (req as any).user.id;
+        const page = parseInt(req.query.page as string) || 1;
+        const limit = parseInt(req.query.limit as string) || 20;
+        const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
+        const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
+
+        const tutor = await prisma.tutorProfile.findUnique({
+            where: { user_id: userId },
+            select: { id: true },
+        });
+
+        if (!tutor) return res.status(404).json({ error: 'Tutor profile not found' });
+
+        const history = await PaymentAnalyticsService.getTutorPaymentHistory(
+            tutor.id,
+            page,
+            limit,
+            startDate,
+            endDate
+        );
+        res.json(history);
+    } catch (error: any) {
+        console.error('Get payment history error:', error);
+        res.status(500).json({ error: 'Failed to retrieve payment history' });
+    }
+};
+
+/**
+ * Get upcoming expected payments for tutor
+ */
+export const getTutorUpcomingPayments = async (req: Request, res: Response) => {
+    try {
+        const userId = (req as any).user.id;
+
+        const tutor = await prisma.tutorProfile.findUnique({
+            where: { user_id: userId },
+            select: { id: true },
+        });
+
+        if (!tutor) return res.status(404).json({ error: 'Tutor profile not found' });
+
+        const upcomingPayments = await PaymentAnalyticsService.getTutorUpcomingPayments(tutor.id);
+        res.json(upcomingPayments);
+    } catch (error: any) {
+        console.error('Get upcoming payments error:', error);
+        res.status(500).json({ error: 'Failed to retrieve upcoming payments' });
+    }
+};
+
+/**
+ * Get tutor subscription information
+ */
+export const getTutorSubscriptionInfo = async (req: Request, res: Response) => {
+    try {
+        const userId = (req as any).user.id;
+
+        const tutor = await prisma.tutorProfile.findUnique({
+            where: { user_id: userId },
+            select: { id: true },
+        });
+
+        if (!tutor) return res.status(404).json({ error: 'Tutor profile not found' });
+
+        const subscriptionInfo = await PaymentAnalyticsService.getTutorSubscriptionInfo(tutor.id);
+        res.json(subscriptionInfo);
+    } catch (error: any) {
+        console.error('Get subscription info error:', error);
+        res.status(500).json({ error: 'Failed to retrieve subscription information' });
+    }
+};
+
+/**
+ * Export payment history as CSV
+ */
+export const exportPaymentHistoryCSV = async (req: Request, res: Response) => {
+    try {
+        const userId = (req as any).user.id;
+        const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
+        const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
+
+        const tutor = await prisma.tutorProfile.findUnique({
+            where: { user_id: userId },
+            select: { id: true, username: true },
+        });
+
+        if (!tutor) return res.status(404).json({ error: 'Tutor profile not found' });
+
+        const csvContent = await PaymentAnalyticsService.exportPaymentHistoryCSV(
+            tutor.id,
+            startDate,
+            endDate
+        );
+
+        // Set headers for CSV download
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader(
+            'Content-Disposition',
+            `attachment; filename="payment-history-${tutor.username}-${new Date().toISOString().split('T')[0]}.csv"`
+        );
+        res.send(csvContent);
+    } catch (error: any) {
+        console.error('Export payment history error:', error);
+        res.status(500).json({ error: 'Failed to export payment history' });
+    }
+};
+
