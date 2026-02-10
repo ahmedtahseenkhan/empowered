@@ -22,21 +22,31 @@ export class PaymentAnalyticsService {
                 include: {
                     booking: {
                         include: {
-                            tutor: true,
+                            tutor: {
+                                select: {
+                                    hourly_rate: true,
+                                },
+                            },
                         },
                     },
                 },
             });
 
-            // Calculate total earnings (all time)
-            const totalEarnings = paidSessions.reduce((sum, session) => sum + session.amount, 0);
+            // Calculate total earnings (all time) - using tutor's hourly_rate, not total payment
+            const totalEarnings = paidSessions.reduce((sum, session) => {
+                const tutorEarning = Number(session.booking.tutor.hourly_rate) * 100; // Convert to cents
+                return sum + tutorEarning;
+            }, 0);
 
             // Calculate current month earnings
             const now = new Date();
             const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
             const currentMonthEarnings = paidSessions
                 .filter((session) => session.created_at && session.created_at >= startOfMonth)
-                .reduce((sum, session) => sum + session.amount, 0);
+                .reduce((sum, session) => {
+                    const tutorEarning = Number(session.booking.tutor.hourly_rate) * 100; // Convert to cents
+                    return sum + tutorEarning;
+                }, 0);
 
             // Get Stripe Connect account balance and payout info
             const tutor = await prisma.tutorProfile.findUnique({
