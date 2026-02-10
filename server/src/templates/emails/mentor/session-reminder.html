@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            background: #4F46E5;
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+        }
+
+        .content {
+            background: #f9f9f9;
+            padding: 30px;
+            border-radius: 8px;
+        }
+
+        .highlight {
+            background: #FEF3C7;
+            padding: 15px;
+            border-left: 4px solid #F59E0B;
+            margin: 20px 0;
+        }
+
+        .button {
+            display: inline-block;
+            padding: 12px 24px;
+            background-color: #4F46E5;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            margin-top: 20px;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            font-size: 12px;
+            color: #666;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h2>📅 Upcoming Session Reminder</h2>
+        </div>
+        <div class="content">
+            <h3>Hi {{mentorName}},</h3>
+            <p>This is a friendly reminder that you have a mentoring session scheduled for tomorrow.</p>
+
+            <div class="highlight">
+                <strong>Session Details:</strong><br>
+                Student: {{studentName}}<br>
+                Date: {{sessionDate}}<br>
+                Time: {{sessionTime}}<br>
+            </div>
+
+            <p><strong>Meeting Link:</strong></p>
+            <p><a href="{{meetingLink}}" class="button">Join Session</a></p>
+
+            <p style="margin-top: 30px;">Please ensure you're prepared and ready a few minutes before the scheduled
+                time.</p>
+
+            <br>
+            <p>Best regards,<br>The EmpowerEd Team</p>
+        </div>
+        <div class="footer">
+            <p>&copy; {{year}} EmpowerEd Learnings. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+
+</html>

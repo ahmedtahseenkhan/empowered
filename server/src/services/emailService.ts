@@ -124,6 +124,22 @@ class EmailService {
         });
     }
 
+    async sendPaymentDueReminder(data: {
+        studentName: string;
+        studentEmail: string;
+        tutorName: string;
+        amount: string;
+        dueDate: string;
+        paymentLink: string;
+    }): Promise<void> {
+        const html = this.renderTemplate('student/payment-due-reminder', { ...data, year: new Date().getFullYear() });
+        await this.sendEmail({
+            to: data.studentEmail,
+            subject: '💳 Payment Due Tomorrow - EmpowerEd',
+            html,
+        });
+    }
+
     /**
      * MENTOR EMAILS
      */

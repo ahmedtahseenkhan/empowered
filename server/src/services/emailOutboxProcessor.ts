@@ -101,6 +101,90 @@ async function sendOutboxRow(row: OutboxRow) {
         return;
     }
 
+    if (row.type === 'SESSION_REMINDER_STUDENT') {
+        const lessonId = row.payload?.lessonId as string | undefined;
+        if (!lessonId) throw new Error('Missing lessonId in payload');
+
+        const lesson = await prisma.lesson.findUnique({
+            where: { id: lessonId },
+            include: {
+                student: { select: { username: true } },
+                tutor: { select: { username: true } },
+            },
+        });
+
+        if (!lesson) throw new Error(`Lesson not found: ${lessonId}`);
+
+        await emailService.sendSessionReminderStudent({
+            studentName: lesson.student?.username || 'Student',
+            studentEmail: row.to_email,
+            mentorName: lesson.tutor?.username || 'Mentor',
+            sessionDate: formatDatePart(lesson.start_time),
+            sessionTime: formatTimePart(lesson.start_time),
+            meetingLink: lesson.meeting_link || '',
+        });
+
+        return;
+    }
+
+    if (row.type === 'SESSION_REMINDER_TUTOR') {
+        const lessonId = row.payload?.lessonId as string | undefined;
+        if (!lessonId) throw new Error('Missing lessonId in payload');
+
+        const lesson = await prisma.lesson.findUnique({
+            where: { id: lessonId },
+            include: {
+                student: { select: { username: true } },
+                tutor: { select: { username: true } },
+            },
+        });
+
+        if (!lesson) throw new Error(`Lesson not found: ${lessonId}`);
+
+        await emailService.sendSessionReminderMentor({
+            mentorName: lesson.tutor?.username || 'Mentor',
+            mentorEmail: row.to_email,
+            studentName: lesson.student?.username || 'Student',
+            sessionDate: formatDatePart(lesson.start_time),
+            sessionTime: formatTimePart(lesson.start_time),
+            meetingLink: lesson.meeting_link || '',
+        });
+
+        return;
+    }
+
+    if (row.type === 'PAYMENT_DUE_REMINDER') {
+        const paymentId = row.payload?.paymentId as string | undefined;
+        if (!paymentId) throw new Error('Missing paymentId in payload');
+
+        const payment = await prisma.paymentSchedule.findUnique({
+            where: { id: paymentId },
+            include: {
+                booking: {
+                    include: {
+                        student: { select: { username: true } },
+                        tutor: { select: { username: true } },
+                    },
+                },
+            },
+        });
+
+        if (!payment) throw new Error(`Payment not found: ${paymentId}`);
+
+        const amountDollars = (payment.amount / 100).toFixed(2);
+
+        await emailService.sendPaymentDueReminder({
+            studentName: payment.booking.student?.username || 'Student',
+            studentEmail: row.to_email,
+            tutorName: payment.booking.tutor?.username || 'Mentor',
+            amount: `$${amountDollars}`,
+            dueDate: formatDatePart(payment.due_date),
+            paymentLink: `${process.env.CLIENT_URL || 'http://localhost:5173'}/payments`,
+        });
+
+        return;
+    }
+
     throw new Error(`Unknown outbox type: ${row.type}`);
 }
 
