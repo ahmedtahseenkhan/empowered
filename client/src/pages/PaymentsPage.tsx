@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { Card } from '../components/ui/Card';
-import axios from 'axios';
+import api from '../api/axios';
 
 interface EarningsOverview {
     totalEarnings: number;
@@ -59,14 +59,11 @@ const PaymentsPage: React.FC = () => {
         try {
             setLoading(true);
             setError(null);
-            const token = localStorage.getItem('token');
-            const headers = { Authorization: `Bearer ${token}` };
-
             const [overviewRes, historyRes, upcomingRes, subscriptionRes] = await Promise.all([
-                axios.get(`${import.meta.env.VITE_API_URL}/api/payments/tutor/earnings/overview`, { headers }),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/payments/tutor/earnings/history?page=${currentPage}&limit=10`, { headers }),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/payments/tutor/earnings/upcoming`, { headers }),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/payments/tutor/subscription-info`, { headers }),
+                api.get('/payments/tutor/earnings/overview'),
+                api.get(`/payments/tutor/earnings/history?page=${currentPage}&limit=10`),
+                api.get('/payments/tutor/earnings/upcoming'),
+                api.get('/payments/tutor/subscription-info'),
             ]);
 
             setOverview(overviewRes.data || null);
@@ -96,14 +93,9 @@ const PaymentsPage: React.FC = () => {
 
     const handleExportCSV = async () => {
         try {
-            const token = localStorage.getItem('token');
-            const response = await axios.get(
-                `${import.meta.env.VITE_API_URL}/api/payments/tutor/earnings/export`,
-                {
-                    headers: { Authorization: `Bearer ${token}` },
-                    responseType: 'blob',
-                }
-            );
+            const response = await api.get('/payments/tutor/earnings/export', {
+                responseType: 'blob',
+            });
 
             // Create download link
             const url = window.URL.createObjectURL(new Blob([response.data]));
