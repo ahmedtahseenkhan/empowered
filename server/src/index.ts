@@ -25,6 +25,7 @@ import uploadRoutes from './routes/uploadRoutes';
 import adminRoutes from './routes/adminRoutes';
 import paymentRoutes from './routes/paymentRoutes';
 import webhookRoutes from './routes/webhookRoutes';
+import { startEmailOutboxProcessor } from './services/emailOutboxProcessor';
 
 // Middleware
 app.use(cors());
@@ -61,4 +62,5 @@ app.get('/', (req, res) => {
 // Start Server
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
+    startEmailOutboxProcessor();
 });
