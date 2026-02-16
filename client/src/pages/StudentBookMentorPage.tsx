@@ -42,8 +42,9 @@ const StudentBookMentorPage: React.FC = () => {
     const [frequency, setFrequency] = useState<Frequency>((searchParams.get('frequency') as Frequency) || 'WEEKLY');
 
     const formatDayKey = (iso: string) => {
+        if (!mentor) return '';
         const d = new Date(iso);
-        const fmt = new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' });
+        const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: mentor.timezone, year: 'numeric', month: '2-digit', day: '2-digit' });
         return fmt.format(d);
     };
 
@@ -54,8 +55,9 @@ const StudentBookMentorPage: React.FC = () => {
     };
 
     const formatTimeLabel = (iso: string) => {
+        if (!mentor) return '';
         const d = new Date(iso);
-        return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', hour12: true }).format(d);
+        return new Intl.DateTimeFormat(undefined, { timeZone: mentor.timezone, hour: 'numeric', minute: '2-digit', hour12: true }).format(d);
     };
 
     const slotsByDay = useMemo(() => {
