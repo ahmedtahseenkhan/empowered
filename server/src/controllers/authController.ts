@@ -9,9 +9,17 @@ import emailService from '../services/emailService';
 export const register = async (req: Request, res: Response) => {
     try {
         const { email, password, role, username, tier } = RegisterSchema.parse(req.body);
+        const normalizedEmail = email.trim().toLowerCase();
 
         // Check if user exists
-        const existingUser = await prisma.user.findUnique({ where: { email } });
+        const existingUser = await prisma.user.findFirst({
+            where: {
+                email: {
+                    equals: normalizedEmail,
+                    mode: 'insensitive',
+                },
+            },
+        });
         if (existingUser) {
             return res.status(400).json({ error: 'User already exists' });
         }
@@ -23,7 +31,7 @@ export const register = async (req: Request, res: Response) => {
         const result = await prisma.$transaction(async (tx) => {
             const newUser = await tx.user.create({
                 data: {
-                    email,
+                    email: normalizedEmail,
                     password_hash: passwordHash,
                     role,
                 },
@@ -60,14 +68,14 @@ export const register = async (req: Request, res: Response) => {
 
             await emailService.sendVerificationEmail({
                 username,
-                email,
+                email: normalizedEmail,
                 verificationLink
             });
 
             // Also send welcome email (optional, or send after verification)
             await emailService.sendWelcomeEmail({
                 username,
-                email,
+                email: normalizedEmail,
                 loginLink: `${process.env.CLIENT_URL || 'http://localhost:5173'}/login`,
             });
 
@@ -130,7 +138,16 @@ export const forgotPassword = async (req: Request, res: Response) => {
         const { email } = req.body as { email?: string };
         if (!email || typeof email !== 'string') return res.status(400).json({ error: 'email is required' });
 
-        const user = await prisma.user.findUnique({ where: { email } });
+        const normalizedEmail = email.trim().toLowerCase();
+
+        const user = await prisma.user.findFirst({
+            where: {
+                email: {
+                    equals: normalizedEmail,
+                    mode: 'insensitive',
+                },
+            },
+        });
         if (!user) {
             return res.json({ message: 'If an account exists for that email, a reset code has been sent.' });
         }
@@ -158,7 +175,7 @@ export const forgotPassword = async (req: Request, res: Response) => {
         `;
 
         await emailService.sendEmail({
-            to: email,
+            to: normalizedEmail,
             subject: 'Your EmpowerEd password reset code',
             html,
         });
@@ -176,7 +193,16 @@ export const resetPassword = async (req: Request, res: Response) => {
         if (!email || !code || !newPassword) return res.status(400).json({ error: 'email, code, and newPassword are required' });
         if (typeof email !== 'string' || typeof code !== 'string' || typeof newPassword !== 'string') return res.status(400).json({ error: 'Invalid payload' });
 
-        const user = await prisma.user.findUnique({ where: { email } });
+        const normalizedEmail = email.trim().toLowerCase();
+
+        const user = await prisma.user.findFirst({
+            where: {
+                email: {
+                    equals: normalizedEmail,
+                    mode: 'insensitive',
+                },
+            },
+        });
         if (!user) return res.status(400).json({ error: 'Invalid code or email' });
 
         const latest = await prisma.passwordResetCode.findFirst({
@@ -254,8 +280,15 @@ export const login = async (req: Request, res: Response) => {
     try {
         const { email, password } = LoginSchema.parse(req.body);
 
-        const user = await prisma.user.findUnique({
-            where: { email },
+        const normalizedEmail = email.trim().toLowerCase();
+
+        const user = await prisma.user.findFirst({
+            where: {
+                email: {
+                    equals: normalizedEmail,
+                    mode: 'insensitive',
+                },
+            },
             include: {
                 student_profile: true,
                 tutor_profile: true
@@ -315,8 +348,15 @@ export const resendVerification = async (req: Request, res: Response) => {
         const { email } = req.body;
         if (!email) return res.status(400).json({ error: 'Email is required' });
 
-        const user = await prisma.user.findUnique({
-            where: { email },
+        const normalizedEmail = String(email).trim().toLowerCase();
+
+        const user = await prisma.user.findFirst({
+            where: {
+                email: {
+                    equals: normalizedEmail,
+                    mode: 'insensitive',
+                },
+            },
             include: { student_profile: true, tutor_profile: true }
         });
 
