@@ -43,16 +43,14 @@ const BookMentorPage: React.FC = () => {
 
     const formatDayKey = (iso: string) => {
         const d = new Date(iso);
-        const timeZone = mentor?.timezone || 'UTC';
-        const fmt = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' });
-        return fmt.format(d);
+        const fmt = new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' });
+        return fmt.format(d); // YYYY-MM-DD in most runtimes
     };
 
     const formatDayLabel = (dayKey: string) => {
         const [y, m, d] = dayKey.split('-').map(Number);
-        const dt = new Date(Date.UTC(y, (m || 1) - 1, d || 1, 12, 0, 0));
-        const timeZone = mentor?.timezone || 'UTC';
-        return new Intl.DateTimeFormat(undefined, { timeZone, weekday: 'short', month: 'short', day: 'numeric' }).format(dt);
+        const dt = new Date(Date.UTC(y, (m || 1) - 1, d || 1));
+        return dt.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
     };
 
     const formatTimeLabel = (iso: string) => {
