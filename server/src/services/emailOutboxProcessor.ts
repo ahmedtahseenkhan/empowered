@@ -216,6 +216,8 @@ export function startEmailOutboxProcessor() {
             });
 
             for (const row of rows) {
+                console.log(`[EmailOutbox] Processing ${row.type} for ${row.to_email} (id=${row.id}, attempt=${row.attempts || 0})`);
+
                 const claimed = await prisma.emailOutbox.updateMany({
                     where: { id: row.id, status: row.status },
                     data: {
@@ -240,18 +242,20 @@ export function startEmailOutboxProcessor() {
                             last_error: null,
                         },
                     });
-                    console.log(`[EmailOutbox] Sent ${row.type} to ${row.to_email} (id=${row.id})`);
+                    console.log(`[EmailOutbox] ✅ Successfully sent ${row.type} to ${row.to_email} (id=${row.id})`);
                 } catch (e: any) {
                     const msg = e?.message ? String(e.message) : String(e);
+                    const isRetryable = attemptNumber < 8;
+
                     await prisma.emailOutbox.update({
                         where: { id: row.id },
                         data: {
-                            status: attemptNumber >= 8 ? 'FAILED' : 'RETRY',
+                            status: isRetryable ? 'RETRY' : 'FAILED',
                             last_error: msg.slice(0, 1000),
-                            next_retry_at: attemptNumber >= 8 ? null : computeNextRetryAt(attemptNumber),
+                            next_retry_at: isRetryable ? computeNextRetryAt(attemptNumber) : null,
                         },
                     });
-                    console.error(`[EmailOutbox] Failed ${row.type} to ${row.to_email} (id=${row.id}, attempt=${attemptNumber}):`, msg);
+                    console.error(`[EmailOutbox] ❌ Failed to send ${row.type} to ${row.to_email} (id=${row.id}, attempt=${attemptNumber}):`, msg);
                 }
             }
         } catch (e) {
