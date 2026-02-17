@@ -211,15 +211,6 @@ async function handleCheckoutSessionCompleted(session: any) {
             return;
         }
 
-        // Check availability for each lesson block
-        for (const l of lessonsToCreate) {
-            const isAvailable = await isTutorSlotAvailable({ tutorId, start: l.start, end: l.end });
-            if (!isAvailable) {
-                console.error('Selected time is no longer available for student_booking');
-                return;
-            }
-        }
-
         // Create Booking, Lessons and PaymentSchedule inside a transaction
         const result = await prisma.$transaction(async (tx) => {
             const createdBooking = await tx.booking.create({
