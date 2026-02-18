@@ -32,6 +32,7 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({ onBack }) => {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [tier, setTier] = useState<'STANDARD' | 'PRO' | 'PREMIUM'>('STANDARD');
 
     // Modal State
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -39,6 +40,7 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({ onBack }) => {
         mainId: string;
         subId: string;
         expertiseIds: string[];
+        originalSubId?: string; // Track original subcategory when editing
     } | null>(null);
 
     useEffect(() => {
@@ -50,6 +52,7 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({ onBack }) => {
                 ]);
 
                 setAllCategories(catsRes.data);
+                setTier(profileRes.data.tier || 'STANDARD');
 
                 // Initialize selection
                 const existing = profileRes.data.categories?.map((c: any) => c.category.id) || [];
@@ -101,12 +104,53 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({ onBack }) => {
         return Object.values(groups);
     }, [selectedIds, categoryMap]);
 
+    // 3. Compute current major/sub counts for tier-based validation
+    const { majorCount, subCount, majorsSelected, subsByMajor } = useMemo(() => {
+        const majors = new Set<string>();
+        const subs = new Set<string>();
+        const subsPerMajor = new Map<string, Set<string>>();
+
+        selectedIds.forEach(id => {
+            const node = categoryMap.get(id);
+            const sub = node?.parent;
+            const major = sub?.parent;
+            if (!sub || !major) return;
+
+            majors.add(major.id);
+            subs.add(sub.id);
+
+            if (!subsPerMajor.has(major.id)) {
+                subsPerMajor.set(major.id, new Set());
+            }
+            subsPerMajor.get(major.id)!.add(sub.id);
+        });
+
+        return {
+            majorCount: majors.size,
+            subCount: subs.size,
+            majorsSelected: Array.from(majors),
+            subsByMajor: subsPerMajor,
+        };
+    }, [selectedIds, categoryMap]);
+
     // Modal Helpers
     const openAddModal = () => {
-        // Default to first Main Category if available
-        const firstMain = allCategories.length > 0 ? allCategories[0] : null;
+        // For STANDARD/PRO: if already have a major, default to it
+        // For PREMIUM: default to first available
+        let defaultMainId = '';
+        if (tier === 'STANDARD' || tier === 'PRO') {
+            if (majorCount === 1 && majorsSelected.length > 0) {
+                defaultMainId = majorsSelected[0];
+            } else if (allCategories.length > 0) {
+                defaultMainId = allCategories[0].id;
+            }
+        } else {
+            // PREMIUM: can add any major
+            defaultMainId = allCategories.length > 0 ? allCategories[0].id : '';
+        }
+
         setEditingItem({
-            mainId: firstMain?.id || '',
+            mainId: defaultMainId,
             subId: '', // User must select
             expertiseIds: []
         });
@@ -117,7 +161,8 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({ onBack }) => {
         setEditingItem({
             mainId: group.main.id,
             subId: group.sub.id,
-            expertiseIds: group.expertise.map(e => e.id)
+            expertiseIds: group.expertise.map(e => e.id),
+            originalSubId: group.sub.id // Track original subcategory for edit mode
         });
         setIsModalOpen(true);
     };
@@ -125,47 +170,91 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({ onBack }) => {
     const handleSaveModal = () => {
         if (!editingItem) return;
 
-        // 1. Remove old expertise for this SUB (if we are editing an existing row, we might need original IDs)
-        // But here we are just adding to the set.
-        // Wait, if I uncheck something in modal, it should be removed.
-        // Strategy: 
-        // - Identify all POTENTIAL expertise for the selected Sub.
-        // - Remove ALL of them from `selectedIds`.
-        // - Add back ONLY the `editingItem.expertiseIds`.
-
-        // But wait, if I changed the Sub category in the modal?
-        // - I need to remove expertise from the OLD sub?
-        // To keep it simple: The modal defines the state for the *selected* Sub.
-        // If the user editing an existing row changed the Sub, the old row's expertise should formally be removed?
-        // My simple logic: 
-        // The modal state handles the ADDITION/UPDATE of a specific Sub-Category's expertise.
-        // If I want to "Edit", I load the current state.
-        // When I save:
-        // - I get all leaves for `editingItem.subId`.
-        // - I update `selectedIds` for THOSE leaves to match `editingItem.expertiseIds`.
-
-        // LIMITATION: If I change the "Sub Category" dropdown in the modal, 
-        // I am NOT removing the expertise from the PREVIOUS sub category. 
-        // This acts more like "Add/Update" than "Move". The user can delete the old row if they want.
-        // Actually, for "Edit", it's better to lock the "Main" and "Sub" if possible, or handle the diff.
-        // Given the UI allows changing it, I'll stick to "Update selected sub's expertise". 
-        // BUT, I should ensure I don't lose data.
-
         const subCategory = categoryMap.get(editingItem.subId);
         if (!subCategory?.children) return;
 
+        const majorCategory = subCategory.parent;
+        if (!majorCategory) return;
+
+        // Frontend validation before updating state
         const newSet = new Set(selectedIds);
 
-        // Clear all expertise for this specific sub-category (to handle unchecks)
-        subCategory.children.forEach(child => {
-            newSet.delete(child.id);
-        });
+        // If editing and subcategory changed, clear the ORIGINAL subcategory's expertise
+        // Otherwise, clear the current subcategory's expertise
+        const subIdToClear = editingItem.originalSubId && editingItem.originalSubId !== editingItem.subId
+            ? editingItem.originalSubId
+            : editingItem.subId;
 
-        // Add selected ones
+        const subCategoryToClear = categoryMap.get(subIdToClear);
+        if (subCategoryToClear?.children) {
+            subCategoryToClear.children.forEach(child => {
+                newSet.delete(child.id);
+            });
+        }
+
+        // Add selected ones for the NEW subcategory
         editingItem.expertiseIds.forEach(id => {
             newSet.add(id);
         });
 
+        // Compute what the counts would be after this change
+        const tempMajors = new Set<string>();
+        const tempSubs = new Set<string>();
+        const tempSubsPerMajor = new Map<string, Set<string>>();
+
+        newSet.forEach(id => {
+            const node = categoryMap.get(id);
+            const sub = node?.parent;
+            const major = sub?.parent;
+            if (!sub || !major) return;
+
+            tempMajors.add(major.id);
+            tempSubs.add(sub.id);
+
+            if (!tempSubsPerMajor.has(major.id)) {
+                tempSubsPerMajor.set(major.id, new Set());
+            }
+            tempSubsPerMajor.get(major.id)!.add(sub.id);
+        });
+
+        // Validate tier limits
+        if (tier === 'STANDARD') {
+            if (tempMajors.size > 1) {
+                setError('Standard plan: You can select only 1 major category. Please remove other major categories first.');
+                return;
+            }
+            if (tempSubs.size > 1) {
+                setError('Standard plan: You can select only 1 subcategory. Please remove other subcategories first.');
+                return;
+            }
+        } else if (tier === 'PRO') {
+            if (tempMajors.size > 1) {
+                setError('Pro plan: You can select only 1 major category. Please remove other major categories first.');
+                return;
+            }
+            const maxSubsForPro = 3;
+            if (tempSubs.size > maxSubsForPro) {
+                setError(`Pro plan: You can select up to ${maxSubsForPro} subcategories. Please remove excess subcategories.`);
+                return;
+            }
+        } else if (tier === 'PREMIUM') {
+            const maxMajorsForPremium = 3;
+            if (tempMajors.size > maxMajorsForPremium) {
+                setError(`Premium plan: You can select up to ${maxMajorsForPremium} major categories. Please remove excess major categories.`);
+                return;
+            }
+
+            const maxSubsPerMajor = 3;
+            for (const [majorId, subs] of tempSubsPerMajor.entries()) {
+                if (subs.size > maxSubsPerMajor) {
+                    const major = allCategories.find(c => c.id === majorId);
+                    setError(`Premium plan: You can select up to ${maxSubsPerMajor} subcategories per major category. "${major?.name || 'This major'}" has too many subcategories.`);
+                    return;
+                }
+            }
+        }
+
+        setError(null);
         setSelectedIds(newSet);
         setIsModalOpen(false);
     };
@@ -180,13 +269,15 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({ onBack }) => {
     // Persistence
     const handleSaveToServer = async () => {
         setSaving(true);
+        setError(null);
         try {
             const categoryIds = Array.from(selectedIds);
             await api.put('/tutor/me/services', { categoryIds });
             onBack();
-        } catch (err) {
+        } catch (err: any) {
             console.error("Failed to save services", err);
-            alert("Failed to save. Please try again.");
+            const errorMsg = err.response?.data?.error || 'Failed to save. Please try again.';
+            setError(errorMsg);
         } finally {
             setSaving(false);
         }
@@ -198,8 +289,38 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({ onBack }) => {
     const modalSub = modalSubs.find(c => c.id === editingItem?.subId);
     const modalExpertiseOptions = modalSub?.children || [];
 
+    // Check if we can add more majors/subs based on tier
+    // For PRO: Allow adding if we can add more subcategories (even if major count is 1)
+    const canAddMajor = (() => {
+        if (tier === 'PREMIUM') return majorCount < 3;
+        if (tier === 'PRO') {
+            // PRO can have 1 major with up to 3 subs, so allow adding if subCount < 3
+            return subCount < 3;
+        }
+        // STANDARD: only 1 major allowed
+        return majorCount < 1;
+    })();
+    const canAddSubForCurrentMajor = (() => {
+        if (!editingItem?.mainId) return false;
+        if (tier === 'STANDARD') return subCount < 1;
+        if (tier === 'PRO') return subCount < 3;
+        // PREMIUM: check subs for THIS major
+        const subsForThisMajor = subsByMajor.get(editingItem.mainId)?.size || 0;
+        return subsForThisMajor < 3;
+    })();
+
+    // Plan limit messages
+    const planLimitMessage = (() => {
+        if (tier === 'STANDARD') {
+            return 'Standard Plan: 1 major category, 1 subcategory, unlimited areas of expertise';
+        } else if (tier === 'PRO') {
+            return 'Pro Plan: 1 major category, up to 3 subcategories, unlimited areas of expertise';
+        } else {
+            return 'Premium Plan: Up to 3 major categories, up to 3 subcategories per major, unlimited areas of expertise';
+        }
+    })();
+
     if (loading) return <div className="p-6 text-center">Loading services...</div>;
-    if (error) return <div className="p-6 text-center text-red-500"><p>{error}</p><Button onClick={onBack} className="mt-4">Go Back</Button></div>;
 
     return (
         <div className="space-y-6">
@@ -210,13 +331,37 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({ onBack }) => {
                 </div>
             </div>
 
+            {error && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                    {error}
+                </div>
+            )}
+
             <Card className="overflow-hidden border-0 shadow-lg">
                 <div className="bg-[#4A1D96] text-white p-4 flex justify-between items-center">
-                    <h3 className="font-bold text-lg">My Category</h3>
+                    <div>
+                        <h3 className="font-bold text-lg">My Category</h3>
+                        <p className="text-xs text-white/80 mt-1">
+                            {planLimitMessage}
+                            {tier === 'PRO' && (
+                                <span className="ml-2 font-semibold">
+                                    ({subCount}/3 subcategories used)
+                                </span>
+                            )}
+                        </p>
+                    </div>
                     <Button
                         size="sm"
                         onClick={openAddModal}
-                        className="bg-white/20 hover:bg-white/30 text-white border-0"
+                        disabled={!canAddMajor}
+                        className="bg-white/20 hover:bg-white/30 text-white border-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                        title={!canAddMajor ? (
+                            tier === 'PRO' 
+                                ? `You've reached the Pro plan limit of 3 subcategories. Please remove a subcategory to add a new one.`
+                                : tier === 'STANDARD'
+                                ? `You've reached the Standard plan limit of 1 subcategory.`
+                                : `You've reached the ${tier} plan limit for major categories`
+                        ) : ''}
                     >
                         <Plus className="w-4 h-4 mr-1" /> Add
                     </Button>
@@ -284,50 +429,123 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({ onBack }) => {
                 title={modalMain?.name || 'Select Category'}
             >
                 <div className="space-y-6">
-                    {/* Main Category (Only for Add, or Read-only for Edit? Let's allow changing for now to be flexible) */}
+                    {/* Main Category */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Category
+                            {tier !== 'PREMIUM' && majorCount >= 1 && (
+                                <span className="ml-2 text-xs text-amber-600 font-normal">
+                                    ({tier} plan: Only 1 major category allowed)
+                                </span>
+                            )}
+                        </label>
                         <select
-                            className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-[#4A1D96] focus:border-transparent outline-none"
+                            className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-[#4A1D96] focus:border-transparent outline-none disabled:bg-gray-100 disabled:cursor-not-allowed"
                             value={editingItem?.mainId || ''}
-                            onChange={(e) => setEditingItem(prev => ({
-                                ...prev!,
-                                mainId: e.target.value,
-                                subId: '', // Reset sub
-                                expertiseIds: []
-                            }))}
+                            onChange={(e) => {
+                                const newMainId = e.target.value;
+                                // For STANDARD: if changing major and already have one selected, prevent it
+                                // For PRO: allow changing major if it's the same major (they can have multiple subs)
+                                if (tier === 'STANDARD' && majorCount >= 1 && majorsSelected.length > 0 && newMainId !== majorsSelected[0]) {
+                                    setError(`${tier} plan: You can only select 1 major category. Please delete existing categories first.`);
+                                    return;
+                                }
+                                // For PRO: if changing to a different major, prevent it
+                                if (tier === 'PRO' && majorCount >= 1 && majorsSelected.length > 0 && newMainId !== majorsSelected[0]) {
+                                    setError(`${tier} plan: You can only select 1 major category. Please delete existing categories first.`);
+                                    return;
+                                }
+                                setEditingItem(prev => ({
+                                    ...prev!,
+                                    mainId: newMainId,
+                                    subId: '', // Reset sub
+                                    expertiseIds: [],
+                                    originalSubId: prev?.originalSubId // Preserve originalSubId when editing
+                                }));
+                                setError(null);
+                            }}
+                            disabled={tier !== 'PREMIUM' && majorCount >= 1 && editingItem?.mainId !== majorsSelected[0]}
                         >
                             <option value="" disabled>Select a category</option>
-                            {allCategories.map(cat => (
-                                <option key={cat.id} value={cat.id}>{cat.name}</option>
-                            ))}
+                            {allCategories.map(cat => {
+                                const isDisabled = tier !== 'PREMIUM' && majorCount >= 1 && cat.id !== majorsSelected[0] && cat.id !== editingItem?.mainId;
+                                return (
+                                    <option key={cat.id} value={cat.id} disabled={isDisabled}>
+                                        {cat.name} {isDisabled ? '(Limit reached)' : ''}
+                                    </option>
+                                );
+                            })}
                         </select>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {/* Sub Category */}
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Subject</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Subject
+                                {editingItem?.mainId && (
+                                    <span className="ml-2 text-xs text-gray-500 font-normal">
+                                        ({(() => {
+                                            const currentMajorSubs = subsByMajor.get(editingItem.mainId)?.size || 0;
+                                            if (tier === 'STANDARD') return '1 allowed';
+                                            if (tier === 'PRO') return `${currentMajorSubs}/3 allowed`;
+                                            return `${currentMajorSubs}/3 per major`;
+                                        })()})
+                                    </span>
+                                )}
+                            </label>
                             <div className="border border-gray-300 rounded-lg divide-y divide-gray-100 max-h-[300px] overflow-y-auto">
                                 {!editingItem?.mainId ? (
                                     <div className="p-4 text-gray-400 text-sm">Select a category first</div>
                                 ) : modalSubs.length === 0 ? (
                                     <div className="p-4 text-gray-400 text-sm">No subjects available</div>
                                 ) : (
-                                    modalSubs.map(sub => (
-                                        <div
-                                            key={sub.id}
-                                            onClick={() => setEditingItem(prev => ({
-                                                ...prev!,
-                                                subId: sub.id,
-                                                expertiseIds: [] // Clear expertise when switching sub
-                                            }))}
-                                            className={`p-3 cursor-pointer text-sm flex items-center justify-between ${editingItem?.subId === sub.id ? 'bg-purple-50 text-[#4A1D96] font-medium' : 'hover:bg-gray-50'}`}
-                                        >
-                                            {sub.name}
-                                            {editingItem?.subId === sub.id && <Check className="w-4 h-4" />}
-                                        </div>
-                                    ))
+                                    modalSubs.map(sub => {
+                                        const isAlreadySelected = Array.from(selectedIds).some(id => {
+                                            const node = categoryMap.get(id);
+                                            return node?.parent?.id === sub.id;
+                                        });
+                                        const isSelectedInModal = editingItem?.subId === sub.id;
+                                        const currentMajorSubs = editingItem?.mainId ? (subsByMajor.get(editingItem.mainId)?.size || 0) : 0;
+                                        const isDisabled = (() => {
+                                            if (isSelectedInModal || isAlreadySelected) return false;
+                                            if (tier === 'STANDARD') return subCount >= 1;
+                                            if (tier === 'PRO') return subCount >= 3;
+                                            // PREMIUM: check subs for THIS major
+                                            return currentMajorSubs >= 3;
+                                        })();
+
+                                        return (
+                                            <div
+                                                key={sub.id}
+                                                onClick={() => {
+                                                    if (isDisabled) {
+                                                        setError(`${tier} plan: You've reached the subcategory limit${tier === 'PREMIUM' ? ' for this major category' : ''}. Please remove other subcategories first.`);
+                                                        return;
+                                                    }
+                                                    setEditingItem(prev => ({
+                                                        ...prev!,
+                                                        subId: sub.id,
+                                                        expertiseIds: [], // Clear expertise when switching sub
+                                                        originalSubId: prev?.originalSubId // Preserve originalSubId when editing
+                                                    }));
+                                                    setError(null);
+                                                }}
+                                                className={`p-3 text-sm flex items-center justify-between ${
+                                                    isDisabled
+                                                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                                        : isSelectedInModal
+                                                        ? 'bg-purple-50 text-[#4A1D96] font-medium cursor-pointer'
+                                                        : 'hover:bg-gray-50 cursor-pointer'
+                                                }`}
+                                                title={isDisabled ? `${tier} plan limit reached` : ''}
+                                            >
+                                                {sub.name}
+                                                {isSelectedInModal && <Check className="w-4 h-4" />}
+                                                {isDisabled && !isSelectedInModal && <span className="text-xs">(Limit)</span>}
+                                            </div>
+                                        );
+                                    })
                                 )}
                             </div>
                         </div>

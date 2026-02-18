@@ -580,18 +580,104 @@ export const updateServices = async (req: AuthenticatedRequest, res: Response) =
         const profile = await prisma.tutorProfile.findUnique({ where: { user_id: userId } });
         if (!profile) return res.status(404).json({ error: 'Profile not found' });
         const tutorId = profile.id;
+        const tier = profile.tier || 'STANDARD';
 
-        if (categoryIds) {
+        if (!categoryIds || !Array.isArray(categoryIds) || categoryIds.length === 0) {
+            // Allow clearing all categories
             await prisma.tutorCategory.deleteMany({ where: { tutor_id: tutorId } });
-            if (categoryIds.length > 0) {
-                await prisma.tutorCategory.createMany({
-                    data: categoryIds.map((catId: string) => ({
-                        tutor_id: tutorId,
-                        category_id: catId
-                    }))
+            return res.json({ message: 'Services updated' });
+        }
+
+        // Load selected categories with their parent hierarchy
+        const selectedCategories = await prisma.category.findMany({
+            where: { id: { in: categoryIds } },
+            include: {
+                parent: {
+                    include: {
+                        parent: true, // grandparent = major category
+                    },
+                },
+            },
+        });
+
+        // Compute unique major categories and subcategories
+        const majorIds = new Set<string>();
+        const subIds = new Set<string>();
+        const subToMajor = new Map<string, string>(); // subcategory_id -> major_category_id
+
+        for (const cat of selectedCategories) {
+            const sub = cat.parent;
+            const major = sub?.parent;
+            if (!sub || !major) {
+                // Skip if not a proper leaf (level 3) category
+                continue;
+            }
+            majorIds.add(major.id);
+            subIds.add(sub.id);
+            subToMajor.set(sub.id, major.id);
+        }
+
+        // Enforce tier-based limits
+        if (tier === 'STANDARD') {
+            if (majorIds.size > 1) {
+                return res.status(400).json({
+                    error: 'Standard plan: You can select only 1 major category. Please remove other major categories first.',
                 });
             }
+            if (subIds.size > 1) {
+                return res.status(400).json({
+                    error: 'Standard plan: You can select only 1 subcategory. Please remove other subcategories first.',
+                });
+            }
+        } else if (tier === 'PRO') {
+            if (majorIds.size > 1) {
+                return res.status(400).json({
+                    error: 'Pro plan: You can select only 1 major category. Please remove other major categories first.',
+                });
+            }
+            const maxSubsForPro = 3;
+            if (subIds.size > maxSubsForPro) {
+                return res.status(400).json({
+                    error: `Pro plan: You can select up to ${maxSubsForPro} subcategories. Please remove excess subcategories.`,
+                });
+            }
+        } else if (tier === 'PREMIUM') {
+            // Premium: Up to 3 major categories, up to 3 subcategories per major
+            const maxMajorsForPremium = 3;
+            if (majorIds.size > maxMajorsForPremium) {
+                return res.status(400).json({
+                    error: `Premium plan: You can select up to ${maxMajorsForPremium} major categories. Please remove excess major categories.`,
+                });
+            }
+
+            // Check subs per major
+            const maxSubsPerMajor = 3;
+            const subsByMajor = new Map<string, Set<string>>();
+            for (const [subId, majorId] of subToMajor.entries()) {
+                if (!subsByMajor.has(majorId)) {
+                    subsByMajor.set(majorId, new Set());
+                }
+                subsByMajor.get(majorId)!.add(subId);
+            }
+
+            for (const [majorId, subs] of subsByMajor.entries()) {
+                if (subs.size > maxSubsPerMajor) {
+                    const major = selectedCategories.find(c => c.parent?.parent?.id === majorId)?.parent?.parent;
+                    return res.status(400).json({
+                        error: `Premium plan: You can select up to ${maxSubsPerMajor} subcategories per major category. "${major?.name || 'This major'}" has too many subcategories.`,
+                    });
+                }
+            }
         }
+
+        // All validations passed - save the categories
+        await prisma.tutorCategory.deleteMany({ where: { tutor_id: tutorId } });
+        await prisma.tutorCategory.createMany({
+            data: categoryIds.map((catId: string) => ({
+                tutor_id: tutorId,
+                category_id: catId,
+            })),
+        });
 
         res.json({ message: 'Services updated' });
 
