@@ -30,7 +30,9 @@ export const getMyScheduling = async (req: AuthRequest, res: Response) => {
             select: {
                 id: true,
                 timezone: true,
+                free_session_enabled: true,
                 availabilities: { orderBy: [{ day_of_week: 'asc' }, { start_time: 'asc' }] },
+                free_session_availabilities: { orderBy: [{ day_of_week: 'asc' }, { start_time: 'asc' }] },
                 time_blocks: { orderBy: { start_time: 'asc' } },
             }
         });
@@ -65,6 +67,82 @@ export const setMyTimezone = async (req: AuthRequest, res: Response) => {
     } catch (e) {
         console.error('setMyTimezone error:', e);
         return res.status(500).json({ error: 'Failed to update timezone' });
+    }
+};
+
+export const setFreeSessionEnabled = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user?.id;
+        const role = req.user?.role;
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+        if (role !== 'TUTOR') return res.status(403).json({ error: 'Only tutors can update free session setting' });
+
+        const enabled = req.body?.enabled;
+        if (typeof enabled !== 'boolean') return res.status(400).json({ error: 'enabled must be a boolean' });
+
+        const tutorId = await getTutorIdForUser(userId);
+        if (!tutorId) return res.status(404).json({ error: 'Tutor profile not found' });
+
+        await prisma.tutorProfile.update({
+            where: { id: tutorId },
+            data: { free_session_enabled: enabled },
+        });
+
+        return res.json({ free_session_enabled: enabled });
+    } catch (e) {
+        console.error('setFreeSessionEnabled error:', e);
+        return res.status(500).json({ error: 'Failed to update free session setting' });
+    }
+};
+
+export const replaceFreeSessionAvailability = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user?.id;
+        const role = req.user?.role;
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+        if (role !== 'TUTOR') return res.status(403).json({ error: 'Only tutors can update free session availability' });
+
+        const rules = req.body?.rules as Array<{ day_of_week: number; start_time: string; end_time: string }> | undefined;
+        if (!Array.isArray(rules)) return res.status(400).json({ error: 'rules must be an array' });
+
+        for (const r of rules) {
+            if (typeof r.day_of_week !== 'number' || r.day_of_week < 0 || r.day_of_week > 6) {
+                return res.status(400).json({ error: 'day_of_week must be between 0 and 6' });
+            }
+            if (!TIME_RE.test(r.start_time) || !TIME_RE.test(r.end_time)) {
+                return res.status(400).json({ error: 'start_time and end_time must be HH:MM' });
+            }
+            if (r.start_time >= r.end_time) {
+                return res.status(400).json({ error: 'start_time must be before end_time' });
+            }
+        }
+
+        const tutorId = await getTutorIdForUser(userId);
+        if (!tutorId) return res.status(404).json({ error: 'Tutor profile not found' });
+
+        await prisma.$transaction(async (tx) => {
+            await tx.freeSessionAvailability.deleteMany({ where: { tutor_id: tutorId } });
+            if (rules.length > 0) {
+                await tx.freeSessionAvailability.createMany({
+                    data: rules.map((r) => ({
+                        tutor_id: tutorId,
+                        day_of_week: r.day_of_week,
+                        start_time: r.start_time,
+                        end_time: r.end_time,
+                    })),
+                });
+            }
+        });
+
+        const updated = await prisma.freeSessionAvailability.findMany({
+            where: { tutor_id: tutorId },
+            orderBy: [{ day_of_week: 'asc' }, { start_time: 'asc' }],
+        });
+
+        return res.json({ free_session_availabilities: updated });
+    } catch (e) {
+        console.error('replaceFreeSessionAvailability error:', e);
+        return res.status(500).json({ error: 'Failed to update free session availability' });
     }
 };
 

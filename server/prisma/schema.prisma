@@ -55,6 +55,7 @@ enum LessonStatus {
 
 enum LessonBillingType {
   FREE_TRIAL
+  FREE_INTRO  // Standalone free introductory session (25 min)
   PAID
 }
 
@@ -145,7 +146,9 @@ model TutorProfile {
   certifications   TutorCertification[]
   languages        TutorLanguage[]
   categories       TutorCategory[]
-  availabilities   Availability[]
+  availabilities           Availability[]
+  free_session_availabilities FreeSessionAvailability[]
+  free_session_enabled     Boolean @default(false)
   time_blocks      TutorTimeBlock[]
   lessons          Lesson[]
   bookings         Booking[]
@@ -403,6 +406,15 @@ model Availability {
   id          String       @id @default(uuid())
   tutor_id    String
   tutor       TutorProfile @relation(fields: [tutor_id], references: [id])
+  day_of_week Int // 0=Sunday
+  start_time  String // "09:00"
+  end_time    String // "17:00"
+}
+
+model FreeSessionAvailability {
+  id          String       @id @default(uuid())
+  tutor_id    String
+  tutor       TutorProfile @relation(fields: [tutor_id], references: [id], onDelete: Cascade)
   day_of_week Int // 0=Sunday
   start_time  String // "09:00"
   end_time    String // "17:00"

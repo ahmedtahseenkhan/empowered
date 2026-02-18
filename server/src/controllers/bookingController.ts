@@ -2,7 +2,9 @@ import { Response } from 'express';
 import prisma from '../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
 import { createMeetEventForLesson } from '../services/googleCalendar';
-import { isTutorSlotAvailable } from '../services/availability';
+import { isTutorSlotAvailable, isFreeSessionSlotAvailable } from '../services/availability';
+
+const FREE_SESSION_DURATION_MINUTES = 25;
 
 const addMinutes = (date: Date, minutes: number) => new Date(date.getTime() + minutes * 60 * 1000);
 const addDays = (date: Date, days: number) => new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
@@ -211,5 +213,134 @@ export const createBooking = async (req: AuthRequest, res: Response) => {
     } catch (error) {
         console.error('Create booking error:', error);
         return res.status(500).json({ error: 'Failed to create booking' });
+    }
+};
+
+/** Create a free 25-min introductory session. No payment; booking is auto-confirmed. */
+export const createFreeSessionBooking = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user?.id;
+        const role = req.user?.role;
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+        if (role !== 'STUDENT') return res.status(403).json({ error: 'Only students can book free sessions' });
+
+        const { tutorId, slotStart } = req.body as { tutorId?: string; slotStart?: string };
+
+        if (!tutorId) return res.status(400).json({ error: 'tutorId is required' });
+        if (!slotStart) return res.status(400).json({ error: 'slotStart is required (ISO string)' });
+
+        const start = new Date(slotStart);
+        if (Number.isNaN(start.getTime())) return res.status(400).json({ error: 'Invalid slotStart' });
+
+        const tutor = await prisma.tutorProfile.findUnique({ where: { id: tutorId } });
+        if (!tutor) return res.status(404).json({ error: 'Tutor not found' });
+        if (!tutor.free_session_enabled) return res.status(400).json({ error: 'This tutor does not offer free sessions' });
+
+        const student = await prisma.studentProfile.findUnique({ where: { user_id: userId } });
+        if (!student) return res.status(404).json({ error: 'Student profile not found' });
+
+        const available = await isFreeSessionSlotAvailable({ tutorId, start });
+        if (!available) return res.status(409).json({ error: 'Selected time is no longer available' });
+
+        const end = addMinutes(start, FREE_SESSION_DURATION_MINUTES);
+
+        const result = await prisma.$transaction(async (tx) => {
+            const createdBooking = await tx.booking.create({
+                data: {
+                    student_id: student.id,
+                    tutor_id: tutorId,
+                    start_date: start,
+                    end_date: end,
+                    frequency: 'ONCE',
+                    status: 'active',
+                },
+                include: {
+                    tutor: { select: { id: true, username: true } },
+                },
+            });
+
+            const lesson = await tx.lesson.create({
+                data: {
+                    tutor_id: tutorId,
+                    student_id: student.id,
+                    booking_id: createdBooking.id,
+                    start_time: start,
+                    end_time: end,
+                    duration: FREE_SESSION_DURATION_MINUTES,
+                    status: 'BOOKED',
+                    billing_type: 'FREE_INTRO',
+                },
+            });
+
+            const user = await tx.user.findUnique({ where: { id: userId } });
+            const tutorUser = await tx.user.findUnique({ where: { id: tutor.user_id } });
+
+            if (user?.email) {
+                await tx.emailOutbox.create({
+                    data: {
+                        type: 'BOOKING_CONFIRMATION_STUDENT',
+                        to_email: user.email,
+                        payload: {
+                            bookingId: createdBooking.id,
+                            tutorName: tutor.username,
+                            start: start.toISOString(),
+                            end: end.toISOString(),
+                            freeSession: true,
+                        },
+                        idempotency_key: `free-booking:${createdBooking.id}:student`,
+                    },
+                });
+            }
+            if (tutorUser?.email) {
+                await tx.emailOutbox.create({
+                    data: {
+                        type: 'BOOKING_CONFIRMATION_TUTOR',
+                        to_email: tutorUser.email,
+                        payload: {
+                            bookingId: createdBooking.id,
+                            studentId: student.id,
+                            start: start.toISOString(),
+                            end: end.toISOString(),
+                            freeSession: true,
+                        },
+                        idempotency_key: `free-booking:${createdBooking.id}:tutor`,
+                    },
+                });
+            }
+
+            return { createdBooking, lesson };
+        });
+
+        try {
+            const studentUser = await prisma.user.findUnique({ where: { id: userId } });
+            const tutorUser = await prisma.user.findUnique({ where: { id: tutor.user_id } });
+            const attendees = [studentUser?.email, tutorUser?.email].filter(Boolean) as string[];
+            const event = await createMeetEventForLesson({
+                tutorId,
+                lessonId: result.lesson.id,
+                title: `Free intro session with ${tutor.username}`,
+                description: 'Free 25-minute introductory session via Empowered Learnings',
+                start: result.lesson.start_time,
+                end: result.lesson.end_time,
+                attendeesEmails: attendees,
+            });
+            if (event?.eventId || event?.meetLink || event?.htmlLink) {
+                await prisma.lesson.update({
+                    where: { id: result.lesson.id },
+                    data: {
+                        meeting_link: event.meetLink || undefined,
+                        google_calendar_event_id: event.eventId || undefined,
+                        google_calendar_html_link: event.htmlLink || undefined,
+                    },
+                });
+            }
+        } catch (e) {
+            console.error('Calendar event for free session failed (non-fatal):', e);
+        }
+
+        return res.status(201).json({ booking: result.createdBooking, lesson: result.lesson });
+    } catch (error) {
+        console.error('Create free session booking error:', error);
+        return res.status(500).json({ error: 'Failed to create free session booking' });
     }
 };

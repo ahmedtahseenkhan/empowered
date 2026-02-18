@@ -41,9 +41,11 @@ const StudentBookMentorPage: React.FC = () => {
     const [selectedSlotStarts, setSelectedSlotStarts] = useState<string[]>([]);
     const [frequency, setFrequency] = useState<Frequency>((searchParams.get('frequency') as Frequency) || 'WEEKLY');
 
-    const formatDayKey = (iso: string) => {
+    const timeZone = mentor?.timezone || 'UTC';
+
+    const formatDayKey = (iso: string, tz?: string) => {
         const d = new Date(iso);
-        const fmt = new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' });
+        const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: tz || timeZone, year: 'numeric', month: '2-digit', day: '2-digit' });
         return fmt.format(d);
     };
 
@@ -53,16 +55,17 @@ const StudentBookMentorPage: React.FC = () => {
         return dt.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
     };
 
-    const formatTimeLabel = (iso: string) => {
+    const formatTimeLabel = (iso: string, tz?: string) => {
         const d = new Date(iso);
-        return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', hour12: true }).format(d);
+        return new Intl.DateTimeFormat(undefined, { timeZone: tz || timeZone, hour: 'numeric', minute: '2-digit', hour12: true }).format(d);
     };
 
     const slotsByDay = useMemo(() => {
         if (!mentor) return new Map<string, Array<{ start: string; end: string }>>();
         const map = new Map<string, Array<{ start: string; end: string }>>();
+        const tz = mentor.timezone || 'UTC';
         for (const s of slots) {
-            const key = formatDayKey(s.start);
+            const key = formatDayKey(s.start, tz);
             map.set(key, [...(map.get(key) || []), s]);
         }
         for (const [k, arr] of map.entries()) {
@@ -73,6 +76,31 @@ const StudentBookMentorPage: React.FC = () => {
     }, [slots, mentor]);
 
     const availableDays = useMemo(() => Array.from(slotsByDay.keys()).sort(), [slotsByDay]);
+
+    const [monthOffset, setMonthOffset] = useState(0);
+
+    const calendarMeta = useMemo(() => {
+        if (!mentor) return null;
+        const tz = mentor.timezone || 'UTC';
+        const base = new Date();
+        const firstOfMonthLocal = new Date(base.getFullYear(), base.getMonth() + monthOffset, 1, 12, 0, 0);
+        const monthLabel = new Intl.DateTimeFormat(undefined, { timeZone: tz, month: 'long', year: 'numeric' }).format(firstOfMonthLocal);
+        const year = firstOfMonthLocal.getFullYear();
+        const monthIndex = firstOfMonthLocal.getMonth();
+        const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+        const startWeekday = new Date(year, monthIndex, 1).getDay();
+        const cells: Array<{ day: number | null; dayKey: string | null }> = [];
+        for (let i = 0; i < startWeekday; i++) cells.push({ day: null, dayKey: null });
+        for (let day = 1; day <= daysInMonth; day++) {
+            const noonUtc = new Date(Date.UTC(year, monthIndex, day, 12, 0, 0));
+            const key = formatDayKey(noonUtc.toISOString(), tz);
+            cells.push({ day, dayKey: key });
+        }
+        while (cells.length % 7 !== 0) cells.push({ day: null, dayKey: null });
+        return { tz, monthLabel, cells };
+    }, [mentor, monthOffset]);
+
+    const availableDayKeys = useMemo(() => new Set(availableDays), [availableDays]);
 
     const requiredWeeklySlots = useMemo(() => requiredWeeklySlotsForFrequency(frequency), [frequency]);
 
@@ -124,12 +152,13 @@ const StudentBookMentorPage: React.FC = () => {
                 const fetched = res.data?.slots || [];
                 setSlots(fetched);
 
+                const tz = mentor.timezone || 'UTC';
                 const paramDay = (searchParams.get('day') || '').trim();
                 const paramSlotStart = (searchParams.get('slotStart') || '').trim();
 
                 const dayKeys = (() => {
                     const s = new Set<string>();
-                    for (const slot of fetched) s.add(formatDayKey(slot.start));
+                    for (const slot of fetched) s.add(formatDayKey(slot.start, tz));
                     return Array.from(s).sort();
                 })();
 
@@ -137,19 +166,22 @@ const StudentBookMentorPage: React.FC = () => {
                 const resolvedDay = (paramDay && dayKeys.includes(paramDay)) ? paramDay : (selectedDay || initialDay);
                 setSelectedDay(resolvedDay);
 
-                if (paramSlotStart && fetched.some((s: any) => s.start === paramSlotStart)) {
-                } else {
-                    const daySlots = fetched
-                        .filter((s: any) => formatDayKey(s.start) === resolvedDay)
-                        .sort((a: any, b: any) => new Date(a.start).getTime() - new Date(b.start).getTime());
-                    void daySlots;
+                if (paramDay && /^\d{4}-\d{2}-\d{2}$/.test(paramDay) && dayKeys.includes(paramDay)) {
+                    const [y, m] = paramDay.split('-').map(Number);
+                    const base = new Date();
+                    const baseYear = base.getFullYear();
+                    const baseMonth = base.getMonth();
+                    const paramYear = y || baseYear;
+                    const paramMonth = (m || 1) - 1;
+                    const diffMonths = (paramYear - baseYear) * 12 + (paramMonth - baseMonth);
+                    setMonthOffset((prev) => (diffMonths >= -2 && diffMonths <= 2 ? diffMonths : prev));
                 }
 
                 setSelectedSlotStarts((prev) => {
                     if (prev.length) return prev;
                     if (paramSlotStart && fetched.some((s: any) => s.start === paramSlotStart)) return [paramSlotStart];
                     const first = fetched
-                        .filter((s: any) => formatDayKey(s.start) === resolvedDay)
+                        .filter((s: any) => formatDayKey(s.start, tz) === resolvedDay)
                         .sort((a: any, b: any) => new Date(a.start).getTime() - new Date(b.start).getTime())[0]?.start;
                     return first ? [first] : [];
                 });
@@ -277,24 +309,71 @@ const StudentBookMentorPage: React.FC = () => {
                                     </div>
 
                                     <div className="rounded-lg bg-[#4A1D96] text-white text-sm font-semibold px-4 py-3">
-                                        View your mentor's available days and times below.
+                                        View your mentor's available days and times below. Dates and times are in the mentor's timezone ({timeZone}).
                                     </div>
 
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Choose a day</label>
-                                        <select
-                                            className="w-full border border-gray-300 rounded-lg p-3 bg-white"
-                                            value={selectedDay}
-                                            onChange={(e) => {
-                                                const day = e.target.value;
-                                                setSelectedDay(day);
-                                            }}
-                                        >
-                                            <option value="">Select day</option>
-                                            {availableDays.map((d) => (
-                                                <option key={d} value={d}>{formatDayLabel(d)}</option>
-                                            ))}
-                                        </select>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Choose a day</label>
+                                        {!calendarMeta ? null : (
+                                            <div className="rounded-xl border border-gray-200 bg-white p-4">
+                                                <div className="flex items-center justify-between mb-3">
+                                                    <div className="font-bold text-gray-900">{calendarMeta.monthLabel}</div>
+                                                    <div className="flex items-center gap-2">
+                                                        <button
+                                                            type="button"
+                                                            className="h-8 w-8 rounded-lg border border-gray-200 hover:bg-gray-50"
+                                                            onClick={() => setMonthOffset((v) => v - 1)}
+                                                        >
+                                                            {'<'}
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            className="h-8 w-8 rounded-lg border border-gray-200 hover:bg-gray-50"
+                                                            onClick={() => setMonthOffset((v) => v + 1)}
+                                                        >
+                                                            {'>'}
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <div className="grid grid-cols-7 text-xs text-gray-500 mb-2">
+                                                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
+                                                        <div key={d} className="text-center py-1">{d}</div>
+                                                    ))}
+                                                </div>
+                                                <div className="grid grid-cols-7 gap-2">
+                                                    {calendarMeta.cells.map((c, idx) => {
+                                                        if (!c.day || !c.dayKey) return <div key={idx} className="h-10" />;
+                                                        const isAvailable = availableDayKeys.has(c.dayKey);
+                                                        const isSelected = selectedDay === c.dayKey;
+                                                        return (
+                                                            <button
+                                                                key={`${c.dayKey}-${idx}`}
+                                                                type="button"
+                                                                disabled={!isAvailable}
+                                                                onClick={() => setSelectedDay(c.dayKey || '')}
+                                                                className={`h-10 rounded-lg text-sm border transition-colors ${
+                                                                    !isAvailable
+                                                                        ? 'bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed'
+                                                                        : isSelected
+                                                                        ? 'bg-purple-600 text-white border-purple-600'
+                                                                        : 'bg-white text-gray-900 border-purple-200 hover:bg-purple-50'
+                                                                }`}
+                                                            >
+                                                                {c.day}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                                <div className="flex items-center gap-4 text-xs text-gray-600 mt-4">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="inline-block h-3 w-3 rounded border border-purple-400 bg-white" /> Available
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="inline-block h-3 w-3 rounded border border-gray-200 bg-gray-50" /> Not available
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
 
                                     <div>
@@ -309,7 +388,7 @@ const StudentBookMentorPage: React.FC = () => {
                                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                                 {(slotsByDay.get(selectedDay) || []).map((s) => {
                                                     const active = isSlotSelected(s.start);
-                                                    const label = formatTimeLabel(s.start);
+                                                    const label = formatTimeLabel(s.start, timeZone);
                                                     return (
                                                         <button
                                                             key={s.start}
@@ -357,8 +436,8 @@ const StudentBookMentorPage: React.FC = () => {
                                             {selectedSlotStarts.map((s) => (
                                                 <div key={s} className="flex items-center justify-between gap-3 border border-purple-100 bg-purple-50/40 rounded-lg p-3">
                                                     <div>
-                                                        <div className="text-xs text-gray-600">Every {formatDayLabel(formatDayKey(s)).split(',')[0]}</div>
-                                                        <div className="text-sm font-semibold text-gray-900">{formatTimeLabel(s)}</div>
+                                                        <div className="text-xs text-gray-600">Every {formatDayLabel(formatDayKey(s, timeZone)).split(',')[0]}</div>
+                                                        <div className="text-sm font-semibold text-gray-900">{formatTimeLabel(s, timeZone)}</div>
                                                     </div>
                                                     <button
                                                         type="button"

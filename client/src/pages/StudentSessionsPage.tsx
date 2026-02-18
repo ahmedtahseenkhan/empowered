@@ -11,7 +11,7 @@ type Lesson = {
     end_time: string;
     created_at?: string;
     status: string;
-    billing_type?: 'FREE_TRIAL' | 'PAID';
+    billing_type?: 'FREE_TRIAL' | 'FREE_INTRO' | 'PAID';
     booking?: {
         frequency?: 'ONCE' | 'WEEKLY' | 'TWICE_WEEKLY' | 'THRICE_WEEKLY' | string | null;
         created_at?: string;
@@ -150,6 +150,14 @@ const StudentSessionsPage: React.FC = () => {
     const mapBillingToBadge = (lesson: Lesson & { start?: Date; booking?: Lesson['booking'] }) => {
         const billing = (lesson.billing_type || '').toUpperCase();
         const freq = lesson.booking?.frequency;
+
+        if (billing === 'FREE_INTRO') {
+            return (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-50 text-green-700 border border-green-200">
+                    Free intro
+                </span>
+            );
+        }
 
         if (billing === 'FREE_TRIAL') {
             return (

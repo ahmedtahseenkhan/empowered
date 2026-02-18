@@ -198,3 +198,107 @@ export const isTutorSlotAvailable = async (args: {
     const blocks = await getBlocks(args.tutorId, args.start, args.end);
     return isSlotFree({ start: args.start, end: args.end }, blocks);
 };
+
+const FREE_SESSION_DURATION_MINUTES = 25;
+
+/** Compute 25-minute free introductory session slots from FreeSessionAvailability. */
+export const computeFreeSessionSlots = async (args: {
+    tutorId: string;
+    from: Date;
+    to: Date;
+}) => {
+    const tutor = await prisma.tutorProfile.findUnique({
+        where: { id: args.tutorId },
+        select: { timezone: true, free_session_enabled: true },
+    });
+    if (!tutor?.free_session_enabled) return { slots: [] as { start: string; end: string }[] };
+
+    const timeZone = tutor.timezone || 'UTC';
+    const durationMinutes = FREE_SESSION_DURATION_MINUTES;
+    const stepMinutes = FREE_SESSION_DURATION_MINUTES;
+
+    const rules = await prisma.freeSessionAvailability.findMany({
+        where: { tutor_id: args.tutorId },
+        orderBy: [{ day_of_week: 'asc' }, { start_time: 'asc' }],
+    });
+    if (rules.length === 0) return { slots: [] as { start: string; end: string }[] };
+
+    const blocks = await getBlocks(args.tutorId, args.from, args.to);
+    const slots: { start: string; end: string }[] = [];
+
+    const cursor = new Date(args.from);
+    cursor.setSeconds(0, 0);
+
+    while (cursor < args.to) {
+        const zoned = getZonedDayAndMinutes(cursor, timeZone);
+        if (!zoned) {
+            cursor.setTime(cursor.getTime() + stepMinutes * 60 * 1000);
+            continue;
+        }
+
+        let minutesOfDay = zoned.minutesOfDay;
+        const remainder = minutesOfDay % stepMinutes;
+        if (remainder !== 0) {
+            const advance = stepMinutes - remainder;
+            cursor.setTime(cursor.getTime() + advance * 60 * 1000);
+            const z2 = getZonedDayAndMinutes(cursor, timeZone);
+            if (!z2) continue;
+            minutesOfDay = z2.minutesOfDay;
+        }
+
+        for (const rule of rules) {
+            if (rule.day_of_week !== zoned.dayOfWeek) continue;
+
+            const startMin = timeStrToMinutes(rule.start_time);
+            const endMin = timeStrToMinutes(rule.end_time);
+            if (startMin === null || endMin === null) continue;
+            if (minutesOfDay < startMin || minutesOfDay + durationMinutes > endMin) continue;
+
+            const slot: Interval = {
+                start: new Date(cursor),
+                end: addMinutes(cursor, durationMinutes),
+            };
+            if (slot.end <= args.to && isSlotFree(slot, blocks)) {
+                slots.push({ start: slot.start.toISOString(), end: slot.end.toISOString() });
+            }
+        }
+
+        cursor.setTime(cursor.getTime() + stepMinutes * 60 * 1000);
+    }
+
+    return { slots };
+};
+
+/** Check if a 25-min slot is valid for a free intro session (within free session availability and not blocked). */
+export const isFreeSessionSlotAvailable = async (args: {
+    tutorId: string;
+    start: Date;
+}) => {
+    const end = addMinutes(args.start, FREE_SESSION_DURATION_MINUTES);
+    const tutor = await prisma.tutorProfile.findUnique({
+        where: { id: args.tutorId },
+        select: { timezone: true, free_session_enabled: true },
+    });
+    if (!tutor?.free_session_enabled) return false;
+
+    const timeZone = tutor.timezone || 'UTC';
+    const zoned = getZonedDayAndMinutes(args.start, timeZone);
+    if (!zoned) return false;
+
+    const rules = await prisma.freeSessionAvailability.findMany({
+        where: { tutor_id: args.tutorId, day_of_week: zoned.dayOfWeek },
+    });
+    const startMin = zoned.minutesOfDay;
+    const endMin = startMin + FREE_SESSION_DURATION_MINUTES;
+
+    const insideRule = rules.some((r) => {
+        const rStart = timeStrToMinutes(r.start_time);
+        const rEnd = timeStrToMinutes(r.end_time);
+        if (rStart === null || rEnd === null) return false;
+        return startMin >= rStart && endMin <= rEnd;
+    });
+    if (!insideRule) return false;
+
+    const blocks = await getBlocks(args.tutorId, args.start, end);
+    return isSlotFree({ start: args.start, end }, blocks);
+};

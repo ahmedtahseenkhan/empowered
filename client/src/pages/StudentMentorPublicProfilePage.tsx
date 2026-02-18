@@ -4,6 +4,7 @@ import { DashboardLayout } from '../layouts/DashboardLayout';
 import api from '../api/axios';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
+import { Modal } from '../components/ui/Modal';
 
 type PublicTutorProfile = {
     id: string;
@@ -35,6 +36,7 @@ type PublicTutorProfile = {
         };
     }[];
     total_students: number;
+    free_session_enabled?: boolean;
 };
 
 const StudentMentorPublicProfilePage: React.FC = () => {
@@ -54,6 +56,13 @@ const StudentMentorPublicProfilePage: React.FC = () => {
     const [slots, setSlots] = useState<Array<{ start: string; end: string }>>([]);
     const [monthOffset, setMonthOffset] = useState(0);
     const [selectedDayKey, setSelectedDayKey] = useState<string>('');
+
+    const [freeSlotsBusy, setFreeSlotsBusy] = useState(false);
+    const [freeSlots, setFreeSlots] = useState<Array<{ start: string; end: string }>>([]);
+    const [freeMonthOffset, setFreeMonthOffset] = useState(0);
+    const [freeSelectedDayKey, setFreeSelectedDayKey] = useState<string>('');
+    const [freeBookingBusy, setFreeBookingBusy] = useState(false);
+    const [freeConfirmSlot, setFreeConfirmSlot] = useState<{ start: string; end: string } | null>(null);
 
     const [profileTab, setProfileTab] = useState<'EXPERIENCE' | 'EDUCATION' | 'CERTIFICATIONS'>('EXPERIENCE');
 
@@ -163,6 +172,59 @@ const StudentMentorPublicProfilePage: React.FC = () => {
         return { tz, monthLabel, cells };
     }, [mentor, monthOffset]);
 
+    const freeSlotsByDay = useMemo(() => {
+        if (!mentor) return new Map<string, Array<{ start: string; end: string }>>();
+        const map = new Map<string, Array<{ start: string; end: string }>>();
+        for (const s of freeSlots) {
+            const key = formatDayKey(s.start, mentor.timezone || 'UTC');
+            map.set(key, [...(map.get(key) || []), s]);
+        }
+        for (const [k, arr] of map.entries()) {
+            arr.sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+            map.set(k, arr);
+        }
+        return map;
+    }, [freeSlots, mentor]);
+
+    const freeCalendarMeta = useMemo(() => {
+        if (!mentor) return null;
+        const tz = mentor.timezone || 'UTC';
+        const base = new Date();
+        const firstOfMonthLocal = new Date(base.getFullYear(), base.getMonth() + freeMonthOffset, 1, 12, 0, 0);
+        const monthLabel = new Intl.DateTimeFormat(undefined, { timeZone: tz, month: 'long', year: 'numeric' }).format(firstOfMonthLocal);
+        const year = firstOfMonthLocal.getFullYear();
+        const monthIndex = firstOfMonthLocal.getMonth();
+        const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+        const startWeekday = new Date(year, monthIndex, 1).getDay();
+        const cells: Array<{ day: number | null; dayKey: string | null }> = [];
+        for (let i = 0; i < startWeekday; i++) cells.push({ day: null, dayKey: null });
+        for (let day = 1; day <= daysInMonth; day++) {
+            const noonUtc = new Date(Date.UTC(year, monthIndex, day, 12, 0, 0));
+            const key = formatDayKey(noonUtc.toISOString(), tz);
+            cells.push({ day, dayKey: key });
+        }
+        while (cells.length % 7 !== 0) cells.push({ day: null, dayKey: null });
+        return { tz, monthLabel, cells, year, monthIndex };
+    }, [mentor, freeMonthOffset]);
+
+    const freeCurrentMonthDayKeys = useMemo(() => {
+        if (!freeCalendarMeta) return new Set<string>();
+        const set = new Set<string>();
+        freeCalendarMeta.cells.forEach((c) => {
+            if (c.dayKey) set.add(c.dayKey);
+        });
+        return set;
+    }, [freeCalendarMeta]);
+
+    const freeHasSlotsInCurrentMonth = useMemo(() => {
+        for (const dayKey of freeCurrentMonthDayKeys) {
+            if ((freeSlotsByDay.get(dayKey) || []).length > 0) return true;
+        }
+        return false;
+    }, [freeCurrentMonthDayKeys, freeSlotsByDay]);
+
+    const freeSelectedDayInViewedMonth = freeSelectedDayKey && freeCurrentMonthDayKeys.has(freeSelectedDayKey);
+
     useEffect(() => {
         const fetchSlots = async () => {
             if (!mentor) return;
@@ -204,6 +266,60 @@ const StudentMentorPublicProfilePage: React.FC = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [mentor?.id]);
 
+    useEffect(() => {
+        const fetchFreeSlots = async () => {
+            if (!mentor?.id || !mentor?.free_session_enabled) return;
+            try {
+                setFreeSlotsBusy(true);
+                const from = new Date();
+                from.setSeconds(0, 0);
+                const to = new Date(from);
+                to.setDate(to.getDate() + 60);
+                const res = await api.get(`/availability/tutor/${mentor.id}/slots`, {
+                    params: { from: from.toISOString(), to: to.toISOString(), type: 'free' },
+                });
+                const list = res.data?.slots || [];
+                setFreeSlots(list);
+                const tz = mentor.timezone || 'UTC';
+                const base = new Date();
+                const year = base.getFullYear();
+                const month = base.getMonth();
+                const firstDayThisMonth = new Set<string>();
+                for (let d = 1; d <= 31; d++) {
+                    const noon = new Date(Date.UTC(year, month, d, 12, 0, 0));
+                    if (noon.getUTCMonth() !== month) break;
+                    firstDayThisMonth.add(formatDayKey(noon.toISOString(), tz));
+                }
+                if (list.length > 0) {
+                    const firstKey = formatDayKey(list[0].start, tz);
+                    setFreeSelectedDayKey(firstDayThisMonth.has(firstKey) ? firstKey : '');
+                } else {
+                    setFreeSelectedDayKey('');
+                }
+            } catch (e) {
+                console.error('Failed to fetch free session slots', e);
+                setFreeSlots([]);
+                setFreeSelectedDayKey('');
+            } finally {
+                setFreeSlotsBusy(false);
+            }
+        };
+        fetchFreeSlots();
+    }, [mentor?.id, mentor?.free_session_enabled, mentor?.timezone]);
+
+    useEffect(() => {
+        if (!freeCalendarMeta || !freeCurrentMonthDayKeys.size) return;
+        if (freeSelectedDayKey && freeCurrentMonthDayKeys.has(freeSelectedDayKey)) return;
+        const firstAvailableInMonth = Array.from(freeCurrentMonthDayKeys).sort().find((dayKey) => (freeSlotsByDay.get(dayKey) || []).length > 0);
+        setFreeSelectedDayKey(firstAvailableInMonth || '');
+    }, [freeMonthOffset, freeCalendarMeta, freeCurrentMonthDayKeys, freeSlotsByDay]);
+
+    const freeTodayKey = useMemo(() => {
+        if (!mentor) return '';
+        const d = new Date();
+        return formatDayKey(d.toISOString(), mentor.timezone || 'UTC');
+    }, [mentor]);
+
     return (
         <DashboardLayout>
             <div className="w-full">
@@ -229,10 +345,19 @@ const StudentMentorPublicProfilePage: React.FC = () => {
                                         <div className="text-sm text-purple-100 mt-1">{mentor.country || 'Remote'} • Tutor timezone: {mentor.timezone}</div>
                                     </div>
 
-                                    <div className="flex gap-3">
+                                    <div className="flex flex-wrap gap-3">
                                         <Link to={`/student/mentors?frequency=${encodeURIComponent(frequency)}`}>
                                             <Button variant="outline">Back</Button>
                                         </Link>
+                                        {!isPreview && mentor.free_session_enabled && (
+                                            <Button
+                                                variant="outline"
+                                                className="border-green-500 text-green-700 hover:bg-green-50"
+                                                onClick={() => document.getElementById('free-session-card')?.scrollIntoView({ behavior: 'smooth' })}
+                                            >
+                                                Book free 25-min session
+                                            </Button>
+                                        )}
                                         {!isPreview && (
                                             <Button
                                                 onClick={() => {
@@ -328,6 +453,147 @@ const StudentMentorPublicProfilePage: React.FC = () => {
                                         </div>
                                     </div>
                                 </Card>
+
+                                {mentor.free_session_enabled && (
+                                    <Card id="free-session-card" className="p-6 border-green-200 bg-green-50/30">
+                                        <h2 className="text-lg font-bold text-gray-900 mb-1">Free 25-min introductory session</h2>
+                                        <p className="text-sm text-gray-600 mb-4">Try a short session with this mentor at no cost. Select a time below to book.</p>
+                                        {freeSlotsBusy ? (
+                                            <div className="text-sm text-gray-600">Loading free session times...</div>
+                                        ) : freeCalendarMeta ? (
+                                            <>
+                                                <div className="rounded-xl border border-gray-200 bg-white p-4">
+                                                    <div className="flex items-center justify-between mb-3">
+                                                        <div className="font-bold text-gray-900">{freeCalendarMeta.monthLabel}</div>
+                                                        <div className="flex items-center gap-2">
+                                                            <button type="button" className="h-8 w-8 rounded-lg border border-gray-200 hover:bg-gray-50" onClick={() => setFreeMonthOffset((v) => v - 1)}>{'<'}</button>
+                                                            <button type="button" className="h-8 w-8 rounded-lg border border-gray-200 hover:bg-gray-50" onClick={() => setFreeMonthOffset((v) => v + 1)}>{'>'}</button>
+                                                        </div>
+                                                    </div>
+                                                    <div className="grid grid-cols-7 text-xs text-gray-500 mb-2">
+                                                        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (<div key={d} className="text-center py-1">{d}</div>))}
+                                                    </div>
+                                                    <div className="grid grid-cols-7 gap-2">
+                                                        {freeCalendarMeta.cells.map((c, idx) => {
+                                                            if (!c.day || !c.dayKey) return <div key={idx} className="h-10" />;
+                                                            const isPast = c.dayKey < freeTodayKey;
+                                                            const hasFree = !isPast && (freeSlotsByDay.get(c.dayKey) || []).length > 0;
+                                                            const isSelected = freeSelectedDayKey === c.dayKey;
+                                                            return (
+                                                                <button
+                                                                    key={`${c.dayKey}-${idx}`}
+                                                                    type="button"
+                                                                    disabled={!hasFree}
+                                                                    onClick={() => setFreeSelectedDayKey(c.dayKey || '')}
+                                                                    className={`h-10 rounded-lg text-sm border transition-colors ${!hasFree ? 'bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed' : isSelected ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-900 border-green-300 hover:bg-green-50'}`}
+                                                                >
+                                                                    {c.day}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                                {!freeHasSlotsInCurrentMonth && (
+                                                    <div className="mt-4 py-4 text-center text-sm text-gray-600 rounded-lg bg-gray-50 border border-gray-100">
+                                                        No free sessions available this month. Try another month.
+                                                    </div>
+                                                )}
+                                                {freeSelectedDayInViewedMonth && (freeSlotsByDay.get(freeSelectedDayKey) || []).length > 0 && (
+                                                    <div className="mt-4">
+                                                        <div className="text-sm font-bold text-gray-900 mb-2">Available times (25 min)</div>
+                                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                                            {(freeSlotsByDay.get(freeSelectedDayKey) || []).map((s) => (
+                                                                <button
+                                                                    key={s.start}
+                                                                    type="button"
+                                                                    disabled={freeBookingBusy || isPreview}
+                                                                    onClick={() => {
+                                                                        if (isPreview || freeBookingBusy) return;
+                                                                        setFreeConfirmSlot(s);
+                                                                    }}
+                                                                    className="px-3 py-2 rounded-lg text-sm border border-green-300 bg-white hover:bg-green-50 text-gray-900 disabled:opacity-50"
+                                                                >
+                                                                    {formatTimeLabel(s.start, mentor.timezone || 'UTC')}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                        {freeBookingBusy && <div className="text-sm text-gray-600 mt-2">Booking...</div>}
+                                                    </div>
+                                                )}
+                                                {freeSelectedDayInViewedMonth && (freeSlotsByDay.get(freeSelectedDayKey) || []).length === 0 && freeHasSlotsInCurrentMonth && (
+                                                    <div className="mt-4 text-sm text-gray-600">No free slots on this day. Pick another date.</div>
+                                                )}
+                                                {freeSelectedDayKey && !freeSelectedDayInViewedMonth && freeHasSlotsInCurrentMonth && (
+                                                    <div className="mt-4 text-sm text-gray-600">Select a date in the calendar above to see available times.</div>
+                                                )}
+                                            </>
+                                        ) : null}
+                                    </Card>
+                                )}
+
+                                {mentor.free_session_enabled && (
+                                    <Modal
+                                        isOpen={!!freeConfirmSlot}
+                                        onClose={() => setFreeConfirmSlot(null)}
+                                        title="Confirm free session"
+                                    >
+                                        {freeConfirmSlot && (
+                                            <div className="space-y-4">
+                                                <p className="text-gray-600">Please confirm your free 25-minute introductory session:</p>
+                                                <dl className="grid grid-cols-1 gap-2 text-sm">
+                                                    <div className="flex justify-between py-2 border-b border-gray-100">
+                                                        <dt className="text-gray-500">Mentor</dt>
+                                                        <dd className="font-medium text-gray-900">{mentor.username}</dd>
+                                                    </div>
+                                                    <div className="flex justify-between py-2 border-b border-gray-100">
+                                                        <dt className="text-gray-500">Date</dt>
+                                                        <dd className="font-medium text-gray-900">
+                                                            {new Date(freeConfirmSlot.start).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                                                        </dd>
+                                                    </div>
+                                                    <div className="flex justify-between py-2 border-b border-gray-100">
+                                                        <dt className="text-gray-500">Time</dt>
+                                                        <dd className="font-medium text-gray-900">{formatTimeLabel(freeConfirmSlot.start, mentor.timezone || 'UTC')}</dd>
+                                                    </div>
+                                                    <div className="flex justify-between py-2 border-b border-gray-100">
+                                                        <dt className="text-gray-500">Duration</dt>
+                                                        <dd className="font-medium text-gray-900">25 minutes</dd>
+                                                    </div>
+                                                    <div className="flex justify-between py-2">
+                                                        <dt className="text-gray-500">Cost</dt>
+                                                        <dd className="font-medium text-green-600">Free</dd>
+                                                    </div>
+                                                </dl>
+                                                <div className="flex gap-3 pt-4">
+                                                    <Button variant="outline" className="flex-1" onClick={() => setFreeConfirmSlot(null)} disabled={freeBookingBusy}>
+                                                        Cancel
+                                                    </Button>
+                                                    <Button
+                                                        className="flex-1 bg-green-600 hover:bg-green-700"
+                                                        disabled={freeBookingBusy}
+                                                        onClick={async () => {
+                                                            if (!freeConfirmSlot) return;
+                                                            setFreeBookingBusy(true);
+                                                            try {
+                                                                const res = await api.post('/bookings/free-session', { tutorId: mentor.id, slotStart: freeConfirmSlot.start });
+                                                                const bookingId = res.data?.booking?.id;
+                                                                setFreeConfirmSlot(null);
+                                                                if (bookingId) navigate(`/student/booking/confirmation?bookingId=${encodeURIComponent(bookingId)}`);
+                                                                else setError('Booking could not be completed.');
+                                                            } catch (err: any) {
+                                                                setError(err.response?.data?.error || 'Failed to book free session.');
+                                                            } finally {
+                                                                setFreeBookingBusy(false);
+                                                            }
+                                                        }}
+                                                    >
+                                                        {freeBookingBusy ? 'Booking...' : 'Confirm'}
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </Modal>
+                                )}
 
                                 <Card className="p-6">
                                     <h2 className="text-lg font-bold text-gray-900 mb-3">{isPreview ? 'Availability' : 'Book a Session'}</h2>

@@ -161,6 +161,7 @@ export const getPublicTutorById = async (req: Request, res: Response) => {
                 rating: true,
                 review_count: true,
                 total_students: true,
+                free_session_enabled: true,
                 categories: {
                     select: {
                         category: {

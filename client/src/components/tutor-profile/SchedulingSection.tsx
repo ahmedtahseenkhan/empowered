@@ -44,6 +44,9 @@ export const SchedulingSection: React.FC<SchedulingSectionProps> = ({ onBack }) 
 
     const [rules, setRules] = useState<WeeklyRule[]>([]);
 
+    const [freeSessionEnabled, setFreeSessionEnabled] = useState(false);
+    const [freeSessionRules, setFreeSessionRules] = useState<WeeklyRule[]>([]);
+
     const [blocksLoading, setBlocksLoading] = useState(false);
     const [blocks, setBlocks] = useState<TimeBlock[]>([]);
 
@@ -62,6 +65,8 @@ export const SchedulingSection: React.FC<SchedulingSectionProps> = ({ onBack }) 
         try {
             const res = await api.get('/scheduling/me');
             setRules(res.data?.availabilities || []);
+            setFreeSessionEnabled(!!res.data?.free_session_enabled);
+            setFreeSessionRules(res.data?.free_session_availabilities || []);
 
             // Blocks are included in /scheduling/me but we also support listing.
             setBlocks(res.data?.time_blocks || []);
@@ -103,6 +108,21 @@ export const SchedulingSection: React.FC<SchedulingSectionProps> = ({ onBack }) 
         setRules(prev => prev.filter((_, i) => i !== idx));
     };
 
+    const addFreeSessionRule = () => {
+        setFreeSessionRules(prev => ([
+            ...prev,
+            { day_of_week: 1, start_time: '09:00', end_time: '17:00' }
+        ]));
+    };
+
+    const updateFreeSessionRule = (idx: number, patch: Partial<WeeklyRule>) => {
+        setFreeSessionRules(prev => prev.map((r, i) => i === idx ? { ...r, ...patch } : r));
+    };
+
+    const removeFreeSessionRule = (idx: number) => {
+        setFreeSessionRules(prev => prev.filter((_, i) => i !== idx));
+    };
+
     const saveAll = async () => {
         setSaving(true);
         try {
@@ -112,6 +132,14 @@ export const SchedulingSection: React.FC<SchedulingSectionProps> = ({ onBack }) 
                 start_time: r.start_time,
                 end_time: r.end_time,
             })) });
+            await api.put('/scheduling/me/free-session-enabled', { enabled: freeSessionEnabled });
+            await api.put('/scheduling/me/free-session-availability', {
+                rules: freeSessionEnabled ? freeSessionRules.map(r => ({
+                    day_of_week: r.day_of_week,
+                    start_time: r.start_time,
+                    end_time: r.end_time,
+                })) : [],
+            });
             await fetchScheduling();
             onBack();
         } catch (e) {
@@ -201,6 +229,67 @@ export const SchedulingSection: React.FC<SchedulingSectionProps> = ({ onBack }) 
                         ))
                     )}
                 </div>
+            </Card>
+
+            <Card className="p-6">
+                <div className="flex items-center justify-between gap-3 mb-4">
+                    <div>
+                        <h3 className="font-bold text-lg">Free introductory session</h3>
+                        <p className="text-sm text-gray-500">Offer a free 25-minute session so students can try a session before booking paid ones. Optional.</p>
+                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={freeSessionEnabled}
+                            onChange={(e) => setFreeSessionEnabled(e.target.checked)}
+                            className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                        />
+                        <span className="text-sm font-medium text-gray-700">Offer free session</span>
+                    </label>
+                </div>
+                {freeSessionEnabled && (
+                    <>
+                        <p className="text-sm text-gray-600 mb-3">When you're available for free 25-min sessions (e.g. Mon 14:00–16:00). Students will see bookable 25-min slots in these windows.</p>
+                        <div className="flex justify-end mb-3">
+                            <Button variant="outline" size="sm" onClick={addFreeSessionRule}>Add time range</Button>
+                        </div>
+                        <div className="space-y-3">
+                            {freeSessionRules.length === 0 ? (
+                                <div className="text-sm text-gray-600">No free session hours set. Add at least one time range.</div>
+                            ) : (
+                                freeSessionRules.map((r, idx) => (
+                                    <div key={idx} className="flex flex-col md:flex-row md:items-center gap-3 bg-purple-50 border border-purple-200 rounded-lg p-3">
+                                        <select
+                                            className="border border-gray-300 rounded-lg px-3 py-2 w-full md:w-32"
+                                            value={r.day_of_week}
+                                            onChange={(e) => updateFreeSessionRule(idx, { day_of_week: parseInt(e.target.value, 10) })}
+                                        >
+                                            {DAYS.map((d, i) => (
+                                                <option key={d} value={i}>{d}</option>
+                                            ))}
+                                        </select>
+                                        <div className="flex items-center gap-2 w-full md:w-auto">
+                                            <Input
+                                                type="time"
+                                                value={r.start_time}
+                                                onChange={(e) => updateFreeSessionRule(idx, { start_time: e.target.value })}
+                                            />
+                                            <span className="text-gray-500 text-sm">to</span>
+                                            <Input
+                                                type="time"
+                                                value={r.end_time}
+                                                onChange={(e) => updateFreeSessionRule(idx, { end_time: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className="flex justify-end md:ml-auto">
+                                            <Button variant="outline" size="sm" onClick={() => removeFreeSessionRule(idx)}>Remove</Button>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </>
+                )}
             </Card>
 
             <Card className="p-6">
