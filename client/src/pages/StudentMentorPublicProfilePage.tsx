@@ -66,6 +66,8 @@ const StudentMentorPublicProfilePage: React.FC = () => {
 
     const [profileTab, setProfileTab] = useState<'EXPERIENCE' | 'EDUCATION' | 'CERTIFICATIONS'>('EXPERIENCE');
 
+    const studentTimezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', []);
+
     useEffect(() => {
         const fetchMentor = async () => {
             try {
@@ -133,7 +135,7 @@ const StudentMentorPublicProfilePage: React.FC = () => {
         if (!mentor) return new Map<string, Array<{ start: string; end: string }>>();
         const map = new Map<string, Array<{ start: string; end: string }>>();
         for (const s of slots) {
-            const key = formatDayKey(s.start, mentor.timezone || 'UTC');
+            const key = formatDayKey(s.start, studentTimezone);
             map.set(key, [...(map.get(key) || []), s]);
         }
         for (const [k, arr] of map.entries()) {
@@ -141,17 +143,15 @@ const StudentMentorPublicProfilePage: React.FC = () => {
             map.set(k, arr);
         }
         return map;
-    }, [slots, mentor]);
+    }, [slots, mentor, studentTimezone]);
 
     const availableDayKeys = useMemo(() => new Set(Array.from(slotsByDay.keys())), [slotsByDay]);
 
     const calendarMeta = useMemo(() => {
         if (!mentor) return null;
-        const tz = mentor.timezone || 'UTC';
-
         const base = new Date();
         const firstOfMonthLocal = new Date(base.getFullYear(), base.getMonth() + monthOffset, 1, 12, 0, 0);
-        const monthLabel = new Intl.DateTimeFormat(undefined, { timeZone: tz, month: 'long', year: 'numeric' }).format(firstOfMonthLocal);
+        const monthLabel = new Intl.DateTimeFormat(undefined, { timeZone: studentTimezone, month: 'long', year: 'numeric' }).format(firstOfMonthLocal);
 
         const year = firstOfMonthLocal.getFullYear();
         const monthIndex = firstOfMonthLocal.getMonth();
@@ -162,21 +162,21 @@ const StudentMentorPublicProfilePage: React.FC = () => {
         for (let i = 0; i < startWeekday; i++) cells.push({ day: null, dayKey: null });
 
         for (let day = 1; day <= daysInMonth; day++) {
-            const noonUtc = new Date(Date.UTC(year, monthIndex, day, 12, 0, 0));
-            const key = formatDayKey(noonUtc.toISOString(), tz);
+            const noonLocal = new Date(year, monthIndex, day, 12, 0, 0);
+            const key = formatDayKey(noonLocal.toISOString(), studentTimezone);
             cells.push({ day, dayKey: key });
         }
 
         while (cells.length % 7 !== 0) cells.push({ day: null, dayKey: null });
 
-        return { tz, monthLabel, cells };
-    }, [mentor, monthOffset]);
+        return { monthLabel, cells };
+    }, [mentor, monthOffset, studentTimezone]);
 
     const freeSlotsByDay = useMemo(() => {
         if (!mentor) return new Map<string, Array<{ start: string; end: string }>>();
         const map = new Map<string, Array<{ start: string; end: string }>>();
         for (const s of freeSlots) {
-            const key = formatDayKey(s.start, mentor.timezone || 'UTC');
+            const key = formatDayKey(s.start, studentTimezone);
             map.set(key, [...(map.get(key) || []), s]);
         }
         for (const [k, arr] of map.entries()) {
@@ -184,14 +184,13 @@ const StudentMentorPublicProfilePage: React.FC = () => {
             map.set(k, arr);
         }
         return map;
-    }, [freeSlots, mentor]);
+    }, [freeSlots, mentor, studentTimezone]);
 
     const freeCalendarMeta = useMemo(() => {
         if (!mentor) return null;
-        const tz = mentor.timezone || 'UTC';
         const base = new Date();
         const firstOfMonthLocal = new Date(base.getFullYear(), base.getMonth() + freeMonthOffset, 1, 12, 0, 0);
-        const monthLabel = new Intl.DateTimeFormat(undefined, { timeZone: tz, month: 'long', year: 'numeric' }).format(firstOfMonthLocal);
+        const monthLabel = new Intl.DateTimeFormat(undefined, { timeZone: studentTimezone, month: 'long', year: 'numeric' }).format(firstOfMonthLocal);
         const year = firstOfMonthLocal.getFullYear();
         const monthIndex = firstOfMonthLocal.getMonth();
         const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
@@ -199,13 +198,13 @@ const StudentMentorPublicProfilePage: React.FC = () => {
         const cells: Array<{ day: number | null; dayKey: string | null }> = [];
         for (let i = 0; i < startWeekday; i++) cells.push({ day: null, dayKey: null });
         for (let day = 1; day <= daysInMonth; day++) {
-            const noonUtc = new Date(Date.UTC(year, monthIndex, day, 12, 0, 0));
-            const key = formatDayKey(noonUtc.toISOString(), tz);
+            const noonLocal = new Date(year, monthIndex, day, 12, 0, 0);
+            const key = formatDayKey(noonLocal.toISOString(), studentTimezone);
             cells.push({ day, dayKey: key });
         }
         while (cells.length % 7 !== 0) cells.push({ day: null, dayKey: null });
-        return { tz, monthLabel, cells, year, monthIndex };
-    }, [mentor, freeMonthOffset]);
+        return { monthLabel, cells, year, monthIndex };
+    }, [mentor, freeMonthOffset, studentTimezone]);
 
     const freeCurrentMonthDayKeys = useMemo(() => {
         if (!freeCalendarMeta) return new Set<string>();
@@ -247,9 +246,10 @@ const StudentMentorPublicProfilePage: React.FC = () => {
                 const fetched = res.data?.slots || [];
                 setSlots(fetched);
 
+                const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
                 const dayKeys = (() => {
                     const s = new Set<string>();
-                    for (const slot of fetched) s.add(formatDayKey(slot.start, mentor.timezone || 'UTC'));
+                    for (const slot of fetched) s.add(formatDayKey(slot.start, tz));
                     return Array.from(s).sort();
                 })();
 
@@ -280,14 +280,14 @@ const StudentMentorPublicProfilePage: React.FC = () => {
                 });
                 const list = res.data?.slots || [];
                 setFreeSlots(list);
-                const tz = mentor.timezone || 'UTC';
+                const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
                 const base = new Date();
                 const year = base.getFullYear();
                 const month = base.getMonth();
                 const firstDayThisMonth = new Set<string>();
                 for (let d = 1; d <= 31; d++) {
-                    const noon = new Date(Date.UTC(year, month, d, 12, 0, 0));
-                    if (noon.getUTCMonth() !== month) break;
+                    const noon = new Date(year, month, d, 12, 0, 0);
+                    if (noon.getMonth() !== month) break;
                     firstDayThisMonth.add(formatDayKey(noon.toISOString(), tz));
                 }
                 if (list.length > 0) {
@@ -305,7 +305,7 @@ const StudentMentorPublicProfilePage: React.FC = () => {
             }
         };
         fetchFreeSlots();
-    }, [mentor?.id, mentor?.free_session_enabled, mentor?.timezone]);
+    }, [mentor?.id, mentor?.free_session_enabled]);
 
     useEffect(() => {
         if (!freeCalendarMeta || !freeCurrentMonthDayKeys.size) return;
@@ -315,10 +315,9 @@ const StudentMentorPublicProfilePage: React.FC = () => {
     }, [freeMonthOffset, freeCalendarMeta, freeCurrentMonthDayKeys, freeSlotsByDay]);
 
     const freeTodayKey = useMemo(() => {
-        if (!mentor) return '';
         const d = new Date();
-        return formatDayKey(d.toISOString(), mentor.timezone || 'UTC');
-    }, [mentor]);
+        return formatDayKey(d.toISOString(), studentTimezone);
+    }, [studentTimezone]);
 
     return (
         <DashboardLayout>
@@ -513,7 +512,7 @@ const StudentMentorPublicProfilePage: React.FC = () => {
                                                                     }}
                                                                     className="px-3 py-2 rounded-lg text-sm border border-green-300 bg-white hover:bg-green-50 text-gray-900 disabled:opacity-50"
                                                                 >
-                                                                    {formatTimeLabel(s.start, mentor.timezone || 'UTC')}
+                                                                    {formatTimeLabel(s.start, studentTimezone)}
                                                                 </button>
                                                             ))}
                                                         </div>
@@ -548,12 +547,12 @@ const StudentMentorPublicProfilePage: React.FC = () => {
                                                     <div className="flex justify-between py-2 border-b border-gray-100">
                                                         <dt className="text-gray-500">Date</dt>
                                                         <dd className="font-medium text-gray-900">
-                                                            {new Date(freeConfirmSlot.start).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                                                            {new Date(freeConfirmSlot.start).toLocaleDateString(undefined, { timeZone: studentTimezone, weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                                                         </dd>
                                                     </div>
                                                     <div className="flex justify-between py-2 border-b border-gray-100">
                                                         <dt className="text-gray-500">Time</dt>
-                                                        <dd className="font-medium text-gray-900">{formatTimeLabel(freeConfirmSlot.start, mentor.timezone || 'UTC')}</dd>
+                                                        <dd className="font-medium text-gray-900">{formatTimeLabel(freeConfirmSlot.start, studentTimezone)}</dd>
                                                     </div>
                                                     <div className="flex justify-between py-2 border-b border-gray-100">
                                                         <dt className="text-gray-500">Duration</dt>
@@ -597,7 +596,7 @@ const StudentMentorPublicProfilePage: React.FC = () => {
 
                                 <Card className="p-6">
                                     <h2 className="text-lg font-bold text-gray-900 mb-3">{isPreview ? 'Availability' : 'Book a Session'}</h2>
-                                    <div className="text-sm text-gray-600 mb-4">Select a date to see available times (shown in tutor timezone: {mentor.timezone}).</div>
+                                    <div className="text-sm text-gray-600 mb-4">Select a date to see available times (shown in your local timezone: {studentTimezone}).</div>
 
                                     {slotsBusy ? (
                                         <div className="text-sm text-gray-600">Loading availability...</div>
@@ -678,7 +677,7 @@ const StudentMentorPublicProfilePage: React.FC = () => {
                                                             navigate(`/student/book/${mentor.id}?${qs.toString()}`);
                                                         }}
                                                     >
-                                                        {formatTimeLabel(s.start, mentor.timezone || 'UTC')}
+                                                        {formatTimeLabel(s.start, studentTimezone)}
                                                     </button>
                                                 ))}
                                             </div>

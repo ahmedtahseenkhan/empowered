@@ -75,9 +75,12 @@ const StudentSessionsPage: React.FC = () => {
             .filter((l) => !Number.isNaN(l.startMs));
     }, [lessons]);
 
+    const studentTimezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', []);
+
     const formatBookedOn = (d: Date | null | undefined) => {
         if (!d || Number.isNaN(d.getTime())) return '';
         return d.toLocaleString(undefined, {
+            timeZone: studentTimezone,
             year: 'numeric',
             month: 'short',
             day: 'numeric',
@@ -85,6 +88,17 @@ const StudentSessionsPage: React.FC = () => {
             minute: '2-digit',
             hour12: true,
         });
+    };
+
+    const formatRange = (startIso: string, endIso: string) => {
+        const s = new Date(startIso);
+        const e = new Date(endIso);
+        if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime())) return '—';
+        const opts = { timeZone: studentTimezone } as const;
+        const datePart = s.toLocaleDateString(undefined, { ...opts, day: '2-digit', month: '2-digit', year: 'numeric' });
+        const startTime = s.toLocaleTimeString(undefined, { ...opts, hour: 'numeric', minute: '2-digit', hour12: true });
+        const endTime = e.toLocaleTimeString(undefined, { ...opts, hour: 'numeric', minute: '2-digit', hour12: true });
+        return `${datePart}, ${startTime} – ${endTime}`;
     };
 
     const filtered = useMemo(() => {
@@ -99,16 +113,6 @@ const StudentSessionsPage: React.FC = () => {
         copy.sort((a, b) => (tab === 'upcoming' ? a.startMs - b.startMs : b.startMs - a.startMs));
         return copy;
     }, [filtered, tab]);
-
-    const formatRange = (startIso: string, endIso: string) => {
-        const s = new Date(startIso);
-        const e = new Date(endIso);
-        if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime())) return '—';
-        const datePart = s.toLocaleDateString(undefined, { day: '2-digit', month: '2-digit', year: 'numeric' });
-        const startTime = s.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12: true });
-        const endTime = e.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12: true });
-        return `${datePart}, ${startTime} – ${endTime}`;
-    };
 
     const mapStatusToBadge = (status: string) => {
         const normalized = status.toUpperCase();
@@ -237,6 +241,7 @@ const StudentSessionsPage: React.FC = () => {
                                         </div>
                                         <div className="text-lg font-bold text-gray-900 mt-2">
                                             {l.start.toLocaleDateString(undefined, {
+                                                timeZone: studentTimezone,
                                                 weekday: 'short',
                                                 month: 'short',
                                                 day: 'numeric',

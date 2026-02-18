@@ -41,31 +41,31 @@ const StudentBookMentorPage: React.FC = () => {
     const [selectedSlotStarts, setSelectedSlotStarts] = useState<string[]>([]);
     const [frequency, setFrequency] = useState<Frequency>((searchParams.get('frequency') as Frequency) || 'WEEKLY');
 
-    const timeZone = mentor?.timezone || 'UTC';
+    const mentorTimezone = mentor?.timezone || 'UTC';
+    const studentTimezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', []);
 
-    const formatDayKey = (iso: string, tz?: string) => {
+    const formatDayKey = (iso: string, tz: string) => {
         const d = new Date(iso);
-        const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: tz || timeZone, year: 'numeric', month: '2-digit', day: '2-digit' });
+        const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' });
         return fmt.format(d);
     };
 
-    const formatDayLabel = (dayKey: string) => {
+    const formatDayLabel = (dayKey: string, tz: string) => {
         const [y, m, d] = dayKey.split('-').map(Number);
         const dt = new Date(Date.UTC(y, (m || 1) - 1, d || 1));
-        return dt.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+        return new Intl.DateTimeFormat(undefined, { timeZone: tz, weekday: 'short', month: 'short', day: 'numeric' }).format(dt);
     };
 
-    const formatTimeLabel = (iso: string, tz?: string) => {
+    const formatTimeLabel = (iso: string, tz: string) => {
         const d = new Date(iso);
-        return new Intl.DateTimeFormat(undefined, { timeZone: tz || timeZone, hour: 'numeric', minute: '2-digit', hour12: true }).format(d);
+        return new Intl.DateTimeFormat(undefined, { timeZone: tz, hour: 'numeric', minute: '2-digit', hour12: true }).format(d);
     };
 
     const slotsByDay = useMemo(() => {
         if (!mentor) return new Map<string, Array<{ start: string; end: string }>>();
         const map = new Map<string, Array<{ start: string; end: string }>>();
-        const tz = mentor.timezone || 'UTC';
         for (const s of slots) {
-            const key = formatDayKey(s.start, tz);
+            const key = formatDayKey(s.start, studentTimezone);
             map.set(key, [...(map.get(key) || []), s]);
         }
         for (const [k, arr] of map.entries()) {
@@ -73,7 +73,7 @@ const StudentBookMentorPage: React.FC = () => {
             map.set(k, arr);
         }
         return map;
-    }, [slots, mentor]);
+    }, [slots, mentor, studentTimezone]);
 
     const availableDays = useMemo(() => Array.from(slotsByDay.keys()).sort(), [slotsByDay]);
 
@@ -81,10 +81,9 @@ const StudentBookMentorPage: React.FC = () => {
 
     const calendarMeta = useMemo(() => {
         if (!mentor) return null;
-        const tz = mentor.timezone || 'UTC';
         const base = new Date();
         const firstOfMonthLocal = new Date(base.getFullYear(), base.getMonth() + monthOffset, 1, 12, 0, 0);
-        const monthLabel = new Intl.DateTimeFormat(undefined, { timeZone: tz, month: 'long', year: 'numeric' }).format(firstOfMonthLocal);
+        const monthLabel = new Intl.DateTimeFormat(undefined, { timeZone: studentTimezone, month: 'long', year: 'numeric' }).format(firstOfMonthLocal);
         const year = firstOfMonthLocal.getFullYear();
         const monthIndex = firstOfMonthLocal.getMonth();
         const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
@@ -92,13 +91,13 @@ const StudentBookMentorPage: React.FC = () => {
         const cells: Array<{ day: number | null; dayKey: string | null }> = [];
         for (let i = 0; i < startWeekday; i++) cells.push({ day: null, dayKey: null });
         for (let day = 1; day <= daysInMonth; day++) {
-            const noonUtc = new Date(Date.UTC(year, monthIndex, day, 12, 0, 0));
-            const key = formatDayKey(noonUtc.toISOString(), tz);
+            const noonLocal = new Date(year, monthIndex, day, 12, 0, 0);
+            const key = formatDayKey(noonLocal.toISOString(), studentTimezone);
             cells.push({ day, dayKey: key });
         }
         while (cells.length % 7 !== 0) cells.push({ day: null, dayKey: null });
-        return { tz, monthLabel, cells };
-    }, [mentor, monthOffset]);
+        return { monthLabel, cells };
+    }, [mentor, monthOffset, studentTimezone]);
 
     const availableDayKeys = useMemo(() => new Set(availableDays), [availableDays]);
 
@@ -152,7 +151,7 @@ const StudentBookMentorPage: React.FC = () => {
                 const fetched = res.data?.slots || [];
                 setSlots(fetched);
 
-                const tz = mentor.timezone || 'UTC';
+                const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
                 const paramDay = (searchParams.get('day') || '').trim();
                 const paramSlotStart = (searchParams.get('slotStart') || '').trim();
 
@@ -309,7 +308,7 @@ const StudentBookMentorPage: React.FC = () => {
                                     </div>
 
                                     <div className="rounded-lg bg-[#4A1D96] text-white text-sm font-semibold px-4 py-3">
-                                        View your mentor's available days and times below. Dates and times are in the mentor's timezone ({timeZone}).
+                                        Times below are in your local timezone ({studentTimezone}). Your mentor is in {mentorTimezone}.
                                     </div>
 
                                     <div>
@@ -388,7 +387,7 @@ const StudentBookMentorPage: React.FC = () => {
                                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                                 {(slotsByDay.get(selectedDay) || []).map((s) => {
                                                     const active = isSlotSelected(s.start);
-                                                    const label = formatTimeLabel(s.start, timeZone);
+                                                    const label = formatTimeLabel(s.start, studentTimezone);
                                                     return (
                                                         <button
                                                             key={s.start}
@@ -436,8 +435,8 @@ const StudentBookMentorPage: React.FC = () => {
                                             {selectedSlotStarts.map((s) => (
                                                 <div key={s} className="flex items-center justify-between gap-3 border border-purple-100 bg-purple-50/40 rounded-lg p-3">
                                                     <div>
-                                                        <div className="text-xs text-gray-600">Every {formatDayLabel(formatDayKey(s, timeZone)).split(',')[0]}</div>
-                                                        <div className="text-sm font-semibold text-gray-900">{formatTimeLabel(s, timeZone)}</div>
+                                                        <div className="text-xs text-gray-600">Every {formatDayLabel(formatDayKey(s, studentTimezone), studentTimezone).split(',')[0]}</div>
+                                                        <div className="text-sm font-semibold text-gray-900">{formatTimeLabel(s, studentTimezone)}</div>
                                                     </div>
                                                     <button
                                                         type="button"
