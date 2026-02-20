@@ -26,7 +26,7 @@ const TutorDashboard: React.FC = () => {
     const [calendarBusy, setCalendarBusy] = useState(false);
     const [availabilitySlots, setAvailabilitySlots] = useState<Array<{ start: string; end: string }>>([]);
     const [lessonsBusy, setLessonsBusy] = useState(false);
-    const [lessons, setLessons] = useState<Array<{ id: string; start_time: string; end_time: string; status: string; meeting_link?: string | null; google_calendar_html_link?: string | null; student?: { username?: string | null } }>>([]);
+    const [lessons, setLessons] = useState<Array<{ id: string; start_time: string; end_time: string; status: string; billing_type?: 'FREE_TRIAL' | 'FREE_INTRO' | 'PAID'; meeting_link?: string | null; google_calendar_html_link?: string | null; student?: { username?: string | null } }>>([]);
     const [blocksBusy, setBlocksBusy] = useState(false);
     const [timeBlocks, setTimeBlocks] = useState<Array<{ id: string; start_time: string; end_time: string; reason?: string | null }>>([]);
 
@@ -410,11 +410,15 @@ const TutorDashboard: React.FC = () => {
     })();
 
     const lessonsByDayKey = (() => {
-        const map = new Map<string, number>();
+        const map = new Map<string, { total: number; free: number; paid: number }>();
         for (const l of lessons) {
             const d = new Date(l.start_time);
             const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-            map.set(key, (map.get(key) || 0) + 1);
+            const cur = map.get(key) || { total: 0, free: 0, paid: 0 };
+            cur.total += 1;
+            if (l.billing_type === 'FREE_INTRO' || l.billing_type === 'FREE_TRIAL') cur.free += 1;
+            else cur.paid += 1;
+            map.set(key, cur);
         }
         return map;
     })();
@@ -571,7 +575,8 @@ const TutorDashboard: React.FC = () => {
                                             const inMonth = d.getMonth() === monthCursor.getMonth();
                                             const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
                                             const blockCount = blocksByDayKey.get(key) || 0;
-                                            const lessonCount = lessonsByDayKey.get(key) || 0;
+                                            const lessonInfo = lessonsByDayKey.get(key) || { total: 0, free: 0, paid: 0 };
+                                            const lessonCount = lessonInfo.total;
                                             return (
                                                 <button
                                                     key={i}
@@ -586,8 +591,21 @@ const TutorDashboard: React.FC = () => {
                                                     </div>
                                                     <div className="mt-1 space-y-1">
                                                         {lessonCount > 0 && (
-                                                            <div className="text-[10px] bg-purple-50 border border-purple-100 text-purple-800 rounded px-1.5 py-0.5 inline-block">
-                                                                {lessonCount} session{lessonCount > 1 ? 's' : ''}
+                                                            <div className="space-y-0.5">
+                                                                <div className="text-[10px] bg-purple-50 border border-purple-100 text-purple-800 rounded px-1.5 py-0.5 inline-block">
+                                                                    {lessonCount} session{lessonCount > 1 ? 's' : ''}
+                                                                </div>
+                                                                {lessonInfo.free > 0 && lessonInfo.paid > 0 && (
+                                                                    <div className="text-[9px] text-gray-500">
+                                                                        {lessonInfo.free} free, {lessonInfo.paid} paid
+                                                                    </div>
+                                                                )}
+                                                                {lessonInfo.free > 0 && lessonInfo.paid === 0 && (
+                                                                    <div className="text-[9px] text-green-600">{lessonInfo.free} free</div>
+                                                                )}
+                                                                {lessonInfo.paid > 0 && lessonInfo.free === 0 && (
+                                                                    <div className="text-[9px] text-purple-600">{lessonInfo.paid} paid</div>
+                                                                )}
                                                             </div>
                                                         )}
                                                         {blockCount > 0 && (
@@ -714,15 +732,20 @@ const TutorDashboard: React.FC = () => {
                                                         const height = Math.max(12, minutesToPx(endMinutes - startMinutes));
                                                         if (startMinutes < 0 || endMinutes > (endHour - startHour) * 60) return null;
 
+                                                        const isFreeIntro = l.billing_type === 'FREE_INTRO';
+                                                        const isFreeTrial = l.billing_type === 'FREE_TRIAL';
+                                                        const isFree = isFreeIntro || isFreeTrial;
+                                                        const label = isFreeIntro ? 'Free intro' : isFreeTrial ? 'Free trial' : 'Paid';
+
                                                         return (
                                                             <div
                                                                 key={l.id}
-                                                                className="absolute left-1 right-1 rounded-md bg-purple-50 border border-purple-200 text-purple-900 px-2 py-1 text-[10px]"
+                                                                className={`absolute left-1 right-1 rounded-md px-2 py-1 text-[10px] ${isFree ? 'bg-green-50 border border-green-200 text-green-900' : 'bg-purple-50 border border-purple-200 text-purple-900'}`}
                                                                 style={{ top, height }}
-                                                                title={`${l.student?.username || 'Student'} (${l.status})`}
+                                                                title={`${l.student?.username || 'Student'} · ${label} (${l.status})`}
                                                                 onMouseDown={(e) => e.stopPropagation()}
                                                             >
-                                                                <div className="font-semibold truncate">Session</div>
+                                                                <div className="font-semibold truncate">{label}</div>
                                                                 <div className="truncate">{l.student?.username || 'Student'}</div>
                                                             </div>
                                                         );
