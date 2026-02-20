@@ -36,6 +36,7 @@ const StudentMentorResultsPage: React.FC = () => {
     const majorCategoryId = searchParams.get('majorCategoryId') || '';
     const subcategoryId = searchParams.get('subcategoryId') || '';
     const areaIdsParam = searchParams.get('areaIds') || '';
+    const fromAssessment = searchParams.get('fromAssessment') === '1';
 
     const parseCsv = (value: string | null) => {
         if (!value) return [];
@@ -167,7 +168,11 @@ const StudentMentorResultsPage: React.FC = () => {
                 <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6">
                     <div>
                         <h1 className="text-3xl font-bold text-gray-900 mb-2">{title}</h1>
-                        <p className="text-gray-600">Browse mentors and book a session when you’re ready.</p>
+                        {fromAssessment ? (
+                            <p className="text-gray-600">Based on your answers, here are the Mentors we recommend to help you achieve your desired results:</p>
+                        ) : (
+                            <p className="text-gray-600">Browse mentors and book a session when you're ready.</p>
+                        )}
                     </div>
                     <div className="flex flex-col md:items-end gap-2">
                         <div className="text-sm text-gray-600">
