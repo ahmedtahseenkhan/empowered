@@ -1,6 +1,6 @@
 import React from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Users, GraduationCap, FileCheck, LogOut, Settings, MessageSquare } from 'lucide-react';
+import { LayoutDashboard, Users, GraduationCap, FileCheck, LogOut, Settings, MessageSquare, Calendar } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 const AdminLayout: React.FC = () => {
@@ -21,6 +21,7 @@ const AdminLayout: React.FC = () => {
         { icon: Settings, label: 'Subscriptions', path: '/subscriptions' },
         { icon: LayoutDashboard, label: 'Payments', path: '/payments' },
         { icon: MessageSquare, label: 'Queries', path: '/support' },
+        { icon: Calendar, label: 'Demo Requests', path: '/demo-requests' },
     ];
 
     return (

@@ -18,6 +18,7 @@ import {
     adminListTickets,
     adminReplyTicket,
     adminGetAnalytics,
+    adminListDemoBookings,
 } from '../controllers/adminController';
 
 const router = express.Router();
@@ -48,5 +49,7 @@ router.get('/payments', adminListPayments);
 
 router.get('/support', adminListTickets);
 router.put('/support/:id/reply', adminReplyTicket);
+
+router.get('/demo-bookings', adminListDemoBookings);
 
 export default router;

@@ -15,6 +15,7 @@ export const listPublicTutors = async (req: Request, res: Response) => {
         const category = (req.query.category as string | undefined)?.trim();
         const majorCategoryId = (req.query.majorCategoryId as string | undefined)?.trim();
         const subcategoryId = (req.query.subcategoryId as string | undefined)?.trim();
+        const subcategoryIdsRaw = (req.query.subcategoryIds as string | undefined)?.trim();
         const areaIdsRaw = (req.query.areaIds as string | undefined)?.trim();
 
         const where: any = {};
@@ -32,14 +33,11 @@ export const listPublicTutors = async (req: Request, res: Response) => {
 
         if (category) {
             // The assessment category values are: ACADEMIC | SKILL | PERSONAL_GROWTH.
-            // We loosely map them to your Category names (Academic Tutoring / Skill Development / Life Coaching)
-            // and do a contains match.
             const map: Record<string, string> = {
                 ACADEMIC: 'Academic',
                 SKILL: 'Skill',
                 PERSONAL_GROWTH: 'Life',
             };
-
             const mapped = map[category] || category;
             where.categories = {
                 some: {
@@ -54,23 +52,25 @@ export const listPublicTutors = async (req: Request, res: Response) => {
         };
 
         const areaIds = parseCsv(areaIdsRaw);
+        const subcategoryIdsParsed = parseCsv(subcategoryIdsRaw);
+        const subcategoryIds = subcategoryIdsParsed.length > 0 ? subcategoryIdsParsed : (subcategoryId ? [subcategoryId] : []);
 
-        // New hierarchical filter (Major -> Subcategory -> Area of Expertise)
+        // OR logic: mentor appears if they match ANY selected subcategory OR ANY selected area of expertise
+        const categoryConditions: any[] = [];
         if (areaIds.length > 0) {
+            categoryConditions.push({ category_id: { in: areaIds } });
+        }
+        if (subcategoryIds.length > 0) {
+            categoryConditions.push({ category: { parent_id: { in: subcategoryIds } } });
+        }
+
+        if (categoryConditions.length > 0) {
             where.categories = {
-                some: {
-                    category_id: { in: areaIds },
-                }
-            };
-        } else if (subcategoryId) {
-            // TutorCategory stores leaf category IDs, so subcategory filter matches categories whose parent is subcategoryId
-            where.categories = {
-                some: {
-                    category: { parent_id: subcategoryId },
-                }
+                some: categoryConditions.length === 1
+                    ? categoryConditions[0]
+                    : { OR: categoryConditions },
             };
         } else if (majorCategoryId) {
-            // Leaf category -> parent (subcategory) -> parent (major)
             where.categories = {
                 some: {
                     category: {

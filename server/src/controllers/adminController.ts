@@ -579,3 +579,31 @@ export const adminGetAnalytics = async (req: AuthRequest, res: Response) => {
         return res.status(500).json({ error: 'Server error' });
     }
 };
+
+export const adminListDemoBookings = async (req: AuthRequest, res: Response) => {
+    try {
+        const fromStr = (req.query.from as string)?.trim();
+        const toStr = (req.query.to as string)?.trim();
+
+        const slotFilter: { gte?: Date; lte?: Date } = {};
+        if (fromStr) {
+            const from = new Date(fromStr);
+            if (!Number.isNaN(from.getTime())) slotFilter.gte = from;
+        }
+        if (toStr) {
+            const to = new Date(toStr);
+            if (!Number.isNaN(to.getTime())) slotFilter.lte = to;
+        }
+        const where = Object.keys(slotFilter).length ? { slot_start_time: slotFilter } : undefined;
+
+        const bookings = await prisma.demoBooking.findMany({
+            where,
+            orderBy: { slot_start_time: 'asc' },
+        });
+
+        return res.json({ bookings });
+    } catch (error) {
+        console.error('adminListDemoBookings error:', error);
+        return res.status(500).json({ error: 'Server error' });
+    }
+};

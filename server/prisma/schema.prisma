@@ -683,3 +683,20 @@ model StripeEvent {
   processed   Boolean  @default(false)
   created_at  DateTime @default(now())
 }
+
+model DemoBooking {
+  id                 String   @id @default(uuid())
+  full_name          String
+  email              String
+  phone              String?
+  category_alignment  String   // Academic Tutoring | Life Coaching | Skill Development | All of the above
+  experience_years   String   // Just getting started | Less than 1 year | 1–3 years | 3+ years
+  income_status      String   // Yes recurring | Yes fluctuates | Not yet building | Planning to start soon
+  looking_for        String   @db.Text // JSON array or comma-separated
+  slot_start_time    DateTime
+  slot_end_time      DateTime
+  timezone           String   @default("America/Chicago")
+  created_at         DateTime @default(now())
+
+  @@index([slot_start_time])
+}

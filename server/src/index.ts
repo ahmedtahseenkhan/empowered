@@ -23,6 +23,7 @@ import progressRoutes from './routes/progressRoutes';
 
 import uploadRoutes from './routes/uploadRoutes';
 import adminRoutes from './routes/adminRoutes';
+import demoRoutes from './routes/demoRoutes';
 import paymentRoutes from './routes/paymentRoutes';
 import webhookRoutes from './routes/webhookRoutes';
 import { startEmailOutboxProcessor } from './services/emailOutboxProcessor';
@@ -53,6 +54,7 @@ app.use('/api/progress', progressRoutes);
 
 app.use('/api/uploads', uploadRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/demo', demoRoutes);
 app.use('/api/payments', paymentRoutes);
 
 // Health Check

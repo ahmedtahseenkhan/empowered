@@ -63,7 +63,7 @@ export default function HeroSection() {
                 <div className="mt-8">
                     <Button
                         as={Link}
-                        to="/find-mentor"
+                        to="/book-demo"
                         variant="primary"
                         size="lg"
                         className="px-12 py-4 text-lg rounded-full"

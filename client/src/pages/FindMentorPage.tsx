@@ -15,13 +15,13 @@ type CategoryNode = {
     children?: CategoryNode[];
 };
 
-// Display names for major categories (API may return "Personal Growth" for Life Coaching)
+// Major categories must match API seed names (Academic Tutoring, Skill Development, Life Coaching)
 const MAJOR_CATEGORIES = [
     {
         key: 'ACADEMIC',
-        title: 'Academic Success',
+        title: 'Academic Tutoring',
         description: 'From core subjects like Reading, Writing, and Math to advanced topics like Algebra, Geometry, and standardized test preps, our experts guide every learner to success.',
-        matchName: 'Academic Success',
+        matchName: 'Academic Tutoring',
     },
     {
         key: 'SKILL',
@@ -33,7 +33,7 @@ const MAJOR_CATEGORIES = [
         key: 'LIFE',
         title: 'Life Coaching',
         description: 'Gain clarity, strengthen emotional intelligence, boost confidence, build soft skills with certified life and career coaches who guide you through personal challenges to lasting success.',
-        matchName: 'Personal Growth', // API seed uses "Personal Growth"
+        matchName: 'Life Coaching',
     },
 ] as const;
 

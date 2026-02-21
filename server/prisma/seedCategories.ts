@@ -4,27 +4,27 @@ const prisma = new PrismaClient();
 
 const categories = [
     {
-        name: "Academic Success",
+        name: "Academic Tutoring",
         children: [
             {
                 name: "Mathematics",
-                children: ["Algebra", "Geometry", "Calculus", "Statistics", "Trigonometry", "Arithmetic", "Pre-Calculus"]
-            },
-            {
-                name: "Language Arts",
-                children: ["Reading Comprehension", "Writing Skills", "Grammar", "Literature", "Creative Writing", "English as Second Language (ESL)"]
+                children: ["Algebra", "Geometry", "Calculus", "Trigonometry", "Statistics"]
             },
             {
                 name: "Science",
-                children: ["Biology", "Chemistry", "Physics", "Environmental Science", "General Science"]
+                children: ["Biology", "Chemistry", "Physics", "Environmental Science", "Anatomy & Physiology"]
             },
             {
-                name: "Test Preparation",
-                children: ["SAT", "ACT", "GRE", "GMAT", "TOEFL", "IELTS", "GED"]
+                name: "English & Literature",
+                children: ["Grammar", "Essay Writing", "Reading Comprehension", "Creative Writing", "AP English"]
             },
             {
-                name: "Social Studies",
-                children: ["History", "Geography", "Economics", "Psychology", "Sociology"]
+                name: "History & Social Studies",
+                children: ["World History", "U.S. History", "Civics & Government", "Geography", "Economics"]
+            },
+            {
+                name: "Test Prep & College Readiness",
+                children: ["SAT", "ACT", "AP Exams", "GED", "College Application Essays"]
             }
         ]
     },
@@ -32,41 +32,41 @@ const categories = [
         name: "Skill Development",
         children: [
             {
-                name: "Programming & Technology",
-                children: ["Python", "JavaScript", "HTML/CSS", "Web Development", "Data Science", "Cybersecurity", "Mobile App Dev"]
+                name: "Coding",
+                children: ["Python", "Java", "C++", "JavaScript", "Swift", "App Development"]
             },
             {
-                name: "Business & Marketing",
-                children: ["Digital Marketing", "Content Writing", "Entrepreneurship", "Social Media Management", "SEO"]
+                name: "Business & Entrepreneurship",
+                children: ["Marketing", "Business Strategy", "Sales", "E-commerce", "Startups"]
             },
             {
-                name: "Creative Arts",
-                children: ["Painting", "Drawing", "Digital Art", "Photography", "Graphic Design"]
+                name: "Financial Literacy",
+                children: ["Budgeting", "Investing", "Taxes", "Credit Management", "Wealth Building"]
             },
             {
-                name: "Music",
-                children: ["Guitar", "Piano", "Vocals", "Music Theory", "Music Production"]
+                name: "Music & Arts",
+                children: ["Instrumental Lessons", "Vocal Training", "Music Production", "Painting", "Drawing", "Digital Art"]
             },
             {
-                name: "Life Skills",
-                children: ["Financial Literacy", "Public Speaking", "Cooking", "Driving Theory"]
+                name: "Public Speaking & Communication",
+                children: ["Presentation Skills", "Storytelling", "Debate", "Speech Writing", "Persuasion"]
             }
         ]
     },
     {
-        name: "Personal Growth",
+        name: "Life Coaching",
         children: [
             {
-                name: "Personal Development",
-                children: ["Time Management", "Goal Setting", "Self-Motivation", "Confidence Building", "Productivity"]
+                name: "Confidence Building",
+                children: ["Boosting Self-Esteem", "Overcoming Self-Doubt", "Building Resilience", "Assertiveness"]
             },
             {
                 name: "Emotional Intelligence",
-                children: ["Stress Management", "Resilience", "Mindfulness", "Communication Skills", "Empathy"]
+                children: ["Managing Emotions", "Stress Reduction", "Self-Awareness", "Mindful Living"]
             },
             {
-                name: "Career Coaching",
-                children: ["Resume Writing", "Interview Preparation", "Career Planning", "Leadership Skills", "Negotiation"]
+                name: "Productivity",
+                children: ["Time Management", "Habit Formation", "Prioritization", "Motivation", "Actionable Goal Setting"]
             }
         ]
     }
@@ -74,6 +74,21 @@ const categories = [
 
 async function main() {
     console.log('Seeding categories...');
+
+    // Remove existing tutor-category links, then categories (delete leaves first, then parents)
+    await prisma.tutorCategory.deleteMany({});
+    let deleted = 1;
+    while (deleted > 0) {
+        const all = await prisma.category.findMany({ select: { id: true, parent_id: true } });
+        const parentIds = new Set(all.map((c) => c.parent_id).filter(Boolean));
+        const leaves = all.filter((c) => !parentIds.has(c.id));
+        deleted = 0;
+        for (const c of leaves) {
+            await prisma.category.delete({ where: { id: c.id } });
+            deleted++;
+        }
+    }
+    console.log('Cleared existing categories.');
 
     for (const root of categories) {
         // Create Root Category

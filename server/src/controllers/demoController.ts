@@ -1,0 +1,156 @@
+import { Request, Response } from 'express';
+import prisma from '../config/db';
+
+const ADMIN_TIMEZONE = 'America/Chicago';
+const ADMIN_START_HOUR = 9;
+const ADMIN_END_HOUR = 17;
+const SLOT_DURATION_MINUTES = 20;
+
+function secondSundayMarch(year: number): Date {
+    const march1 = new Date(Date.UTC(year, 2, 1));
+    const day = march1.getUTCDay();
+    const firstSunday = 1 + (7 - day) % 7;
+    const secondSunday = firstSunday + 7;
+    return new Date(Date.UTC(year, 2, secondSunday, 10, 0, 0));
+}
+
+function firstSundayNovember(year: number): Date {
+    const nov1 = new Date(Date.UTC(year, 10, 1));
+    const day = nov1.getUTCDay();
+    const firstSunday = 1 + (7 - day) % 7;
+    return new Date(Date.UTC(year, 10, firstSunday, 9, 0, 0));
+}
+
+function isDSTChicago(year: number, month: number, day: number): boolean {
+    const d = new Date(Date.UTC(year, month, day, 12, 0, 0));
+    const startDST = secondSundayMarch(year);
+    const endDST = firstSundayNovember(year);
+    return d >= startDST && d < endDST;
+}
+
+function getChicagoStartUTC(date: Date): Date {
+    const y = date.getUTCFullYear();
+    const m = date.getUTCMonth();
+    const d = date.getUTCDate();
+    const dst = isDSTChicago(y, m, d);
+    const utcHour = ADMIN_START_HOUR + (dst ? 5 : 6);
+    return new Date(Date.UTC(y, m, d, utcHour, 0, 0));
+}
+
+export async function getDemoSlots(req: Request, res: Response) {
+    try {
+        const fromStr = (req.query.from as string)?.trim();
+        const toStr = (req.query.to as string)?.trim();
+        if (!fromStr || !toStr) {
+            return res.status(400).json({ error: 'from and to (ISO date) are required' });
+        }
+        const from = new Date(fromStr);
+        const to = new Date(toStr);
+        if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+            return res.status(400).json({ error: 'Invalid from or to date' });
+        }
+
+        const slots: { start: string; end: string }[] = [];
+        const cursor = new Date(from);
+        cursor.setUTCHours(0, 0, 0, 0);
+
+        while (cursor <= to) {
+            const startOfDay = getChicagoStartUTC(new Date(cursor));
+            let slotStart = new Date(startOfDay);
+            const endOfDay = new Date(slotStart);
+            endOfDay.setUTCHours(slotStart.getUTCHours() + (ADMIN_END_HOUR - ADMIN_START_HOUR), 0, 0);
+
+            while (slotStart < endOfDay) {
+                const slotEnd = new Date(slotStart.getTime() + SLOT_DURATION_MINUTES * 60 * 1000);
+                if (slotEnd <= endOfDay && slotStart >= from && slotEnd <= new Date(to.getTime() + 24 * 60 * 60 * 1000)) {
+                    slots.push({
+                        start: slotStart.toISOString(),
+                        end: slotEnd.toISOString(),
+                    });
+                }
+                slotStart = slotEnd;
+            }
+            cursor.setUTCDate(cursor.getUTCDate() + 1);
+        }
+
+        const booked = await prisma.demoBooking.findMany({
+            where: {
+                slot_start_time: { gte: from },
+                slot_end_time: { lte: new Date(to.getTime() + 24 * 60 * 60 * 1000) },
+            },
+            select: { slot_start_time: true },
+        });
+        const bookedSet = new Set(booked.map((b) => b.slot_start_time.toISOString()));
+
+        const available = slots.filter((s) => !bookedSet.has(s.start));
+
+        return res.json({ slots: available });
+    } catch (e) {
+        console.error('getDemoSlots error:', e);
+        return res.status(500).json({ error: 'Failed to fetch demo slots' });
+    }
+}
+
+export async function createDemoBooking(req: Request, res: Response) {
+    try {
+        const body = req.body as {
+            full_name?: string;
+            email?: string;
+            phone?: string;
+            category_alignment?: string;
+            experience_years?: string;
+            income_status?: string;
+            looking_for?: string[];
+            slot_start_time?: string;
+        };
+
+        const full_name = (body.full_name ?? '').trim();
+        const email = (body.email ?? '').trim();
+        const slot_start_time = body.slot_start_time;
+
+        if (!full_name || !email) {
+            return res.status(400).json({ error: 'Full name and email are required' });
+        }
+        if (!slot_start_time) {
+            return res.status(400).json({ error: 'Please select a demo slot' });
+        }
+
+        const start = new Date(slot_start_time);
+        if (Number.isNaN(start.getTime())) {
+            return res.status(400).json({ error: 'Invalid slot time' });
+        }
+        const end = new Date(start.getTime() + SLOT_DURATION_MINUTES * 60 * 1000);
+
+        const existing = await prisma.demoBooking.findFirst({
+            where: {
+                slot_start_time: start,
+            },
+        });
+        if (existing) {
+            return res.status(409).json({ error: 'This slot was just booked. Please choose another time.' });
+        }
+
+        const lookingFor = Array.isArray(body.looking_for) ? body.looking_for : [];
+        const looking_for_str = lookingFor.length ? JSON.stringify(lookingFor) : '[]';
+
+        const booking = await prisma.demoBooking.create({
+            data: {
+                full_name,
+                email,
+                phone: (body.phone ?? '').trim() || null,
+                category_alignment: (body.category_alignment ?? 'All of the above').trim(),
+                experience_years: (body.experience_years ?? '').trim(),
+                income_status: (body.income_status ?? '').trim(),
+                looking_for: looking_for_str,
+                slot_start_time: start,
+                slot_end_time: end,
+                timezone: ADMIN_TIMEZONE,
+            },
+        });
+
+        return res.status(201).json({ booking: { id: booking.id, slot_start_time: booking.slot_start_time.toISOString(), slot_end_time: booking.slot_end_time.toISOString() } });
+    } catch (e) {
+        console.error('createDemoBooking error:', e);
+        return res.status(500).json({ error: 'Failed to create demo booking' });
+    }
+}

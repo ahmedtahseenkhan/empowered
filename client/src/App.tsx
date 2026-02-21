@@ -48,6 +48,7 @@ import StudentBookingConfirmationPage from './pages/StudentBookingConfirmationPa
 import TutorAIAssistPage from './pages/TutorAIAssistPage';
 import StudentSessionsPage from './pages/StudentSessionsPage';
 import ConnectAccountPage from './pages/ConnectAccountPage';
+import BookDemoPage from './pages/BookDemoPage';
 
 const DashboardRouter = () => {
   const { user } = useAuth();
@@ -159,6 +160,7 @@ function App() {
           <Route path="/testimonials" element={<TestimonialsPage />} />
           <Route path="/work-with-us" element={<WorkWithUsPage />} />
           <Route path="/contact-us" element={<ContactUsPage />} />
+          <Route path="/book-demo" element={<BookDemoPage />} />
           <Route path="/find-mentor" element={<FindMentorPage />} />
           <Route path="/mentors" element={<MentorResultsPage />} />
           <Route path="/mentors/:id" element={<MentorPublicProfilePage />} />
