@@ -38,10 +38,20 @@ function getDallasHour(iso: string): number {
     return parseInt(hour, 10);
 }
 
+function parseLookingFor(looking_for: string): string[] {
+    try {
+        const parsed = JSON.parse(looking_for);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch {
+        return [];
+    }
+}
+
 const DemoRequestsPage: React.FC = () => {
     const [bookings, setBookings] = useState<DemoBooking[]>([]);
     const [loading, setLoading] = useState(true);
     const [viewMode, setViewMode] = useState<'week' | 'list'>('week');
+    const [selectedBooking, setSelectedBooking] = useState<DemoBooking | null>(null);
     const [weekStart, setWeekStart] = useState(() => {
         const d = new Date();
         const day = d.getDay();
@@ -171,14 +181,16 @@ const DemoRequestsPage: React.FC = () => {
                                                 return (
                                                     <div key={`${key}-${hour}`} className="border-l border-b border-gray-100 p-1" style={{ height: hourHeight }}>
                                                         {dayBookings.map((b) => (
-                                                            <div
+                                                            <button
                                                                 key={b.id}
-                                                                className="text-xs bg-purple-50 border border-purple-200 rounded p-2 truncate"
-                                                                title={`${b.full_name} – ${b.email}`}
+                                                                type="button"
+                                                                onClick={() => setSelectedBooking(b)}
+                                                                className="w-full text-left text-xs bg-purple-50 border border-purple-200 rounded p-2 truncate hover:bg-purple-100 cursor-pointer"
+                                                                title={`${b.full_name} – ${b.email} (click for details)`}
                                                             >
                                                                 <div className="font-semibold text-purple-900 truncate">{b.full_name}</div>
                                                                 <div className="text-purple-600 truncate">{formatInDallas(b.slot_start_time)}</div>
-                                                            </div>
+                                                            </button>
                                                         ))}
                                                     </div>
                                                 );
@@ -203,7 +215,12 @@ const DemoRequestsPage: React.FC = () => {
                             {[...bookings]
                                 .sort((a, b) => new Date(a.slot_start_time).getTime() - new Date(b.slot_start_time).getTime())
                                 .map((b) => (
-                                    <div key={b.id} className="p-4 hover:bg-gray-50">
+                                    <button
+                                        key={b.id}
+                                        type="button"
+                                        onClick={() => setSelectedBooking(b)}
+                                        className="w-full p-4 hover:bg-gray-50 text-left"
+                                    >
                                         <div className="flex flex-wrap items-start justify-between gap-2">
                                             <div>
                                                 <div className="font-semibold text-gray-900">{b.full_name}</div>
@@ -216,13 +233,70 @@ const DemoRequestsPage: React.FC = () => {
                                             </div>
                                             <div className="text-right text-sm text-gray-600">
                                                 <div className="font-medium text-gray-900">{formatInDallas(b.slot_start_time)}</div>
-                                                <div className="text-xs">20 min</div>
+                                                <div className="text-xs">20 min · Click for details</div>
                                             </div>
                                         </div>
-                                    </div>
+                                    </button>
                                 ))}
                         </div>
                     )}
+                </div>
+            )}
+
+            {selectedBooking && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setSelectedBooking(null)}>
+                    <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-xl font-bold text-gray-900">Demo booking details</h2>
+                            <button type="button" onClick={() => setSelectedBooking(null)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+                        </div>
+                        <dl className="space-y-3 text-sm">
+                            <div>
+                                <dt className="font-medium text-gray-500">Full name</dt>
+                                <dd className="text-gray-900">{selectedBooking.full_name}</dd>
+                            </div>
+                            <div>
+                                <dt className="font-medium text-gray-500">Email</dt>
+                                <dd className="text-gray-900"><a href={`mailto:${selectedBooking.email}`} className="text-purple-600 hover:underline">{selectedBooking.email}</a></dd>
+                            </div>
+                            {selectedBooking.phone && (
+                                <div>
+                                    <dt className="font-medium text-gray-500">Phone</dt>
+                                    <dd className="text-gray-900"><a href={`tel:${selectedBooking.phone}`} className="text-purple-600 hover:underline">{selectedBooking.phone}</a></dd>
+                                </div>
+                            )}
+                            <div>
+                                <dt className="font-medium text-gray-500">Category alignment</dt>
+                                <dd className="text-gray-900">{selectedBooking.category_alignment || '—'}</dd>
+                            </div>
+                            <div>
+                                <dt className="font-medium text-gray-500">Experience</dt>
+                                <dd className="text-gray-900">{selectedBooking.experience_years || '—'}</dd>
+                            </div>
+                            <div>
+                                <dt className="font-medium text-gray-500">Income status</dt>
+                                <dd className="text-gray-900">{selectedBooking.income_status || '—'}</dd>
+                            </div>
+                            <div>
+                                <dt className="font-medium text-gray-500">What they're looking for</dt>
+                                <dd className="text-gray-900">
+                                    {parseLookingFor(selectedBooking.looking_for).length > 0 ? (
+                                        <ul className="list-disc list-inside mt-1">{parseLookingFor(selectedBooking.looking_for).map((item, i) => <li key={i}>{item}</li>)}</ul>
+                                    ) : (
+                                        '—'
+                                    )}
+                                </dd>
+                            </div>
+                            <div>
+                                <dt className="font-medium text-gray-500">Demo time (Dallas, TX)</dt>
+                                <dd className="text-gray-900">{formatInDallas(selectedBooking.slot_start_time)} – 20 min</dd>
+                            </div>
+                            <div>
+                                <dt className="font-medium text-gray-500">Booked on</dt>
+                                <dd className="text-gray-900">{new Date(selectedBooking.created_at).toLocaleString()}</dd>
+                            </div>
+                        </dl>
+                    </div>
                 </div>
             )}
         </div>

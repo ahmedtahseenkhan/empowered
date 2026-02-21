@@ -324,6 +324,44 @@ class EmailService {
             html,
         });
     }
+
+    /**
+     * DEMO BOOKING EMAILS
+     */
+
+    async sendDemoBookingConfirmation(data: {
+        fullName: string;
+        email: string;
+        callDate: string;
+        callTime: string;
+    }): Promise<void> {
+        const html = this.renderTemplate('demo-booking-confirmation', { ...data, year: new Date().getFullYear() });
+        await this.sendEmail({
+            to: data.email,
+            subject: "You're All Set – Demo Call Confirmed | EmpowerEd Learnings",
+            html,
+        });
+    }
+
+    async sendDemoBookingAdminNotification(data: {
+        adminEmail: string;
+        fullName: string;
+        email: string;
+        phone: string;
+        categoryAlignment: string;
+        experienceYears: string;
+        incomeStatus: string;
+        lookingFor: string;
+        callDate: string;
+        callTime: string;
+    }): Promise<void> {
+        const html = this.renderTemplate('demo-booking-admin', data);
+        await this.sendEmail({
+            to: data.adminEmail,
+            subject: `New Demo Booking: ${data.fullName} | EmpowerEd Learnings`,
+            html,
+        });
+    }
 }
 
 export default new EmailService();

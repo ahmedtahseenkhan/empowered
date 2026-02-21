@@ -185,6 +185,45 @@ async function sendOutboxRow(row: OutboxRow) {
         return;
     }
 
+    if (row.type === 'DEMO_BOOKING_CONFIRMATION') {
+        const p = row.payload as { fullName?: string; email?: string; callDate?: string; callTime?: string };
+        await emailService.sendDemoBookingConfirmation({
+            fullName: p.fullName || 'there',
+            email: row.to_email,
+            callDate: p.callDate || '',
+            callTime: p.callTime || '',
+        });
+        return;
+    }
+
+    if (row.type === 'DEMO_BOOKING_ADMIN') {
+        const p = row.payload as {
+            adminEmail?: string;
+            fullName?: string;
+            email?: string;
+            phone?: string;
+            categoryAlignment?: string;
+            experienceYears?: string;
+            incomeStatus?: string;
+            lookingFor?: string;
+            callDate?: string;
+            callTime?: string;
+        };
+        await emailService.sendDemoBookingAdminNotification({
+            adminEmail: p.adminEmail || row.to_email,
+            fullName: p.fullName || '—',
+            email: p.email || '—',
+            phone: p.phone ?? '—',
+            categoryAlignment: p.categoryAlignment ?? '—',
+            experienceYears: p.experienceYears ?? '—',
+            incomeStatus: p.incomeStatus ?? '—',
+            lookingFor: p.lookingFor ?? '—',
+            callDate: p.callDate ?? '—',
+            callTime: p.callTime ?? '—',
+        });
+        return;
+    }
+
     throw new Error(`Unknown outbox type: ${row.type}`);
 }
 

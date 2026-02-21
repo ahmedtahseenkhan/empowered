@@ -2,6 +2,13 @@ import { Request, Response } from 'express';
 import prisma from '../config/db';
 
 const ADMIN_TIMEZONE = 'America/Chicago';
+
+function formatSlotDallas(iso: string): { date: string; time: string } {
+    const d = new Date(iso);
+    const date = d.toLocaleDateString('en-US', { timeZone: ADMIN_TIMEZONE, weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    const time = d.toLocaleTimeString('en-US', { timeZone: ADMIN_TIMEZONE, hour: 'numeric', minute: '2-digit', hour12: true });
+    return { date, time };
+}
 const ADMIN_START_HOUR = 9;
 const ADMIN_END_HOUR = 17;
 const SLOT_DURATION_MINUTES = 20;
@@ -147,6 +154,46 @@ export async function createDemoBooking(req: Request, res: Response) {
                 timezone: ADMIN_TIMEZONE,
             },
         });
+
+        const { date: callDate, time: callTime } = formatSlotDallas(booking.slot_start_time.toISOString());
+        const lookingForDisplay = lookingFor.length > 0 ? lookingFor.join(', ') : '—';
+
+        await prisma.emailOutbox.create({
+            data: {
+                type: 'DEMO_BOOKING_CONFIRMATION',
+                to_email: email,
+                payload: {
+                    fullName: full_name,
+                    email,
+                    callDate,
+                    callTime,
+                },
+                status: 'PENDING',
+            },
+        });
+
+        const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER;
+        if (adminEmail) {
+            await prisma.emailOutbox.create({
+                data: {
+                    type: 'DEMO_BOOKING_ADMIN',
+                    to_email: adminEmail,
+                    payload: {
+                        adminEmail,
+                        fullName: full_name,
+                        email,
+                        phone: (body.phone ?? '').trim() || '—',
+                        categoryAlignment: (body.category_alignment ?? 'All of the above').trim() || '—',
+                        experienceYears: (body.experience_years ?? '').trim() || '—',
+                        incomeStatus: (body.income_status ?? '').trim() || '—',
+                        lookingFor: lookingForDisplay,
+                        callDate,
+                        callTime,
+                    },
+                    status: 'PENDING',
+                },
+            });
+        }
 
         return res.status(201).json({ booking: { id: booking.id, slot_start_time: booking.slot_start_time.toISOString(), slot_end_time: booking.slot_end_time.toISOString() } });
     } catch (e) {
