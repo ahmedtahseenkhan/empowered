@@ -60,15 +60,19 @@ const BookDemoPage: React.FC = () => {
 
     const [slotsLoading, setSlotsLoading] = useState(false);
     const [slots, setSlots] = useState<Array<{ start: string; end: string }>>([]);
+    // Start from "today" in Dallas (admin timezone) so the first day shown is today, not tomorrow
     const [weekStart, setWeekStart] = useState(() => {
-        const d = new Date();
-        d.setHours(0, 0, 0, 0);
-        return d;
+        const now = new Date();
+        const s = now.toLocaleDateString('en-CA', { timeZone: DALLAS_TZ }).split('-');
+        const y = parseInt(s[0], 10);
+        const m = parseInt(s[1], 10) - 1;
+        const d = parseInt(s[2], 10);
+        return new Date(Date.UTC(y, m, d, 0, 0, 0, 0));
     });
 
     const weekEnd = useMemo(() => {
         const d = new Date(weekStart);
-        d.setDate(d.getDate() + 13);
+        d.setUTCDate(d.getUTCDate() + 13);
         return d;
     }, [weekStart]);
 
@@ -270,7 +274,7 @@ const BookDemoPage: React.FC = () => {
                                         type="button"
                                         variant="outline"
                                         size="sm"
-                                        onClick={() => setWeekStart((d) => { const n = new Date(d); n.setDate(n.getDate() - 14); return n; })}
+                                        onClick={() => setWeekStart((d) => { const n = new Date(d); n.setUTCDate(n.getUTCDate() - 14); return n; })}
                                     >
                                         ← Previous weeks
                                     </Button>
@@ -278,7 +282,7 @@ const BookDemoPage: React.FC = () => {
                                         type="button"
                                         variant="outline"
                                         size="sm"
-                                        onClick={() => setWeekStart((d) => { const n = new Date(d); n.setDate(n.getDate() + 14); return n; })}
+                                        onClick={() => setWeekStart((d) => { const n = new Date(d); n.setUTCDate(n.getUTCDate() + 14); return n; })}
                                     >
                                         Next weeks →
                                     </Button>

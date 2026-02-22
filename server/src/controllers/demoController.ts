@@ -58,6 +58,7 @@ export async function getDemoSlots(req: Request, res: Response) {
             return res.status(400).json({ error: 'Invalid from or to date' });
         }
 
+        const now = new Date();
         const slots: { start: string; end: string }[] = [];
         const cursor = new Date(from);
         cursor.setUTCHours(0, 0, 0, 0);
@@ -70,7 +71,8 @@ export async function getDemoSlots(req: Request, res: Response) {
 
             while (slotStart < endOfDay) {
                 const slotEnd = new Date(slotStart.getTime() + SLOT_DURATION_MINUTES * 60 * 1000);
-                if (slotEnd <= endOfDay && slotStart >= from && slotEnd <= new Date(to.getTime() + 24 * 60 * 60 * 1000)) {
+                const isPast = slotEnd.getTime() <= now.getTime();
+                if (slotEnd <= endOfDay && !isPast && slotStart >= from && slotEnd <= new Date(to.getTime() + 24 * 60 * 60 * 1000)) {
                     slots.push({
                         start: slotStart.toISOString(),
                         end: slotEnd.toISOString(),
