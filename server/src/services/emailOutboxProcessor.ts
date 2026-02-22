@@ -36,6 +36,7 @@ const computeNextRetryAt = (attempts: number) => {
 async function sendOutboxRow(row: OutboxRow) {
     if (row.type === 'BOOKING_CONFIRMATION_STUDENT') {
         const bookingId = row.payload?.bookingId as string | undefined;
+        const freeSession = row.payload?.freeSession === true;
         if (!bookingId) throw new Error('Missing bookingId in payload');
 
         const booking = await prisma.booking.findUnique({
@@ -54,22 +55,34 @@ async function sendOutboxRow(row: OutboxRow) {
         const firstLesson = booking.lessons?.[0];
         const start = firstLesson?.start_time;
 
-        await emailService.sendBookingConfirmationRegular({
-            studentName: booking.student?.username || 'Student',
-            studentEmail: row.to_email,
-            mentorName: booking.tutor?.username || row.payload?.tutorName || 'Mentor',
-            firstSessionDate: start ? formatDatePart(start) : '',
-            firstSessionTime: start ? formatTimePart(start) : '',
-            frequency: String(booking.frequency || ''),
-            totalSessions: Array.isArray(booking.lessons) ? booking.lessons.length : 0,
-            meetingLink: firstLesson?.meeting_link || '',
-        });
+        if (freeSession) {
+            await emailService.sendBookingConfirmationTrial({
+                studentName: booking.student?.username || 'Student',
+                studentEmail: row.to_email,
+                mentorName: booking.tutor?.username || row.payload?.tutorName || 'Mentor',
+                sessionDate: start ? formatDatePart(start) : '',
+                sessionTime: start ? formatTimePart(start) : '',
+                meetingLink: firstLesson?.meeting_link || '',
+            });
+        } else {
+            await emailService.sendBookingConfirmationRegular({
+                studentName: booking.student?.username || 'Student',
+                studentEmail: row.to_email,
+                mentorName: booking.tutor?.username || row.payload?.tutorName || 'Mentor',
+                firstSessionDate: start ? formatDatePart(start) : '',
+                firstSessionTime: start ? formatTimePart(start) : '',
+                frequency: String(booking.frequency || ''),
+                totalSessions: Array.isArray(booking.lessons) ? booking.lessons.length : 0,
+                meetingLink: firstLesson?.meeting_link || '',
+            });
+        }
 
         return;
     }
 
     if (row.type === 'BOOKING_CONFIRMATION_TUTOR') {
         const bookingId = row.payload?.bookingId as string | undefined;
+        const freeSession = row.payload?.freeSession === true;
         if (!bookingId) throw new Error('Missing bookingId in payload');
 
         const booking = await prisma.booking.findUnique({
@@ -88,15 +101,26 @@ async function sendOutboxRow(row: OutboxRow) {
         const firstLesson = booking.lessons?.[0];
         const start = firstLesson?.start_time;
 
-        await emailService.sendNewRegularBookingMentor({
-            mentorName: booking.tutor?.username || 'Mentor',
-            mentorEmail: row.to_email,
-            studentName: booking.student?.username || 'Student',
-            firstSessionDate: start ? formatDatePart(start) : '',
-            firstSessionTime: start ? formatTimePart(start) : '',
-            frequency: String(booking.frequency || ''),
-            meetingLink: firstLesson?.meeting_link || '',
-        });
+        if (freeSession) {
+            await emailService.sendNewTrialBookingMentor({
+                mentorName: booking.tutor?.username || 'Mentor',
+                mentorEmail: row.to_email,
+                studentName: booking.student?.username || 'Student',
+                sessionDate: start ? formatDatePart(start) : '',
+                sessionTime: start ? formatTimePart(start) : '',
+                meetingLink: firstLesson?.meeting_link || '',
+            });
+        } else {
+            await emailService.sendNewRegularBookingMentor({
+                mentorName: booking.tutor?.username || 'Mentor',
+                mentorEmail: row.to_email,
+                studentName: booking.student?.username || 'Student',
+                firstSessionDate: start ? formatDatePart(start) : '',
+                firstSessionTime: start ? formatTimePart(start) : '',
+                frequency: String(booking.frequency || ''),
+                meetingLink: firstLesson?.meeting_link || '',
+            });
+        }
 
         return;
     }
@@ -186,12 +210,15 @@ async function sendOutboxRow(row: OutboxRow) {
     }
 
     if (row.type === 'DEMO_BOOKING_CONFIRMATION') {
-        const p = row.payload as { fullName?: string; email?: string; callDate?: string; callTime?: string };
-        await emailService.sendDemoBookingConfirmation({
-            fullName: p.fullName || 'there',
-            email: row.to_email,
+        const p = row.payload as { fullName?: string; email?: string; callDate?: string; callTime?: string; meetingLink?: string; addToCalendarUrl?: string };
+        // Mentor-style demo confirmation with meeting link (per System Generated Emails doc)
+        await emailService.sendDemoCallConfirmation({
+            mentorName: p.fullName || 'there',
+            mentorEmail: row.to_email,
             callDate: p.callDate || '',
             callTime: p.callTime || '',
+            meetingLink: p.meetingLink || '',
+            addToCalendarUrl: p.addToCalendarUrl,
         });
         return;
     }
@@ -208,6 +235,7 @@ async function sendOutboxRow(row: OutboxRow) {
             lookingFor?: string;
             callDate?: string;
             callTime?: string;
+            meetingLink?: string;
         };
         await emailService.sendDemoBookingAdminNotification({
             adminEmail: p.adminEmail || row.to_email,
@@ -220,6 +248,7 @@ async function sendOutboxRow(row: OutboxRow) {
             lookingFor: p.lookingFor ?? '—',
             callDate: p.callDate ?? '—',
             callTime: p.callTime ?? '—',
+            meetingLink: p.meetingLink ?? '',
         });
         return;
     }

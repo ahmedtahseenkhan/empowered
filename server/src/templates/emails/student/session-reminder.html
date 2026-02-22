@@ -26,33 +26,31 @@
                                 Hello <strong>{{studentName}}</strong>,
                             </p>
                             <p style="font-size: 16px; color: #333333; line-height: 1.6; margin: 0 0 20px;">
-                                This is a quick reminder that you have a session today with your mentor
-                                <strong>{{mentorName}}</strong>.
+                                This is a reminder that you have a session with <strong>{{mentorName}}</strong> tomorrow.
                             </p>
 
                             <table width="100%" cellpadding="0" cellspacing="0"
-                                style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 20px; margin: 20px 0;">
+                                style="background-color: #f8f9fa; border-radius: 8px; padding: 20px; margin: 20px 0;">
                                 <tr>
                                     <td>
-                                        <p style="margin: 0 0 10px; font-size: 14px; color: #856404;">📅 <strong>Date &
-                                                Time:</strong> {{sessionDate}} at {{sessionTime}}</p>
-                                        <p style="margin: 0; font-size: 14px; color: #856404;">🔗 <strong>Join
-                                                Here:</strong> <a href="{{meetingLink}}"
-                                                style="color: #667eea; text-decoration: none;">{{meetingLink}}</a></p>
+                                        <p style="margin: 0 0 10px; font-size: 14px; color: #666;">📅 <strong>Date:</strong> {{sessionDate}}</p>
+                                        <p style="margin: 0 0 10px; font-size: 14px; color: #666;">⏰ <strong>Time:</strong> {{sessionTime}}</p>
+                                        <p style="margin: 0; font-size: 14px; color: #666;">🔗 <strong>Join Link:</strong> {{#if meetingLink}}<a href="{{meetingLink}}" style="color: #667eea;">Join Session</a>{{else}}Link will be available in your dashboard.{{/if}}</p>
                                     </td>
                                 </tr>
                             </table>
 
-                            <p style="font-size: 16px; color: #333333; line-height: 1.6; margin: 20px 0;">
-                                Get ready to make the most of your session — your mentor is excited to guide you today!
-                            </p>
+                            <p style="font-size: 14px; color: #333333; line-height: 1.6; margin: 0 0 10px;">Please ensure payment is completed to keep your session confirmed.</p>
+                            <p style="font-size: 14px; color: #333333; line-height: 1.6; margin: 0 0 20px;">If you need to reschedule, please do so now from your dashboard.</p>
+                            <p style="font-size: 14px; color: #ef6c00; line-height: 1.6; margin: 0 0 20px;">⚠️ Sessions cannot be rescheduled once less than 24 hours remain.</p>
 
                             <table width="100%" cellpadding="0" cellspacing="0" style="margin: 30px 0;">
                                 <tr>
                                     <td align="center">
-                                        <a href="{{meetingLink}}"
-                                            style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; text-decoration: none; padding: 15px 40px; border-radius: 6px; font-size: 16px; font-weight: bold;">Join
-                                            Session Now</a>
+                                        {{#if meetingLink}}<a href="{{meetingLink}}"
+                                            style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; text-decoration: none; padding: 15px 40px; border-radius: 6px; font-size: 16px; font-weight: bold; margin: 0 8px;">Join Session</a>{{/if}}
+                                        <a href="{{dashboardUrl}}"
+                                            style="display: inline-block; background: #6b7280; color: #ffffff; text-decoration: none; padding: 15px 40px; border-radius: 6px; font-size: 16px; font-weight: bold; margin: 0 8px;">Go to Dashboard</a>
                                     </td>
                                 </tr>
                             </table>

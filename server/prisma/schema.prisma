@@ -696,6 +696,7 @@ model DemoBooking {
   slot_start_time    DateTime
   slot_end_time      DateTime
   timezone           String   @default("America/Chicago")
+  meeting_link       String?  // Google Meet link for the demo call
   created_at         DateTime @default(now())
 
   @@index([slot_start_time])

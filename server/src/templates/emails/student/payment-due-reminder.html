@@ -59,30 +59,19 @@
 <body>
     <div class="container">
         <div class="header">
-            <h2>💳 Payment Due Tomorrow</h2>
+            <h2>Action Required: Confirm Your Upcoming Session</h2>
         </div>
         <div class="content">
             <h3>Hi {{studentName}},</h3>
-            <p>This is a reminder that your payment for an upcoming session is due tomorrow.</p>
-
-            <div class="highlight">
-                <strong>Payment Details:</strong><br>
-                Tutor: {{tutorName}}<br>
-                Amount: {{amount}}<br>
-                Due Date: {{dueDate}}<br>
-            </div>
-
-            <p>Please ensure your payment is completed before the due date to avoid any disruption to your scheduled
-                sessions.</p>
-
+            <p>Your next session with <strong>{{tutorName}}</strong> is scheduled (payment due by {{dueDate}}).</p>
+            <p>To confirm your upcoming session, please complete payment.</p>
+            <p><strong>⚠️ Sessions are only confirmed once payment is received.</strong></p>
             <div style="text-align: center;">
-                <a href="{{paymentLink}}" class="button">Make Payment</a>
+                <a href="{{paymentLink}}" class="button">Pay Now via Stripe</a>
             </div>
-
-            <p style="margin-top: 30px;">If you've already made this payment, please disregard this reminder.</p>
-
+            <p style="margin-top: 20px;">You can manage or reschedule from your dashboard.</p>
             <br>
-            <p>Best regards,<br>The EmpowerEd Team</p>
+            <p>Team EmpowerEd Learnings</p>
         </div>
         <div class="footer">
             <p>&copy; {{year}} EmpowerEd Learnings. All rights reserved.</p>

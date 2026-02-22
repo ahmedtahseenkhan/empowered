@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import prisma from '../config/db';
+import { createDemoMeetEvent } from '../services/googleCalendar';
 
 const ADMIN_TIMEZONE = 'America/Chicago';
 
@@ -158,6 +159,30 @@ export async function createDemoBooking(req: Request, res: Response) {
         const { date: callDate, time: callTime } = formatSlotDallas(booking.slot_start_time.toISOString());
         const lookingForDisplay = lookingFor.length > 0 ? lookingFor.join(', ') : '—';
 
+        // Create Google Meet link for demo and store on booking (optional; requires GOOGLE_DEMO_REFRESH_TOKEN)
+        let meetingLink = '';
+        try {
+            const meetResult = await createDemoMeetEvent({
+                demoBookingId: booking.id,
+                prospectEmail: email,
+                prospectName: full_name,
+                start: booking.slot_start_time,
+                end: booking.slot_end_time,
+            });
+            if (meetResult?.meetLink) {
+                meetingLink = meetResult.meetLink;
+                await prisma.demoBooking.update({
+                    where: { id: booking.id },
+                    data: { meeting_link: meetResult.meetLink },
+                });
+            }
+        } catch (e) {
+            console.error('Demo Meet creation failed (non-fatal):', e);
+        }
+
+        const formatForGoogleCalendar = (d: Date) => d.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+        const addToCalendarUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=EmpowerEd+Demo&dates=${formatForGoogleCalendar(booking.slot_start_time)}/${formatForGoogleCalendar(booking.slot_end_time)}`;
+
         await prisma.emailOutbox.create({
             data: {
                 type: 'DEMO_BOOKING_CONFIRMATION',
@@ -167,6 +192,8 @@ export async function createDemoBooking(req: Request, res: Response) {
                     email,
                     callDate,
                     callTime,
+                    meetingLink: meetingLink || '',
+                    addToCalendarUrl,
                 },
                 status: 'PENDING',
             },
@@ -189,13 +216,21 @@ export async function createDemoBooking(req: Request, res: Response) {
                         lookingFor: lookingForDisplay,
                         callDate,
                         callTime,
+                        meetingLink: meetingLink || '',
                     },
                     status: 'PENDING',
                 },
             });
         }
 
-        return res.status(201).json({ booking: { id: booking.id, slot_start_time: booking.slot_start_time.toISOString(), slot_end_time: booking.slot_end_time.toISOString() } });
+        return res.status(201).json({
+            booking: {
+                id: booking.id,
+                slot_start_time: booking.slot_start_time.toISOString(),
+                slot_end_time: booking.slot_end_time.toISOString(),
+                meeting_link: meetingLink || undefined,
+            },
+        });
     } catch (e) {
         console.error('createDemoBooking error:', e);
         return res.status(500).json({ error: 'Failed to create demo booking' });

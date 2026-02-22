@@ -63,23 +63,19 @@
         </div>
         <div class="content">
             <h3>Hi {{mentorName}},</h3>
-            <p>This is a friendly reminder that you have a mentoring session scheduled for tomorrow.</p>
+            <p>Reminder of your session tomorrow:</p>
 
             <div class="highlight">
-                <strong>Session Details:</strong><br>
-                Student: {{studentName}}<br>
-                Date: {{sessionDate}}<br>
-                Time: {{sessionTime}}<br>
+                <strong>👤 Student:</strong> {{studentName}}<br>
+                <strong>📅 Date/Time:</strong> {{sessionDate}} at {{sessionTime}}
             </div>
 
-            <p><strong>Meeting Link:</strong></p>
-            <p><a href="{{meetingLink}}" class="button">Join Session</a></p>
+            <p>Please log in a few minutes early to prepare.</p>
 
-            <p style="margin-top: 30px;">Please ensure you're prepared and ready a few minutes before the scheduled
-                time.</p>
+            <p style="margin-top: 20px;"><a href="{{dashboardUrl}}" class="button">Go to Dashboard</a></p>
 
             <br>
-            <p>Best regards,<br>The EmpowerEd Team</p>
+            <p>Team EmpowerEd Learnings</p>
         </div>
         <div class="footer">
             <p>&copy; {{year}} EmpowerEd Learnings. All rights reserved.</p>

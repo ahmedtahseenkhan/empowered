@@ -174,36 +174,32 @@ export const createBooking = async (req: AuthRequest, res: Response) => {
             return { createdBooking, createdLessons };
         });
 
-        // Attempt Calendar event creation *after* DB commit.
-        // If calendar is not connected, we still keep the booking+lesson.
+        // Create Google Meet for each lesson so student, mentor, and (in emails) admin get the link.
         try {
             const studentUser = await prisma.user.findUnique({ where: { id: userId } });
             const tutorUser = await prisma.user.findUnique({ where: { id: tutor.user_id } });
-
             const attendees = [studentUser?.email, tutorUser?.email].filter(Boolean) as string[];
 
-            const firstLesson = booking.createdLessons?.[0];
-            if (!firstLesson) return res.status(201).json({ booking: booking.createdBooking });
-
-            const event = await createMeetEventForLesson({
-                tutorId,
-                lessonId: firstLesson.id,
-                title: `Mentoring Session with ${tutor.username}`,
-                description: 'Scheduled via Empowered Learnings',
-                start: firstLesson.start_time,
-                end: firstLesson.end_time,
-                attendeesEmails: attendees,
-            });
-
-            if (event?.eventId || event?.meetLink || event?.htmlLink) {
-                await prisma.lesson.update({
-                    where: { id: firstLesson.id },
-                    data: {
-                        meeting_link: event.meetLink || undefined,
-                        google_calendar_event_id: event.eventId || undefined,
-                        google_calendar_html_link: event.htmlLink || undefined,
-                    }
+            for (const lesson of booking.createdLessons ?? []) {
+                const event = await createMeetEventForLesson({
+                    tutorId,
+                    lessonId: lesson.id,
+                    title: `Mentoring Session with ${tutor.username}`,
+                    description: 'Scheduled via Empowered Learnings',
+                    start: lesson.start_time,
+                    end: lesson.end_time,
+                    attendeesEmails: attendees,
                 });
+                if (event?.eventId || event?.meetLink || event?.htmlLink) {
+                    await prisma.lesson.update({
+                        where: { id: lesson.id },
+                        data: {
+                            meeting_link: event.meetLink || undefined,
+                            google_calendar_event_id: event.eventId || undefined,
+                            google_calendar_html_link: event.htmlLink || undefined,
+                        },
+                    });
+                }
             }
         } catch (e) {
             console.error('Calendar event creation failed (non-fatal):', e);

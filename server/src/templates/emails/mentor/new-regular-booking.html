@@ -28,43 +28,27 @@
                                 Hi <strong>{{mentorName}}</strong>,
                             </p>
                             <p style="font-size: 16px; color: #333333; line-height: 1.6; margin: 0 0 20px;">
-                                You have a new booking from <strong>{{studentName}}</strong>! This is a recurring
-                                booking.
+                                A student has scheduled a 4-session learning plan with you.
                             </p>
 
-                            <!-- Session Details Box -->
                             <table width="100%" cellpadding="0" cellspacing="0"
                                 style="background-color: #f8f9fa; border-radius: 8px; padding: 20px; margin: 20px 0;">
                                 <tr>
                                     <td>
-                                        <p style="margin: 0 0 10px; font-size: 14px; color: #666;">📅 <strong>First
-                                                Session:</strong> {{firstSessionDate}} at {{firstSessionTime}}</p>
-                                        <p style="margin: 0 0 10px; font-size: 14px; color: #666;">🔁
-                                            <strong>Frequency:</strong> {{frequency}}</p>
-                                        <p style="margin: 0; font-size: 14px; color: #666;">🔗 <strong>Meeting
-                                                Link:</strong> <a href="{{meetingLink}}"
-                                                style="color: #667eea; text-decoration: none;">Join Session</a></p>
+                                        <p style="margin: 0 0 10px; font-size: 14px; color: #666;">📅 <strong>First Session:</strong> {{firstSessionDate}} at {{firstSessionTime}}</p>
+                                        <p style="margin: 0 0 10px; font-size: 14px; color: #666;">🔁 <strong>Frequency:</strong> {{frequency}}</p>
+                                        {{#if meetingLink}}<p style="margin: 0; font-size: 14px; color: #666;">🔗 <strong>Meeting Link:</strong> <a href="{{meetingLink}}" style="color: #667eea;">Join Session</a></p>{{/if}}
                                     </td>
                                 </tr>
                             </table>
 
-                            <p style="font-size: 16px; color: #333333; line-height: 1.6; margin: 20px 0;">
-                                <strong>Next Steps:</strong>
-                            </p>
-                            <ul
-                                style="font-size: 14px; color: #666; line-height: 1.8; margin: 0 0 20px; padding-left: 20px;">
-                                <li>Review the student's profile and learning goals</li>
-                                <li>Prepare for your first session</li>
-                                <li>Ensure you're available at the scheduled time</li>
-                            </ul>
-
-                            <!-- CTA Button -->
+                            <p style="font-size: 14px; color: #666; margin: 0 0 20px;">One session is confirmed. Three additional sessions are automatically reserved on your calendar. You'll receive a payment confirmation before each upcoming session.</p>
+                            <p style="font-size: 14px; color: #666; margin: 0 0 20px;">Please review your schedule in the dashboard.</p>
                             <table width="100%" cellpadding="0" cellspacing="0" style="margin: 30px 0;">
                                 <tr>
                                     <td align="center">
-                                        <a href="{{meetingLink}}"
-                                            style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; text-decoration: none; padding: 15px 40px; border-radius: 6px; font-size: 16px; font-weight: bold;">View
-                                            Booking Details</a>
+                                        <a href="{{dashboardUrl}}"
+                                            style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; text-decoration: none; padding: 15px 40px; border-radius: 6px; font-size: 16px; font-weight: bold;">Go to Mentor Dashboard</a>
                                     </td>
                                 </tr>
                             </table>

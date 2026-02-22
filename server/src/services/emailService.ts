@@ -67,11 +67,16 @@ class EmailService {
         sessionDate: string;
         sessionTime: string;
         meetingLink: string;
+        dashboardUrl?: string;
     }): Promise<void> {
-        const html = this.renderTemplate('student/booking-confirmation-trial', data);
+        const baseUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+        const html = this.renderTemplate('student/booking-confirmation-trial', {
+            ...data,
+            dashboardUrl: data.dashboardUrl || `${baseUrl}/dashboard`,
+        });
         await this.sendEmail({
             to: data.studentEmail,
-            subject: `✅ Your Free Trial with ${data.mentorName} is confirmed!`,
+            subject: `Your Free Trial with ${data.mentorName} is Confirmed`,
             html,
         });
     }
@@ -85,11 +90,16 @@ class EmailService {
         frequency: string;
         totalSessions: number;
         meetingLink: string;
+        dashboardUrl?: string;
     }): Promise<void> {
-        const html = this.renderTemplate('student/booking-confirmation-regular', data);
+        const baseUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+        const html = this.renderTemplate('student/booking-confirmation-regular', {
+            ...data,
+            dashboardUrl: data.dashboardUrl || `${baseUrl}/dashboard`,
+        });
         await this.sendEmail({
             to: data.studentEmail,
-            subject: `✅ Your session with ${data.mentorName} is confirmed!`,
+            subject: 'Booking Confirmed – Check Your Dashboard',
             html,
         });
     }
@@ -101,11 +111,16 @@ class EmailService {
         sessionDate: string;
         sessionTime: string;
         meetingLink: string;
+        dashboardUrl?: string;
     }): Promise<void> {
-        const html = this.renderTemplate('student/session-reminder', data);
+        const baseUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+        const html = this.renderTemplate('student/session-reminder', {
+            ...data,
+            dashboardUrl: data.dashboardUrl || `${baseUrl}/dashboard`,
+        });
         await this.sendEmail({
             to: data.studentEmail,
-            subject: 'Get Ready for Your Session',
+            subject: '24-Hour Reminder – Don’t Miss Your Session',
             html,
         });
     }
@@ -119,7 +134,7 @@ class EmailService {
         const html = this.renderTemplate('student/post-session-feedback', data);
         await this.sendEmail({
             to: data.studentEmail,
-            subject: `⭐ How was your session with ${data.mentorName}?`,
+            subject: 'Rate Your Experience',
             html,
         });
     }
@@ -131,11 +146,13 @@ class EmailService {
         amount: string;
         dueDate: string;
         paymentLink: string;
+        sessionDate?: string;
+        sessionTime?: string;
     }): Promise<void> {
         const html = this.renderTemplate('student/payment-due-reminder', { ...data, year: new Date().getFullYear() });
         await this.sendEmail({
             to: data.studentEmail,
-            subject: '💳 Payment Due Tomorrow - EmpowerEd',
+            subject: 'Action Required: Confirm Your Upcoming Session',
             html,
         });
     }
@@ -151,11 +168,16 @@ class EmailService {
         sessionDate: string;
         sessionTime: string;
         meetingLink: string;
+        dashboardUrl?: string;
     }): Promise<void> {
-        const html = this.renderTemplate('mentor/new-trial-booking', data);
+        const baseUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+        const html = this.renderTemplate('mentor/new-trial-booking', {
+            ...data,
+            dashboardUrl: data.dashboardUrl || `${baseUrl}/tutor/dashboard`,
+        });
         await this.sendEmail({
             to: data.mentorEmail,
-            subject: `New Free Trial Session Scheduled with ${data.studentName}`,
+            subject: 'New Free Trial Booked',
             html,
         });
     }
@@ -168,11 +190,16 @@ class EmailService {
         firstSessionTime: string;
         frequency: string;
         meetingLink: string;
+        dashboardUrl?: string;
     }): Promise<void> {
-        const html = this.renderTemplate('mentor/new-regular-booking', data);
+        const baseUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+        const html = this.renderTemplate('mentor/new-regular-booking', {
+            ...data,
+            dashboardUrl: data.dashboardUrl || `${baseUrl}/tutor/dashboard`,
+        });
         await this.sendEmail({
             to: data.mentorEmail,
-            subject: `New Sessions Scheduled with ${data.studentName}`,
+            subject: 'Recurring Booking Added to Your Calendar',
             html,
         });
     }
@@ -184,11 +211,17 @@ class EmailService {
         sessionDate: string;
         sessionTime: string;
         meetingLink: string;
+        dashboardUrl?: string;
     }): Promise<void> {
-        const html = this.renderTemplate('mentor/session-reminder', data);
+        const baseUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+        const html = this.renderTemplate('mentor/session-reminder', {
+            ...data,
+            dashboardUrl: data.dashboardUrl || `${baseUrl}/tutor/dashboard`,
+            year: new Date().getFullYear(),
+        });
         await this.sendEmail({
             to: data.mentorEmail,
-            subject: 'Upcoming Session Today',
+            subject: `Reminder: Session Tomorrow with ${data.studentName}`,
             html,
         });
     }
@@ -199,11 +232,16 @@ class EmailService {
         studentName: string;
         rating: number;
         review: string;
+        reviewLink?: string;
     }): Promise<void> {
-        const html = this.renderTemplate('mentor/review-received', data);
+        const baseUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+        const html = this.renderTemplate('mentor/review-received', {
+            ...data,
+            reviewLink: data.reviewLink || `${baseUrl}/tutor/dashboard`,
+        });
         await this.sendEmail({
             to: data.mentorEmail,
-            subject: `You've received a new review from ${data.studentName}`,
+            subject: 'You Received a New Review',
             html,
         });
     }
@@ -214,11 +252,15 @@ class EmailService {
         callDate: string;
         callTime: string;
         meetingLink: string;
+        addToCalendarUrl?: string;
     }): Promise<void> {
-        const html = this.renderTemplate('mentor/demo-call-confirmation', data);
+        const html = this.renderTemplate('mentor/demo-call-confirmation', {
+            ...data,
+            addToCalendarUrl: data.addToCalendarUrl || data.meetingLink,
+        });
         await this.sendEmail({
             to: data.mentorEmail,
-            subject: "🎉 You're booked! Your EmpowerEd demo call is confirmed",
+            subject: 'Your EmpowerEd Demo Is Scheduled',
             html,
         });
     }
@@ -231,7 +273,7 @@ class EmailService {
         const html = this.renderTemplate('mentor/demo-call-missed', data);
         await this.sendEmail({
             to: data.mentorEmail,
-            subject: '❌ We missed you! Want to reschedule your demo?',
+            subject: 'We Missed You',
             html,
         });
     }
@@ -244,7 +286,80 @@ class EmailService {
         const html = this.renderTemplate('mentor/post-demo-encouragement', data);
         await this.sendEmail({
             to: data.mentorEmail,
-            subject: '🚀 Ready to launch your EmpowerEd journey?',
+            subject: 'Start Your Free Trial',
+            html,
+        });
+    }
+
+    async sendMentorFreeTrialActivated(data: {
+        mentorName: string;
+        mentorEmail: string;
+        dashboardUrl: string;
+    }): Promise<void> {
+        const html = this.renderTemplate('mentor/free-trial-activated', data);
+        await this.sendEmail({
+            to: data.mentorEmail,
+            subject: 'Free Trial Started – Complete Your Setup',
+            html,
+        });
+    }
+
+    async sendMentorSubscriptionCanceled(data: {
+        mentorName: string;
+        mentorEmail: string;
+        downgradeUrl: string;
+        reactivateUrl: string;
+    }): Promise<void> {
+        const html = this.renderTemplate('mentor/subscription-canceled', data);
+        await this.sendEmail({
+            to: data.mentorEmail,
+            subject: 'Your Subscription Has Been Canceled',
+            html,
+        });
+    }
+
+    async sendMentorPaymentReceived(data: {
+        mentorName: string;
+        mentorEmail: string;
+        studentName: string;
+        sessionDate: string;
+        sessionTime: string;
+    }): Promise<void> {
+        const html = this.renderTemplate('mentor/student-payment-received', data);
+        await this.sendEmail({
+            to: data.mentorEmail,
+            subject: 'Payment Confirmed for Upcoming Session',
+            html,
+        });
+    }
+
+    async sendMentorPaymentFailed(data: {
+        mentorName: string;
+        mentorEmail: string;
+        studentName: string;
+        sessionDate: string;
+        sessionTime: string;
+    }): Promise<void> {
+        const html = this.renderTemplate('mentor/student-payment-failed', data);
+        await this.sendEmail({
+            to: data.mentorEmail,
+            subject: 'Payment Failed – Session Not Confirmed Yet',
+            html,
+        });
+    }
+
+    async sendStudentPaymentFailed(data: {
+        studentName: string;
+        studentEmail: string;
+        mentorName: string;
+        sessionDate: string;
+        sessionTime: string;
+        updatePaymentUrl: string;
+    }): Promise<void> {
+        const html = this.renderTemplate('student/payment-failed', data);
+        await this.sendEmail({
+            to: data.studentEmail,
+            subject: 'Payment Attempt Failed – Action Required',
             html,
         });
     }
@@ -354,11 +469,17 @@ class EmailService {
         lookingFor: string;
         callDate: string;
         callTime: string;
+        meetingLink?: string;
     }): Promise<void> {
-        const html = this.renderTemplate('demo-booking-admin', data);
+        const baseUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+        const html = this.renderTemplate('demo-booking-admin', {
+            ...data,
+            adminDashboardUrl: `${baseUrl}/admin`,
+            meetingLink: data.meetingLink || '',
+        });
         await this.sendEmail({
             to: data.adminEmail,
-            subject: `New Demo Booking: ${data.fullName} | EmpowerEd Learnings`,
+            subject: 'New Demo Call Booked',
             html,
         });
     }
