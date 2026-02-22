@@ -171,31 +171,55 @@ export const createDemoMeetEvent = async (args: {
     const calendarId = process.env.GOOGLE_DEMO_CALENDAR_ID || 'primary';
 
     const requestId = `demo-${args.start.getTime()}-${args.prospectEmail}`;
-    const resp = await calendar.events.insert({
-        calendarId,
-        conferenceDataVersion: 1,
-        requestBody: {
-            summary: `EmpowerEd Demo – ${args.prospectName}`,
-            description: `Demo call with ${args.prospectName} (${args.prospectEmail})`,
-            start: { dateTime: args.start.toISOString() },
-            end: { dateTime: args.end.toISOString() },
-            attendees: [{ email: args.prospectEmail }],
-            conferenceData: {
-                createRequest: {
-                    requestId,
-                    conferenceSolutionKey: { type: 'hangoutsMeet' },
+    try {
+        const resp = await calendar.events.insert({
+            calendarId,
+            conferenceDataVersion: 1,
+            requestBody: {
+                summary: `EmpowerEd Demo – ${args.prospectName}`,
+                description: `Demo call with ${args.prospectName} (${args.prospectEmail})`,
+                start: { dateTime: args.start.toISOString() },
+                end: { dateTime: args.end.toISOString() },
+                attendees: [{ email: args.prospectEmail }],
+                conferenceData: {
+                    createRequest: {
+                        requestId,
+                        conferenceSolutionKey: { type: 'hangoutsMeet' },
+                    },
                 },
             },
-        },
-    });
+        });
 
-    const meetLink = resp.data.hangoutLink;
-    if (!meetLink) {
-        throw new Error('Google Calendar did not return a Meet link for the demo event.');
+        const meetLink = resp.data.hangoutLink;
+        if (!meetLink) {
+            throw new Error('Google Calendar did not return a Meet link for the demo event.');
+        }
+
+        return {
+            meetLink,
+            htmlLink: resp.data.htmlLink || null,
+        };
+    } catch (e: unknown) {
+        const err = e as { response?: { data?: { error?: string }; status?: number }; message?: string };
+        const code = err.response?.data?.error;
+        const status = err.response?.status;
+
+        if (status === 400 && code === 'invalid_grant') {
+            const msg =
+                'GOOGLE_DEMO_REFRESH_TOKEN is invalid or expired. ' +
+                'Generate a new refresh token using the same GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET (see server/docs/DEMO_GOOGLE_SETUP.md).';
+            console.error('[GoogleCalendar]', msg);
+            throw new Error(msg);
+        }
+
+        if (status === 401 || code === 'invalid_grant') {
+            const msg =
+                'Google demo calendar auth failed (invalid_grant or 401). ' +
+                'Check that GOOGLE_DEMO_REFRESH_TOKEN was obtained with this app’s GOOGLE_CLIENT_ID/SECRET and re-generate if needed.';
+            console.error('[GoogleCalendar]', msg);
+            throw new Error(msg);
+        }
+
+        throw e;
     }
-
-    return {
-        meetLink,
-        htmlLink: resp.data.htmlLink || null,
-    };
 };
