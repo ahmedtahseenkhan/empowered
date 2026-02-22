@@ -19,12 +19,17 @@ Save. You do **not** need admin.emplearnings.com for OAuth.
 
 ## 2. Server `.env`
 
+Add this so the redirect URI sent to Google **exactly** matches Google Console (fixes “redirect_uri_mismatch”):
+
 ```env
 GOOGLE_CLIENT_ID="your-client-id"
 GOOGLE_CLIENT_SECRET="your-client-secret"
 GOOGLE_REDIRECT_URI="https://emplearnings.com/api/google-calendar/callback"
+GOOGLE_DEMO_REDIRECT_URI="https://emplearnings.com/api/demo/oauth-callback"
 GOOGLE_DEMO_REFRESH_TOKEN="paste-after-step-3"
 ```
+
+`GOOGLE_DEMO_REDIRECT_URI` must be **exactly** the same as the demo callback URL you added in Google Console (same scheme, host, path, no trailing slash).
 
 ---
 
@@ -56,6 +61,7 @@ GOOGLE_DEMO_REFRESH_TOKEN="paste-after-step-3"
 | Google Console – redirect URI (tutor calendar) | `https://emplearnings.com/api/google-calendar/callback` |
 | Google Console – redirect URI (demo token) | `https://emplearnings.com/api/demo/oauth-callback` |
 | `.env` – `GOOGLE_REDIRECT_URI` | `https://emplearnings.com/api/google-calendar/callback` |
+| `.env` – `GOOGLE_DEMO_REDIRECT_URI` | `https://emplearnings.com/api/demo/oauth-callback` (must match Google Console exactly) |
 | Browser – get demo token | `https://emplearnings.com/api/demo/oauth-start` |
 
-One domain for API and OAuth: **emplearnings.com**.
+One domain for API and OAuth: **emplearnings.com**. If you get **redirect_uri_mismatch**, set `GOOGLE_DEMO_REDIRECT_URI` in `.env` to the exact URL you added in Google Console and restart the server.

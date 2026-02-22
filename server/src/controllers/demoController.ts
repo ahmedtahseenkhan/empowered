@@ -233,8 +233,10 @@ export async function createDemoBooking(req: Request, res: Response) {
     }
 }
 
-/** Build redirect URI for demo OAuth (respects proxy headers). */
+/** Build redirect URI for demo OAuth. Use env for exact match with Google Console (avoids redirect_uri_mismatch). */
 function getDemoOAuthRedirectUri(req: Request): string {
+    const fromEnv = process.env.GOOGLE_DEMO_REDIRECT_URI?.trim();
+    if (fromEnv) return fromEnv;
     const proto = req.get('x-forwarded-proto') || req.protocol || 'https';
     const host = req.get('x-forwarded-host') || req.get('host') || '';
     return `${proto}://${host}/api/demo/oauth-callback`;
