@@ -172,6 +172,8 @@ export const createDemoMeetEvent = async (args: {
 
     const requestId = `demo-${args.start.getTime()}-${args.prospectEmail}`;
     try {
+        // Do not add prospect as attendee — we send one confirmation email ourselves.
+        // Adding them would trigger a separate Google Calendar invite ("unknown sender").
         const resp = await calendar.events.insert({
             calendarId,
             conferenceDataVersion: 1,
@@ -180,7 +182,6 @@ export const createDemoMeetEvent = async (args: {
                 description: `Demo call with ${args.prospectName} (${args.prospectEmail})`,
                 start: { dateTime: args.start.toISOString() },
                 end: { dateTime: args.end.toISOString() },
-                attendees: [{ email: args.prospectEmail }],
                 conferenceData: {
                     createRequest: {
                         requestId,
