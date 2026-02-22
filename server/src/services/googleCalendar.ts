@@ -144,27 +144,25 @@ export const createMeetEventForLesson = async (args: {
 
 /**
  * Create a Google Meet link for a demo call (EmpowerEd team with prospect).
- * Uses optional env: GOOGLE_DEMO_REFRESH_TOKEN, GOOGLE_DEMO_CALENDAR_ID (default 'primary').
+ * Required env: GOOGLE_DEMO_REFRESH_TOKEN; optional: GOOGLE_DEMO_CALENDAR_ID (default 'primary').
  * Same GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET are used.
+ * Call this before creating the DemoBooking so the meeting link is always present.
  */
 export const createDemoMeetEvent = async (args: {
-    demoBookingId: string;
     prospectEmail: string;
     prospectName: string;
     start: Date;
     end: Date;
-}): Promise<{ meetLink: string | null; htmlLink: string | null } | null> => {
+}): Promise<{ meetLink: string; htmlLink: string | null }> => {
     const refreshToken = process.env.GOOGLE_DEMO_REFRESH_TOKEN;
     if (!refreshToken) {
-        console.warn('[GoogleCalendar] GOOGLE_DEMO_REFRESH_TOKEN not set; skipping demo Meet creation.');
-        return null;
+        throw new Error('GOOGLE_DEMO_REFRESH_TOKEN is required for demo bookings. Set it in .env to enable demo scheduling.');
     }
 
     const clientId = process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
     if (!clientId || !clientSecret) {
-        console.warn('[GoogleCalendar] GOOGLE_CLIENT_ID/SECRET not set; skipping demo Meet creation.');
-        return null;
+        throw new Error('GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are required for demo Meet creation.');
     }
 
     const oauth2Client = new google.auth.OAuth2(clientId, clientSecret, process.env.GOOGLE_REDIRECT_URI);
@@ -172,32 +170,32 @@ export const createDemoMeetEvent = async (args: {
     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
     const calendarId = process.env.GOOGLE_DEMO_CALENDAR_ID || 'primary';
 
-    const requestId = `demo-${args.demoBookingId}`;
-    try {
-        const resp = await calendar.events.insert({
-            calendarId,
-            conferenceDataVersion: 1,
-            requestBody: {
-                summary: `EmpowerEd Demo – ${args.prospectName}`,
-                description: `Demo call with ${args.prospectName} (${args.prospectEmail})`,
-                start: { dateTime: args.start.toISOString() },
-                end: { dateTime: args.end.toISOString() },
-                attendees: [{ email: args.prospectEmail }],
-                conferenceData: {
-                    createRequest: {
-                        requestId,
-                        conferenceSolutionKey: { type: 'hangoutsMeet' },
-                    },
+    const requestId = `demo-${args.start.getTime()}-${args.prospectEmail}`;
+    const resp = await calendar.events.insert({
+        calendarId,
+        conferenceDataVersion: 1,
+        requestBody: {
+            summary: `EmpowerEd Demo – ${args.prospectName}`,
+            description: `Demo call with ${args.prospectName} (${args.prospectEmail})`,
+            start: { dateTime: args.start.toISOString() },
+            end: { dateTime: args.end.toISOString() },
+            attendees: [{ email: args.prospectEmail }],
+            conferenceData: {
+                createRequest: {
+                    requestId,
+                    conferenceSolutionKey: { type: 'hangoutsMeet' },
                 },
             },
-        });
+        },
+    });
 
-        return {
-            meetLink: resp.data.hangoutLink || null,
-            htmlLink: resp.data.htmlLink || null,
-        };
-    } catch (e) {
-        console.error('[GoogleCalendar] Demo Meet creation failed:', e);
-        return null;
+    const meetLink = resp.data.hangoutLink;
+    if (!meetLink) {
+        throw new Error('Google Calendar did not return a Meet link for the demo event.');
     }
+
+    return {
+        meetLink,
+        htmlLink: resp.data.htmlLink || null,
+    };
 };

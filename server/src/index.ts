@@ -6,6 +6,22 @@ import path from 'path';
 // Load env vars
 dotenv.config();
 
+// Fail fast if demo booking (Google Meet) is not configured
+function assertDemoMeetEnv(): void {
+    const token = process.env.GOOGLE_DEMO_REFRESH_TOKEN;
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    if (!token) {
+        console.error('[Startup] GOOGLE_DEMO_REFRESH_TOKEN is required for demo bookings. Add it to .env and restart.');
+        process.exit(1);
+    }
+    if (!clientId || !clientSecret) {
+        console.error('[Startup] GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are required for demo Meet creation. Add them to .env and restart.');
+        process.exit(1);
+    }
+}
+assertDemoMeetEnv();
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 

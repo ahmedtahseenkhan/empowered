@@ -141,6 +141,22 @@ export async function createDemoBooking(req: Request, res: Response) {
         const lookingFor = Array.isArray(body.looking_for) ? body.looking_for : [];
         const looking_for_str = lookingFor.length ? JSON.stringify(lookingFor) : '[]';
 
+        // Create Google Meet link first so every demo booking always has a meeting link
+        let meetResult: { meetLink: string; htmlLink: string | null };
+        try {
+            meetResult = await createDemoMeetEvent({
+                prospectEmail: email,
+                prospectName: full_name,
+                start,
+                end,
+            });
+        } catch (e) {
+            console.error('Demo Meet creation failed:', e);
+            return res.status(503).json({
+                error: 'Demo scheduling is temporarily unavailable. Please try again later or contact support.',
+            });
+        }
+
         const booking = await prisma.demoBooking.create({
             data: {
                 full_name,
@@ -153,32 +169,12 @@ export async function createDemoBooking(req: Request, res: Response) {
                 slot_start_time: start,
                 slot_end_time: end,
                 timezone: ADMIN_TIMEZONE,
+                meeting_link: meetResult.meetLink,
             },
         });
 
         const { date: callDate, time: callTime } = formatSlotDallas(booking.slot_start_time.toISOString());
         const lookingForDisplay = lookingFor.length > 0 ? lookingFor.join(', ') : '—';
-
-        // Create Google Meet link for demo and store on booking (optional; requires GOOGLE_DEMO_REFRESH_TOKEN)
-        let meetingLink = '';
-        try {
-            const meetResult = await createDemoMeetEvent({
-                demoBookingId: booking.id,
-                prospectEmail: email,
-                prospectName: full_name,
-                start: booking.slot_start_time,
-                end: booking.slot_end_time,
-            });
-            if (meetResult?.meetLink) {
-                meetingLink = meetResult.meetLink;
-                await prisma.demoBooking.update({
-                    where: { id: booking.id },
-                    data: { meeting_link: meetResult.meetLink },
-                });
-            }
-        } catch (e) {
-            console.error('Demo Meet creation failed (non-fatal):', e);
-        }
 
         const formatForGoogleCalendar = (d: Date) => d.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
         const addToCalendarUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=EmpowerEd+Demo&dates=${formatForGoogleCalendar(booking.slot_start_time)}/${formatForGoogleCalendar(booking.slot_end_time)}`;
@@ -192,7 +188,7 @@ export async function createDemoBooking(req: Request, res: Response) {
                     email,
                     callDate,
                     callTime,
-                    meetingLink: meetingLink || '',
+                    meetingLink: meetResult.meetLink,
                     addToCalendarUrl,
                 },
                 status: 'PENDING',
@@ -216,7 +212,7 @@ export async function createDemoBooking(req: Request, res: Response) {
                         lookingFor: lookingForDisplay,
                         callDate,
                         callTime,
-                        meetingLink: meetingLink || '',
+                        meetingLink: meetResult.meetLink,
                     },
                     status: 'PENDING',
                 },
@@ -228,7 +224,7 @@ export async function createDemoBooking(req: Request, res: Response) {
                 id: booking.id,
                 slot_start_time: booking.slot_start_time.toISOString(),
                 slot_end_time: booking.slot_end_time.toISOString(),
-                meeting_link: meetingLink || undefined,
+                meeting_link: booking.meeting_link,
             },
         });
     } catch (e) {
