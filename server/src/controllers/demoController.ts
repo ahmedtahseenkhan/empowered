@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import prisma from '../config/db';
-import { createDemoMeetEvent } from '../services/googleCalendar';
+import { createDemoMeetEvent, getDemoOAuthAuthUrl, exchangeDemoOAuthCode } from '../services/googleCalendar';
 
 const ADMIN_TIMEZONE = 'America/Chicago';
 
@@ -230,5 +230,73 @@ export async function createDemoBooking(req: Request, res: Response) {
     } catch (e) {
         console.error('createDemoBooking error:', e);
         return res.status(500).json({ error: 'Failed to create demo booking' });
+    }
+}
+
+/** Build redirect URI for demo OAuth (respects proxy headers). */
+function getDemoOAuthRedirectUri(req: Request): string {
+    const proto = req.get('x-forwarded-proto') || req.protocol || 'https';
+    const host = req.get('x-forwarded-host') || req.get('host') || '';
+    return `${proto}://${host}/api/demo/oauth-callback`;
+}
+
+/**
+ * GET /api/demo/oauth-start
+ * Redirects to Google OAuth to obtain a new demo refresh token.
+ * Add the redirect URI (e.g. https://admin.emplearnings.com/api/demo/oauth-callback) to Google Console.
+ */
+export async function demoOAuthStart(req: Request, res: Response) {
+    try {
+        const redirectUri = getDemoOAuthRedirectUri(req);
+        const authUrl = getDemoOAuthAuthUrl(redirectUri);
+        res.redirect(authUrl);
+    } catch (e) {
+        console.error('Demo OAuth start error:', e);
+        res.status(500).send(
+            'Could not start OAuth. Ensure GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set in .env.'
+        );
+    }
+}
+
+/**
+ * GET /api/demo/oauth-callback
+ * Google redirects here after user authorizes. Exchanges code for tokens and shows the refresh token.
+ */
+export async function demoOAuthCallback(req: Request, res: Response) {
+    const code = req.query.code as string;
+    const error = req.query.error as string;
+    if (error) {
+        res.status(400).send(
+            `<p>Google returned an error: ${error}</p><p><a href="/api/demo/oauth-start">Try again</a></p>`
+        );
+        return;
+    }
+    if (!code) {
+        res.status(400).send(
+            '<p>Missing authorization code.</p><p><a href="/api/demo/oauth-start">Start over</a></p>'
+        );
+        return;
+    }
+    try {
+        const redirectUri = getDemoOAuthRedirectUri(req);
+        const { refresh_token } = await exchangeDemoOAuthCode(code, redirectUri);
+        const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Demo refresh token</title></head>
+<body style="font-family: sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem;">
+  <h2>Demo refresh token</h2>
+  <p>Add this to your server <code>.env</code> as <code>GOOGLE_DEMO_REFRESH_TOKEN</code>, then restart the server.</p>
+  <textarea readonly style="width:100%; height:120px; font-family:monospace; font-size:12px;">${refresh_token}</textarea>
+  <p><strong>Keep this token private.</strong> Do not commit it to git.</p>
+  <p><a href="/api/demo/oauth-start">Get a new token</a></p>
+</body>
+</html>`;
+        res.send(html);
+    } catch (e) {
+        console.error('Demo OAuth callback error:', e);
+        res.status(500).send(
+            `<p>Failed to exchange code: ${(e as Error).message}</p><p><a href="/api/demo/oauth-start">Try again</a></p>`
+        );
     }
 }

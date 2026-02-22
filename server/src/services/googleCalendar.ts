@@ -223,3 +223,47 @@ export const createDemoMeetEvent = async (args: {
         throw e;
     }
 };
+
+const DEMO_OAUTH_SCOPES = [
+    'https://www.googleapis.com/auth/calendar.events',
+    'https://www.googleapis.com/auth/calendar',
+];
+
+/**
+ * Build the Google OAuth URL for obtaining a demo refresh token.
+ * Use redirectUri = your server's demo callback URL (e.g. https://admin.emplearnings.com/api/demo/oauth-callback).
+ */
+export function getDemoOAuthAuthUrl(redirectUri: string): string {
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    if (!clientId || !clientSecret) {
+        throw new Error('GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are required.');
+    }
+    const oauth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUri);
+    return oauth2Client.generateAuthUrl({
+        access_type: 'offline',
+        prompt: 'consent',
+        scope: DEMO_OAUTH_SCOPES,
+    });
+}
+
+/**
+ * Exchange the authorization code for tokens and return the refresh token.
+ * redirectUri must match the one used in getDemoOAuthAuthUrl.
+ */
+export async function exchangeDemoOAuthCode(
+    code: string,
+    redirectUri: string
+): Promise<{ refresh_token: string }> {
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    if (!clientId || !clientSecret) {
+        throw new Error('GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are required.');
+    }
+    const oauth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUri);
+    const { tokens } = await oauth2Client.getToken(code);
+    if (!tokens.refresh_token) {
+        throw new Error('Google did not return a refresh token. Try again with prompt=consent (use the oauth-start URL).');
+    }
+    return { refresh_token: tokens.refresh_token };
+}

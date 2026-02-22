@@ -1,42 +1,61 @@
-# Demo booking: Google Meet setup (fix `invalid_grant`)
+# Google OAuth – one simple config (live)
 
-When demo Meet creation fails with **`invalid_grant`**, Google is rejecting your **refresh token**. The token must be valid and **obtained with the same OAuth client** (same `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`) that the server uses.
+Your API is at **https://emplearnings.com/api** (Apache proxies `/api` to the Node server on the main domain). Admin and client both call `/api`, which goes to that same backend. So use **emplearnings.com** for all Google OAuth URLs.
 
-## Why you get `invalid_grant`
+---
 
-- The refresh token was created with a **different** Client ID/Secret (e.g. from another project or env).
-- The token **expired** (e.g. app in Testing mode → tokens can expire after 7 days).
-- The token was **revoked** (user revoked access or re-authorized with different scopes).
-- **Copy/paste** issues (extra spaces, line breaks, or encoding in `.env`).
+## 1. Google Cloud Console (Credentials → your OAuth client)
 
-## Fix: get a new refresh token (same OAuth client)
+Add these **two** Authorized redirect URIs (no trailing slash):
 
-Use the **same** Google Cloud OAuth client as your app (`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`).
+| Redirect URI |
+|--------------|
+| `https://emplearnings.com/api/google-calendar/callback` |
+| `https://emplearnings.com/api/demo/oauth-callback` |
 
-### Option A: One-time script (recommended)
+Save. You do **not** need admin.emplearnings.com for OAuth.
 
-1. From `server/`, run: `node scripts/get-demo-refresh-token.js`  
-   (Uses your existing `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and optionally `GOOGLE_REDIRECT_URI` from `.env`.)
-2. In Google Cloud Console, ensure the OAuth client has **Authorized redirect URI** `http://localhost:3000/oauth2callback` (or set `GOOGLE_REDIRECT_URI` in `.env` to a URI that is authorized).
-3. Open the printed URL in a browser and sign in with the **Google account that should own demo calendar events** (e.g. your team/admin account).
-4. After redirect, the page will show the **refresh_token**. Copy it into `.env` as `GOOGLE_DEMO_REFRESH_TOKEN` (no quotes, no spaces).
-5. Restart the server.
+---
 
-### Option B: Use your existing app’s OAuth flow
+## 2. Server `.env`
 
-If your app already has a “Connect Google Calendar” flow that uses the **same** Client ID/Secret and redirect URI:
+```env
+GOOGLE_CLIENT_ID="your-client-id"
+GOOGLE_CLIENT_SECRET="your-client-secret"
+GOOGLE_REDIRECT_URI="https://emplearnings.com/api/google-calendar/callback"
+GOOGLE_DEMO_REFRESH_TOKEN="paste-after-step-3"
+```
 
-1. Log in as the user that should own demo meetings (e.g. admin/team account).
-2. Complete “Connect Google Calendar” so the app receives tokens.
-3. From your database or logs, copy the **refresh_token** for that user and set it as `GOOGLE_DEMO_REFRESH_TOKEN` in `.env`.
+---
 
-Again: the token **must** come from the same OAuth client (same Client ID/Secret) the server uses for demo Meet creation.
+## 3. Get a new demo refresh token (when you see `invalid_grant`)
 
-## Checklist
+1. In the browser open: **https://emplearnings.com/api/demo/oauth-start**  
+   (Must be **emplearnings.com** – that’s where `/api` is proxied. Do not use admin.emplearnings.com for this.)
 
-- [ ] `GOOGLE_DEMO_REFRESH_TOKEN` was obtained with the **same** `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` that are in the server `.env`.
-- [ ] No extra spaces or line breaks in the token in `.env`.
-- [ ] If the OAuth app is in **Testing** mode, the refresh token can expire; re-run the flow to get a new one, or publish the app so tokens last longer.
-- [ ] Server clock is in sync (e.g. NTP); large time skew can also cause `invalid_grant`.
+2. Sign in with the Google account that should own demo meetings.
 
-After updating `.env`, restart the server and try booking a demo again.
+3. On the next page, copy the **refresh token** and put it in `.env` as `GOOGLE_DEMO_REFRESH_TOKEN`.
+
+4. Restart the server: `pm2 restart all` (or your usual restart).
+
+---
+
+## If you see “Cannot GET /api/demo/oauth-start”
+
+- You’re probably opening **admin.emplearnings.com**/api/demo/oauth-start. In your Apache config, only **emplearnings.com** has `ProxyPass /api`. So use:
+  - **https://emplearnings.com/api/demo/oauth-start**
+- Ensure the latest server code is deployed and the Node process has been restarted after adding the demo OAuth routes.
+
+---
+
+## Summary
+
+| What | URL / value |
+|------|-------------|
+| Google Console – redirect URI (tutor calendar) | `https://emplearnings.com/api/google-calendar/callback` |
+| Google Console – redirect URI (demo token) | `https://emplearnings.com/api/demo/oauth-callback` |
+| `.env` – `GOOGLE_REDIRECT_URI` | `https://emplearnings.com/api/google-calendar/callback` |
+| Browser – get demo token | `https://emplearnings.com/api/demo/oauth-start` |
+
+One domain for API and OAuth: **emplearnings.com**.
