@@ -135,42 +135,6 @@ export const createBooking = async (req: AuthRequest, res: Response) => {
                 await tx.paymentSchedule.createMany({ data: paymentRows });
             }
 
-            // Minimal notification outbox entries (provider wiring can be done later).
-            const user = await tx.user.findUnique({ where: { id: userId } });
-            const tutorUser = await tx.user.findUnique({ where: { id: tutor.user_id } });
-
-            if (user?.email) {
-                await tx.emailOutbox.create({
-                    data: {
-                        type: 'BOOKING_CONFIRMATION_STUDENT',
-                        to_email: user.email,
-                        payload: {
-                            bookingId: createdBooking.id,
-                            tutorName: tutor.username,
-                            start: firstLesson?.start_time ? firstLesson.start_time.toISOString() : null,
-                            end: firstLesson?.end_time ? firstLesson.end_time.toISOString() : null,
-                        },
-                        idempotency_key: `booking:${createdBooking.id}:student`,
-                    }
-                });
-            }
-
-            if (tutorUser?.email) {
-                await tx.emailOutbox.create({
-                    data: {
-                        type: 'BOOKING_CONFIRMATION_TUTOR',
-                        to_email: tutorUser.email,
-                        payload: {
-                            bookingId: createdBooking.id,
-                            studentId: student.id,
-                            start: firstLesson?.start_time ? firstLesson.start_time.toISOString() : null,
-                            end: firstLesson?.end_time ? firstLesson.end_time.toISOString() : null,
-                        },
-                        idempotency_key: `booking:${createdBooking.id}:tutor`,
-                    }
-                });
-            }
-
             return { createdBooking, createdLessons };
         });
 
@@ -203,6 +167,41 @@ export const createBooking = async (req: AuthRequest, res: Response) => {
             }
         } catch (e) {
             console.error('Calendar event creation failed (non-fatal):', e);
+        }
+
+        // Queue confirmation emails after Meet links are set so both sides get the link
+        const firstLesson = booking.createdLessons?.[0];
+        const studentUser = await prisma.user.findUnique({ where: { id: userId } });
+        const tutorUser = await prisma.user.findUnique({ where: { id: tutor.user_id } });
+        if (studentUser?.email) {
+            await prisma.emailOutbox.create({
+                data: {
+                    type: 'BOOKING_CONFIRMATION_STUDENT',
+                    to_email: studentUser.email,
+                    payload: {
+                        bookingId: booking.createdBooking.id,
+                        tutorName: tutor.username,
+                        start: firstLesson?.start_time ? firstLesson.start_time.toISOString() : null,
+                        end: firstLesson?.end_time ? firstLesson.end_time.toISOString() : null,
+                    },
+                    idempotency_key: `booking:${booking.createdBooking.id}:student`,
+                },
+            });
+        }
+        if (tutorUser?.email) {
+            await prisma.emailOutbox.create({
+                data: {
+                    type: 'BOOKING_CONFIRMATION_TUTOR',
+                    to_email: tutorUser.email,
+                    payload: {
+                        bookingId: booking.createdBooking.id,
+                        studentId: student.id,
+                        start: firstLesson?.start_time ? firstLesson.start_time.toISOString() : null,
+                        end: firstLesson?.end_time ? firstLesson.end_time.toISOString() : null,
+                    },
+                    idempotency_key: `booking:${booking.createdBooking.id}:tutor`,
+                },
+            });
         }
 
         return res.status(201).json({ booking: booking.createdBooking });
@@ -268,42 +267,6 @@ export const createFreeSessionBooking = async (req: AuthRequest, res: Response) 
                 },
             });
 
-            const user = await tx.user.findUnique({ where: { id: userId } });
-            const tutorUser = await tx.user.findUnique({ where: { id: tutor.user_id } });
-
-            if (user?.email) {
-                await tx.emailOutbox.create({
-                    data: {
-                        type: 'BOOKING_CONFIRMATION_STUDENT',
-                        to_email: user.email,
-                        payload: {
-                            bookingId: createdBooking.id,
-                            tutorName: tutor.username,
-                            start: start.toISOString(),
-                            end: end.toISOString(),
-                            freeSession: true,
-                        },
-                        idempotency_key: `free-booking:${createdBooking.id}:student`,
-                    },
-                });
-            }
-            if (tutorUser?.email) {
-                await tx.emailOutbox.create({
-                    data: {
-                        type: 'BOOKING_CONFIRMATION_TUTOR',
-                        to_email: tutorUser.email,
-                        payload: {
-                            bookingId: createdBooking.id,
-                            studentId: student.id,
-                            start: start.toISOString(),
-                            end: end.toISOString(),
-                            freeSession: true,
-                        },
-                        idempotency_key: `free-booking:${createdBooking.id}:tutor`,
-                    },
-                });
-            }
-
             return { createdBooking, lesson };
         });
 
@@ -332,6 +295,42 @@ export const createFreeSessionBooking = async (req: AuthRequest, res: Response) 
             }
         } catch (e) {
             console.error('Calendar event for free session failed (non-fatal):', e);
+        }
+
+        // Queue confirmation emails after Meet link is set so both sides get the link
+        const studentUser = await prisma.user.findUnique({ where: { id: userId } });
+        const tutorUser = await prisma.user.findUnique({ where: { id: tutor.user_id } });
+        if (studentUser?.email) {
+            await prisma.emailOutbox.create({
+                data: {
+                    type: 'BOOKING_CONFIRMATION_STUDENT',
+                    to_email: studentUser.email,
+                    payload: {
+                        bookingId: result.createdBooking.id,
+                        tutorName: tutor.username,
+                        start: result.lesson.start_time.toISOString(),
+                        end: result.lesson.end_time.toISOString(),
+                        freeSession: true,
+                    },
+                    idempotency_key: `free-booking:${result.createdBooking.id}:student`,
+                },
+            });
+        }
+        if (tutorUser?.email) {
+            await prisma.emailOutbox.create({
+                data: {
+                    type: 'BOOKING_CONFIRMATION_TUTOR',
+                    to_email: tutorUser.email,
+                    payload: {
+                        bookingId: result.createdBooking.id,
+                        studentId: student.id,
+                        start: result.lesson.start_time.toISOString(),
+                        end: result.lesson.end_time.toISOString(),
+                        freeSession: true,
+                    },
+                    idempotency_key: `free-booking:${result.createdBooking.id}:tutor`,
+                },
+            });
         }
 
         return res.status(201).json({ booking: result.createdBooking, lesson: result.lesson });
