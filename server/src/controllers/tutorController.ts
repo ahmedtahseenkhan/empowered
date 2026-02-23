@@ -708,16 +708,21 @@ export const updatePricing = async (req: AuthenticatedRequest, res: Response) =>
     }
 };
 
-// Get All Categories (Tree)
+// Get All Categories (Tree) — roots: Academic Tutoring, Skill Development, Life Coaching (see prisma/seedCategories.ts)
 export const getCategories = async (req: Request, res: Response) => {
     try {
-        // Fetch all categories
         const categories = await prisma.category.findMany({
-            include: { children: { include: { children: true } } }
+            include: { children: { include: { children: true }, orderBy: { name: 'asc' } } },
+            orderBy: { name: 'asc' }
         });
 
-        // Filter for root categories (parent_id is null)
-        const rootCategories = categories.filter(c => c.parent_id === null);
+        const rootCategories = categories.filter(c => c.parent_id === null).sort((a, b) => a.name.localeCompare(b.name));
+        rootCategories.forEach(r => {
+            if (r.children?.length) r.children.sort((a, b) => a.name.localeCompare(b.name));
+            r.children?.forEach(sub => {
+                if (sub.children?.length) sub.children.sort((a, b) => a.name.localeCompare(b.name));
+            });
+        });
 
         res.json(rootCategories);
     } catch (error) {
