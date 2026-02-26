@@ -4,7 +4,7 @@ import { cn } from '../../utils/cn';
 interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
     children: React.ReactNode;
     className?: string;
-    variant?: 'default' | 'glass';
+    variant?: 'default' | 'glass' | 'compact';
     hover?: boolean;
 }
 
@@ -15,11 +15,12 @@ export const Card: React.FC<CardProps> = ({
     hover = false,
     ...props
 }) => {
-    const baseStyles = 'rounded-2xl p-6';
+    const baseStyles = variant === 'compact' ? 'rounded-xl p-4 border border-gray-200 bg-white' : 'rounded-xl p-6 border border-gray-200 bg-white shadow-sm';
 
     const variants = {
-        default: 'bg-white shadow-lg border border-gray-100',
-        glass: 'glass-card',
+        default: '',
+        glass: 'glass-card rounded-2xl p-6',
+        compact: '',
     };
 
     const hoverStyles = hover ? 'hover-lift cursor-pointer' : '';

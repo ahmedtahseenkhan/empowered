@@ -331,36 +331,70 @@ const FindMentorPage: React.FC = () => {
         </div>
     );
 
-    const renderStep2MajorCategory = () => (
-        <div className="space-y-6">
-            <h2 className="text-2xl md:text-3xl font-bold text-gray-900">How Can We Assist You Today?</h2>
-            <p className="text-gray-600">Please select the Major Category:</p>
-            {catsBusy ? (
-                <div className="text-sm text-gray-600">Loading categories...</div>
-            ) : (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {MAJOR_CATEGORIES.map((major) => {
-                        const active = formData.majorCategoryKey === major.key;
-                        return (
-                            <button
-                                key={major.key}
-                                type="button"
-                                onClick={() => setFormData({ ...formData, majorCategoryKey: major.key, subcategoryId: '', areaIds: [], goals: [], proficiency: '' })}
-                                className={`p-5 rounded-lg border-2 text-left transition-colors ${active ? 'border-purple-600 bg-purple-50' : 'border-gray-200 hover:bg-gray-50'}`}
-                            >
-                                <div className="font-semibold text-gray-900 text-lg">{major.title}</div>
-                                <div className="text-sm text-gray-600 mt-2">{major.description}</div>
-                            </button>
-                        );
-                    })}
+    const renderStep2MajorCategory = () => {
+        const categoryIcons: Record<string, { icon: string; gradient: string; bg: string }> = {
+            ACADEMIC: { icon: '📚', gradient: 'from-purple-600 to-indigo-600', bg: 'bg-purple-50' },
+            SKILL: { icon: '🚀', gradient: 'from-orange-500 to-amber-500', bg: 'bg-orange-50' },
+            LIFE: { icon: '🌟', gradient: 'from-emerald-500 to-teal-500', bg: 'bg-emerald-50' },
+        };
+
+        return (
+            <div className="space-y-4">
+                <div className="text-center">
+                    <h2 className="text-xl md:text-2xl font-bold text-gray-900">How Can We Assist You Today?</h2>
+                    <p className="text-gray-500 mt-1 text-sm">Select the area that best matches your learning goals</p>
                 </div>
-            )}
-            <div className="flex items-center gap-3 justify-center">
-                <Button variant="outline" onClick={onBack}>Back</Button>
-                <Button onClick={onNext} disabled={!formData.majorCategoryKey}>Continue</Button>
+                {catsBusy ? (
+                    <div className="text-sm text-gray-600 text-center py-8">Loading categories...</div>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+                        {MAJOR_CATEGORIES.map((major) => {
+                            const active = formData.majorCategoryKey === major.key;
+                            const style = categoryIcons[major.key];
+                            return (
+                                <button
+                                    key={major.key}
+                                    type="button"
+                                    onClick={() => setFormData({ ...formData, majorCategoryKey: major.key, subcategoryId: '', areaIds: [], goals: [], proficiency: '' })}
+                                    className={`relative group p-5 rounded-2xl border-2 text-left transition-all duration-300 hover:shadow-lg hover:-translate-y-1 ${active
+                                        ? 'border-purple-600 bg-gradient-to-br from-purple-50 to-indigo-50 shadow-md ring-2 ring-purple-200'
+                                        : 'border-gray-200 bg-white hover:border-purple-300'
+                                        }`}
+                                >
+                                    {/* Active check indicator */}
+                                    {active && (
+                                        <div className="absolute -top-2.5 -right-2.5 w-6 h-6 bg-purple-600 rounded-full flex items-center justify-center shadow-md">
+                                            <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                            </svg>
+                                        </div>
+                                    )}
+
+                                    {/* Icon */}
+                                    <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${style.gradient} flex items-center justify-center text-xl mb-3 group-hover:scale-110 transition-transform duration-300 shadow-sm`}>
+                                        {style.icon}
+                                    </div>
+
+                                    {/* Title */}
+                                    <h3 className="font-bold text-gray-900 text-base mb-1.5">{major.title}</h3>
+
+                                    {/* Description */}
+                                    <p className="text-xs text-gray-500 leading-relaxed">{major.description}</p>
+
+                                    {/* Bottom accent */}
+                                    <div className={`mt-3 h-1 rounded-full bg-gradient-to-r ${style.gradient} transition-all duration-300 ${active ? 'w-full opacity-100' : 'w-0 opacity-0 group-hover:w-1/2 group-hover:opacity-60'}`} />
+                                </button>
+                            );
+                        })}
+                    </div>
+                )}
+                <div className="flex items-center gap-3 justify-center pt-2">
+                    <Button variant="outline" onClick={onBack}>Back</Button>
+                    <Button onClick={onNext} disabled={!formData.majorCategoryKey}>Continue</Button>
+                </div>
             </div>
-        </div>
-    );
+        );
+    };
 
     const renderGrade = () => (
         <div className="space-y-6">
@@ -581,11 +615,11 @@ const FindMentorPage: React.FC = () => {
 
     return (
         <PageLayout>
-            <section className="section-container">
-                <div className="max-w-3xl mx-auto">
-                    <div className="text-center mb-8">
-                        <h1 className="heading-lg mb-3">Find Your Perfect Mentor</h1>
-                        <p className="text-gray-600">Once submitted, you'll be guided through a few questions to help us match you with the ideal mentor for your needs.</p>
+            <section className="section-container !pt-6 !pb-8">
+                <div className={`mx-auto ${step === 2 ? 'max-w-4xl' : 'max-w-3xl'} transition-all duration-300`}>
+                    <div className="text-center mb-5">
+                        <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">Find Your Perfect Mentor</h1>
+                        <p className="text-gray-500 text-sm">Answer a few questions and we'll match you with the ideal mentor for your needs.</p>
                     </div>
 
                     <Card className="p-6">

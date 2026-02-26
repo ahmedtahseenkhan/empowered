@@ -3,6 +3,15 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'r
 import { AuthProvider, useAuth } from './context/AuthContext';
 import api from './api/axios';
 
+// Scroll to top on route change
+const ScrollToTop = () => {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+};
+
 // Pages
 import HomePage from './pages/HomePage';
 import HowItWorksPage from './pages/HowItWorksPage';
@@ -49,6 +58,7 @@ import TutorAIAssistPage from './pages/TutorAIAssistPage';
 import StudentSessionsPage from './pages/StudentSessionsPage';
 import ConnectAccountPage from './pages/ConnectAccountPage';
 import BookDemoPage from './pages/BookDemoPage';
+import FAQPage from './pages/FAQPage';
 
 const DashboardRouter = () => {
   const { user } = useAuth();
@@ -152,6 +162,7 @@ function App() {
   return (
     <AuthProvider>
       <Router>
+        <ScrollToTop />
         <Routes>
           {/* Public Pages */}
           <Route path="/" element={<HomePage />} />
@@ -161,6 +172,7 @@ function App() {
           <Route path="/work-with-us" element={<WorkWithUsPage />} />
           <Route path="/contact-us" element={<ContactUsPage />} />
           <Route path="/book-demo" element={<BookDemoPage />} />
+          <Route path="/faqs" element={<FAQPage />} />
           <Route path="/find-mentor" element={<FindMentorPage />} />
           <Route path="/mentors" element={<MentorResultsPage />} />
           <Route path="/mentors/:id" element={<MentorPublicProfilePage />} />

@@ -28,12 +28,14 @@ type CoursePurchase = {
 };
 
 const StatsCard = ({ icon, label, value }: { icon: React.ReactNode; label: string; value: string | number }) => (
-    <Card className="p-6 flex flex-col items-center justify-center text-center">
-        <div className="w-10 h-10 rounded-full bg-primary-50 text-primary-600 flex items-center justify-center mb-3">
+    <Card variant="compact" className="flex flex-row items-center gap-4">
+        <div className="w-10 h-10 rounded-lg bg-primary-50 text-primary-600 flex items-center justify-center shrink-0">
             {icon}
         </div>
-        <p className="text-sm text-gray-500 font-medium">{label}</p>
-        <h3 className="text-2xl font-bold text-gray-900 mt-1">{value}</h3>
+        <div className="min-w-0">
+            <p className="text-xs text-gray-500 font-medium">{label}</p>
+            <p className="text-xl font-semibold text-gray-900 mt-0.5">{value}</p>
+        </div>
     </Card>
 );
 
@@ -209,20 +211,17 @@ const StudentDashboard: React.FC = () => {
 
     return (
         <DashboardLayout>
-            <div className="flex flex-col lg:flex-row gap-8">
-                <div className="flex-1 space-y-8">
-                    <div className="flex items-center justify-between gap-4">
+            <div className="flex flex-col lg:flex-row gap-6">
+                <div className="flex-1 space-y-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                         <div>
-                            <h1 className="text-3xl font-bold text-gray-900">Welcome back</h1>
-                            <p className="text-sm text-gray-600 mt-1">Track your sessions, mentors, and courses.</p>
+                            <h1 className="text-xl font-semibold text-gray-900">Welcome back</h1>
+                            <p className="text-sm text-gray-500 mt-0.5">Track your sessions, mentors, and courses.</p>
                         </div>
-                        <div className="flex gap-2">
-                            <Button variant="outline" onClick={() => navigate('/student/mentors')}>Find a Mentor</Button>
-                            <Button onClick={() => navigate('/student/mentors')}>Browse Mentors</Button>
-                        </div>
+                        <Button size="sm" onClick={() => navigate('/student/mentors')}>Find a Mentor</Button>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <StatsCard icon={<CheckCircle className="w-5 h-5" />} label="Completed Sessions" value={completedSessions} />
                         <StatsCard icon={<Calendar className="w-5 h-5" />} label="Upcoming Sessions" value={upcomingSessions.length} />
                         <StatsCard icon={<BookOpen className="w-5 h-5" />} label="Total Courses" value={totalCourses} />
@@ -231,20 +230,22 @@ const StudentDashboard: React.FC = () => {
 
 
 
-                    <Card className="p-6">
-                        <div className="flex items-center justify-between mb-4">
+                    <Card>
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
                             <div>
-                                <h2 className="text-lg font-bold text-gray-900">Calendar</h2>
-                                <p className="text-sm text-gray-500">Month-wise view of your booked and upcoming sessions.</p>
+                                <h2 className="text-base font-semibold text-gray-900">Calendar</h2>
+                                <p className="text-xs text-gray-500 mt-0.5">Your booked and upcoming sessions.</p>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1">
                                 <Button
+                                    size="sm"
                                     variant={calendarView === 'month' ? 'primary' : 'outline'}
                                     onClick={() => setCalendarView('month')}
                                 >
                                     Month
                                 </Button>
                                 <Button
+                                    size="sm"
                                     variant={calendarView === 'week' ? 'primary' : 'outline'}
                                     onClick={() => setCalendarView('week')}
                                 >
@@ -255,32 +256,24 @@ const StudentDashboard: React.FC = () => {
 
                         {calendarView === 'month' ? (
                             <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-                                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50">
-                                    <div className="font-semibold text-gray-900">
+                                <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200 bg-gray-50">
+                                    <span className="text-sm font-semibold text-gray-900">
                                         {monthCursor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <Button
-                                            variant="outline"
-                                            onClick={() => {
-                                                const d = new Date(monthCursor);
-                                                d.setMonth(d.getMonth() - 1);
-                                                setMonthCursor(d);
-                                            }}
-                                        >
-                                            <ChevronLeft className="w-4 h-4" />
-                                            Prev
+                                    </span>
+                                    <div className="flex items-center gap-1">
+                                        <Button size="xs" variant="outline" onClick={() => {
+                                            const d = new Date(monthCursor);
+                                            d.setMonth(d.getMonth() - 1);
+                                            setMonthCursor(d);
+                                        }}>
+                                            <ChevronLeft className="w-3.5 h-3.5" />
                                         </Button>
-                                        <Button
-                                            variant="outline"
-                                            onClick={() => {
-                                                const d = new Date(monthCursor);
-                                                d.setMonth(d.getMonth() + 1);
-                                                setMonthCursor(d);
-                                            }}
-                                        >
-                                            Next
-                                            <ChevronRight className="w-4 h-4" />
+                                        <Button size="xs" variant="outline" onClick={() => {
+                                            const d = new Date(monthCursor);
+                                            d.setMonth(d.getMonth() + 1);
+                                            setMonthCursor(d);
+                                        }}>
+                                            <ChevronRight className="w-3.5 h-3.5" />
                                         </Button>
                                     </div>
                                 </div>
@@ -354,12 +347,11 @@ const StudentDashboard: React.FC = () => {
                                                             {new Date(l.start_time).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12: true })} — {new Date(l.end_time).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12: true })}
                                                         </div>
                                                     </div>
-                                                    <div className="flex gap-2">
+                                                    <div className="flex gap-1.5 shrink-0">
                                                         {l.meeting_link && (
                                                             <Button
                                                                 variant="outline"
-                                                                size="sm"
-                                                                className="h-7 text-xs px-2"
+                                                                size="xs"
                                                                 disabled={joinBusyId === l.id}
                                                                 onClick={async () => {
                                                                     try {
@@ -379,16 +371,11 @@ const StudentDashboard: React.FC = () => {
                                                                     }
                                                                 }}
                                                             >
-                                                                {joinBusyId === l.id ? 'Joining…' : 'Join'}
+                                                                {joinBusyId === l.id ? '…' : 'Join'}
                                                             </Button>
                                                         )}
                                                         {l.google_calendar_html_link && (
-                                                            <Button
-                                                                variant="outline"
-                                                                size="sm"
-                                                                className="h-7 text-xs px-2"
-                                                                onClick={() => window.open(l.google_calendar_html_link as string, '_blank')}
-                                                            >
+                                                            <Button variant="outline" size="xs" onClick={() => window.open(l.google_calendar_html_link as string, '_blank')}>
                                                                 Calendar
                                                             </Button>
                                                         )}
@@ -459,30 +446,24 @@ const StudentDashboard: React.FC = () => {
                     </Card>
                 </div>
 
-                <div className="w-full lg:w-80 space-y-6">
-                    <Card className="p-6">
-                        <div className="flex items-start gap-3">
-                            <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center text-purple-600">
-                                <Users className="w-5 h-5" />
-                            </div>
-                            <div>
-                                <p className="text-xs text-gray-500">Quick Actions</p>
-                                <div className="mt-2 space-y-2">
-                                    <Button variant="outline" className="w-full" onClick={() => navigate('/student/my-courses')}>My Courses</Button>
-                                    <Button variant="outline" className="w-full" onClick={() => navigate('/student/my-mentors')}>My Mentors</Button>
-                                    <Button className="w-full" onClick={() => navigate('/student/mentors')}>Find a Mentor</Button>
-                                </div>
-                            </div>
+                <div className="w-full lg:w-72 space-y-4">
+                    <Card variant="compact">
+                        <h3 className="text-sm font-semibold text-gray-900 mb-3">Shortcuts</h3>
+                        <div className="space-y-1">
+                            <button type="button" onClick={() => navigate('/student/my-courses')} className="w-full text-left text-sm text-gray-700 hover:text-primary-600 hover:bg-primary-50/50 rounded-lg px-3 py-2 transition-colors">
+                                My Courses
+                            </button>
+                            <button type="button" onClick={() => navigate('/student/my-mentors')} className="w-full text-left text-sm text-gray-700 hover:text-primary-600 hover:bg-primary-50/50 rounded-lg px-3 py-2 transition-colors">
+                                My Mentors
+                            </button>
                         </div>
                     </Card>
 
-                    <Card className="p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <div>
-                                <h2 className="text-sm font-bold text-gray-900">Upcoming Sessions</h2>
-                            </div>
+                    <Card variant="compact">
+                        <div className="flex items-center justify-between mb-3">
+                            <h3 className="text-sm font-semibold text-gray-900">Upcoming Sessions</h3>
                             <Button
-                                size="sm"
+                                size="xs"
                                 variant="outline"
                                 disabled={payBusy}
                                 onClick={async () => {
@@ -510,7 +491,7 @@ const StudentDashboard: React.FC = () => {
                                     }
                                 }}
                             >
-                                {payBusy ? 'Loading…' : 'Pay Next Session'}
+                                {payBusy ? '…' : 'Pay next'}
                             </Button>
                         </div>
 
@@ -538,8 +519,7 @@ const StudentDashboard: React.FC = () => {
                                             {l.meeting_link && (
                                                 <Button
                                                     variant="outline"
-                                                    size="sm"
-                                                    className="h-6 text-xs px-2"
+                                                    size="xs"
                                                     disabled={joinBusyId === l.id}
                                                     onClick={async () => {
                                                         try {
@@ -569,19 +549,19 @@ const StudentDashboard: React.FC = () => {
                         )}
                     </Card>
 
-                    <Card className="p-6">
-                        <div className="text-sm font-bold text-gray-900 mb-2">Recent Courses</div>
+                    <Card variant="compact">
+                        <h3 className="text-sm font-semibold text-gray-900 mb-2">Recent Courses</h3>
                         {courses.length === 0 ? (
-                            <div className="text-sm text-gray-600">No courses purchased yet.</div>
+                            <p className="text-xs text-gray-500">No courses yet.</p>
                         ) : (
-                            <div className="space-y-3">
+                            <ul className="space-y-2">
                                 {courses.slice(0, 3).map((p) => (
-                                    <div key={p.id} className="border border-gray-200 rounded-lg px-3 py-2">
-                                        <div className="text-sm font-semibold text-gray-900 truncate">{p.course.title}</div>
-                                        <div className="text-xs text-gray-600">by {p.course.tutor?.username || 'Mentor'}</div>
-                                    </div>
+                                    <li key={p.id} className="text-sm text-gray-700 truncate" title={p.course.title}>
+                                        {p.course.title}
+                                        <span className="text-xs text-gray-500 block">by {p.course.tutor?.username || 'Mentor'}</span>
+                                    </li>
                                 ))}
-                            </div>
+                            </ul>
                         )}
                     </Card>
                 </div>

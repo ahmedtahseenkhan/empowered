@@ -9,13 +9,14 @@ import { Modal } from '../components/ui/Modal';
 import { Input } from '../components/ui/Input';
 
 const StatsCard = ({ icon, label, value, subLabel }: { icon: React.ReactNode, label: string, value: string | number, subLabel?: string }) => (
-    <Card className="p-6 flex flex-col items-center justify-center text-center">
-        <div className="w-10 h-10 rounded-full bg-primary-50 text-primary-600 flex items-center justify-center mb-3">
+    <Card variant="compact" className="flex flex-row items-center gap-4">
+        <div className="w-10 h-10 rounded-lg bg-primary-50 text-primary-600 flex items-center justify-center shrink-0">
             {icon}
         </div>
-        <p className="text-sm text-gray-500 font-medium">{label}</p>
-        <h3 className="text-2xl font-bold text-gray-900 mt-1">{value}</h3>
-        {subLabel && <p className="text-xs text-gray-400 mt-1">{subLabel}</p>}
+        <div className="min-w-0">
+            <p className="text-xs text-gray-500 font-medium">{label}</p>
+            <p className="text-xl font-semibold text-gray-900 mt-0.5">{value}{subLabel != null ? ` ${subLabel}` : ''}</p>
+        </div>
     </Card>
 );
 
@@ -450,112 +451,62 @@ const TutorDashboard: React.FC = () => {
 
     return (
         <DashboardLayout>
-            <div className="flex flex-col lg:flex-row gap-8">
-                {/* Left Column: Stats & Main Actions */}
-                <div className="flex-1 space-y-8">
-                    {/* Stats Grid */}
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="flex flex-col lg:flex-row gap-6">
+                <div className="flex-1 space-y-6">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                         <StatsCard icon={<Users className="w-5 h-5" />} label="Total Students" value={studentsBusy ? '…' : studentsCount} />
                         <StatsCard icon={<Users className="w-5 h-5" />} label="Active Students" value={studentsBusy ? '…' : studentsCount} />
                         <StatsCard icon={<Calendar className="w-5 h-5" />} label="Total Sessions" value={lessonsBusy ? '…' : totalSessions} />
                         <StatsCard icon={<Clock className="w-5 h-5" />} label="Pending Sessions" value={lessonsBusy ? '…' : pendingSessions} />
                     </div>
 
-                    {/* Google Calendar Authorization Mock */}
-                    <Card className="p-8 border-dashed border-2 bg-gray-50 flex flex-col gap-4 min-h-[300px]">
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <Card className="border border-gray-200">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
                             <div>
-                                <div className="text-sm font-semibold text-gray-900">Calendar & Availability</div>
-                                <div className="text-xs text-gray-500 mt-1">
+                                <h2 className="text-base font-semibold text-gray-900">Calendar & Availability</h2>
+                                <p className="text-xs text-gray-500 mt-0.5">
                                     {profile?.google_calendar_connection?.sync_enabled
-                                        ? 'Google Calendar connected (busy times will be blocked).'
-                                        : 'Connect Google Calendar to block out your busy times automatically.'}
-                                </div>
+                                        ? 'Google Calendar connected. Busy times are blocked.'
+                                        : 'Connect Google Calendar to block busy times automatically.'}
+                                </p>
                             </div>
-
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 shrink-0">
                                 {profile?.google_calendar_connection?.sync_enabled ? (
-                                    <Button variant="outline" onClick={handleDisconnectGoogleCalendar}>
-                                        Disconnect
-                                    </Button>
+                                    <Button size="sm" variant="outline" onClick={handleDisconnectGoogleCalendar}>Disconnect</Button>
                                 ) : (
-                                    <Button
-                                        variant="outline"
-                                        onClick={handleConnectGoogleCalendar}
-                                        className="flex items-center gap-2 bg-white hover:bg-gray-50 text-gray-700 border-gray-300"
-                                    >
-                                        <img src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg" alt="Google" className="w-5 h-5" />
-                                        Connect Google Calendar
+                                    <Button size="sm" variant="outline" onClick={handleConnectGoogleCalendar} className="inline-flex items-center gap-1.5">
+                                        <img src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg" alt="" className="w-4 h-4" />
+                                        Connect Google
                                     </Button>
                                 )}
                             </div>
                         </div>
 
-                        <div className="border-t border-gray-200 pt-4">
+                        <div className="border-t border-gray-100 pt-4">
                             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
-                                <div className="flex items-center gap-2">
-                                    <Button
-                                        variant={viewMode === 'week' ? 'primary' : 'outline'}
-                                        onClick={() => setViewMode('week')}
-                                    >
-                                        Week
-                                    </Button>
-                                    <Button
-                                        variant={viewMode === 'month' ? 'primary' : 'outline'}
-                                        onClick={() => setViewMode('month')}
-                                    >
-                                        Month
-                                    </Button>
+                                <div className="flex items-center gap-1">
+                                    <Button size="sm" variant={viewMode === 'week' ? 'primary' : 'outline'} onClick={() => setViewMode('week')}>Week</Button>
+                                    <Button size="sm" variant={viewMode === 'month' ? 'primary' : 'outline'} onClick={() => setViewMode('month')}>Month</Button>
                                 </div>
 
                                 {viewMode === 'week' ? (
-                                    <div className="flex items-center gap-2">
-                                        <Button
-                                            variant="outline"
-                                            onClick={() => {
-                                                const d = new Date(weekStartDate);
-                                                d.setDate(d.getDate() - 7);
-                                                setWeekStartDate(d);
-                                            }}
-                                        >
-                                            <ChevronLeft className="w-4 h-4" />
+                                    <div className="flex items-center gap-1">
+                                        <Button size="xs" variant="outline" onClick={() => { const d = new Date(weekStartDate); d.setDate(d.getDate() - 7); setWeekStartDate(d); }}>
+                                            <ChevronLeft className="w-3.5 h-3.5" />
                                         </Button>
-                                        <div className="text-sm font-semibold text-gray-900">{weekLabel}</div>
-                                        <Button
-                                            variant="outline"
-                                            onClick={() => {
-                                                const d = new Date(weekStartDate);
-                                                d.setDate(d.getDate() + 7);
-                                                setWeekStartDate(d);
-                                            }}
-                                        >
-                                            <ChevronRight className="w-4 h-4" />
+                                        <span className="text-sm font-medium text-gray-900 min-w-[140px] text-center">{weekLabel}</span>
+                                        <Button size="xs" variant="outline" onClick={() => { const d = new Date(weekStartDate); d.setDate(d.getDate() + 7); setWeekStartDate(d); }}>
+                                            <ChevronRight className="w-3.5 h-3.5" />
                                         </Button>
                                     </div>
                                 ) : (
-                                    <div className="flex items-center gap-2">
-                                        <Button
-                                            variant="outline"
-                                            onClick={() => {
-                                                const d = new Date(monthCursor);
-                                                d.setMonth(d.getMonth() - 1);
-                                                d.setDate(1);
-                                                setMonthCursor(d);
-                                            }}
-                                        >
-                                            <ChevronLeft className="w-4 h-4" />
+                                    <div className="flex items-center gap-1">
+                                        <Button size="xs" variant="outline" onClick={() => { const d = new Date(monthCursor); d.setMonth(d.getMonth() - 1); d.setDate(1); setMonthCursor(d); }}>
+                                            <ChevronLeft className="w-3.5 h-3.5" />
                                         </Button>
-                                        <div className="text-sm font-semibold text-gray-900">{monthLabel}</div>
-                                        <Button
-                                            variant="outline"
-                                            onClick={() => {
-                                                const d = new Date(monthCursor);
-                                                d.setMonth(d.getMonth() + 1);
-                                                d.setDate(1);
-                                                setMonthCursor(d);
-                                            }}
-                                        >
-                                            <ChevronRight className="w-4 h-4" />
+                                        <span className="text-sm font-medium text-gray-900 min-w-[100px] text-center">{monthLabel}</span>
+                                        <Button size="xs" variant="outline" onClick={() => { const d = new Date(monthCursor); d.setMonth(d.getMonth() + 1); d.setDate(1); setMonthCursor(d); }}>
+                                            <ChevronRight className="w-3.5 h-3.5" />
                                         </Button>
                                     </div>
                                 )}
@@ -806,13 +757,11 @@ const TutorDashboard: React.FC = () => {
                     )}
                 </Modal>
 
-                {/* Right Column: Profile & Quick Links */}
-                <div className="w-full lg:w-[340px] space-y-6">
-                    {/* Recent Notes & Homework */}
-                    <Card className="p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-sm font-bold text-gray-900">Recent Notes & Homework</h2>
-                            <Button variant="outline" size="sm" className="h-7 text-xs px-3" onClick={() => navigate('/tutor/notes')}>View</Button>
+                <div className="w-full lg:w-72 space-y-4">
+                    <Card variant="compact">
+                        <div className="flex items-center justify-between mb-3">
+                            <h3 className="text-sm font-semibold text-gray-900">Recent Notes & Homework</h3>
+                            <Button variant="ghost" size="xs" onClick={() => navigate('/tutor/notes')}>View</Button>
                         </div>
                         {activityBusy ? (
                             <div className="text-xs text-gray-600">Loading...</div>
@@ -844,125 +793,65 @@ const TutorDashboard: React.FC = () => {
                         )}
                     </Card>
 
-                    {/* Profile Status & Completion */}
-                    <Card className="p-6">
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="font-bold text-gray-900">Profile Status</h3>
+                    <Card variant="compact">
+                        <div className="flex justify-between items-center mb-3">
+                            <h3 className="text-sm font-semibold text-gray-900">Profile Status</h3>
                             {completionPercentage === 100 ? (
-                                <span className="flex items-center gap-1 text-xs text-green-500 font-medium bg-green-50 px-2 py-1 rounded-full">
-                                    <CheckCircle className="w-3 h-3" /> Live
-                                </span>
+                                <span className="text-xs text-green-600 font-medium bg-green-50 px-2 py-0.5 rounded">Live</span>
                             ) : (
-                                <span className="flex items-center gap-1 text-xs text-red-500 font-medium bg-red-50 px-2 py-1 rounded-full">
-                                    <AlertCircle className="w-3 h-3" /> Incomplete
-                                </span>
+                                <span className="text-xs text-amber-700 font-medium bg-amber-50 px-2 py-0.5 rounded">Incomplete</span>
                             )}
                         </div>
-
-                        <div className="mb-6">
+                        <div className="mb-3">
                             <div className="flex justify-between text-xs mb-1">
-                                <span className="text-gray-600">Profile Completion</span>
-                                <span className="font-bold text-gray-900">{completionPercentage}%</span>
+                                <span className="text-gray-500">Completion</span>
+                                <span className="font-medium text-gray-900">{completionPercentage}%</span>
                             </div>
-                            <div className="w-full bg-gray-100 rounded-full h-2">
-                                <div
-                                    className={`h-2 rounded-full transition-all duration-500 ${completionPercentage === 100 ? 'bg-green-500' : 'bg-red-500'}`}
-                                    style={{ width: `${completionPercentage}%` }}
-                                ></div>
+                            <div className="w-full bg-gray-100 rounded-full h-1.5">
+                                <div className={`h-1.5 rounded-full ${completionPercentage === 100 ? 'bg-green-500' : 'bg-amber-400'}`} style={{ width: `${completionPercentage}%` }} />
                             </div>
                         </div>
-
-                        <div className={`${completionPercentage === 100 ? 'bg-green-50' : 'bg-red-50'} rounded-lg p-4 mb-6`}>
-                            <h4 className={`text-sm font-bold ${completionPercentage === 100 ? 'text-green-700' : 'text-red-700'} mb-2`}>
-                                {completionPercentage === 100 ? 'All set! You are visible to students.' : 'Complete these requirements to go live:'}
-                            </h4>
-                            <ul className="space-y-2">
-                                {checklistItems.map((item, idx) => (
-                                    <li key={idx} className={`flex items-start gap-2 text-xs ${item.done ? 'text-green-600' : 'text-red-600'}`}>
-                                        <span className="mt-0.5">{item.done ? '✓' : '•'}</span>
-                                        <span className={item.done ? 'line-through opacity-70' : ''}>{item.label}</span>
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-
-                        <Button
-                            className="w-full"
-                            variant="primary"
-                            onClick={() => navigate('/tutor-onboarding')}
-                        >
-                            Complete Profile
+                        <ul className="space-y-1.5 mb-4">
+                            {checklistItems.map((item, idx) => (
+                                <li key={idx} className={`flex items-center gap-2 text-xs ${item.done ? 'text-gray-500' : 'text-amber-700'}`}>
+                                    <span>{item.done ? '✓' : '·'}</span>
+                                    <span className={item.done ? 'line-through' : ''}>{item.label}</span>
+                                </li>
+                            ))}
+                        </ul>
+                        <Button size="sm" className="w-full" variant={completionPercentage === 100 ? 'outline' : 'primary'} onClick={() => navigate('/tutor-onboarding')}>
+                            {completionPercentage === 100 ? 'Edit profile' : 'Complete profile'}
                         </Button>
                     </Card>
 
-                    <Card className="p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-sm font-bold text-gray-900">Upcoming Sessions</h2>
-                        </div>
-
-                        <div className="text-xs text-gray-500">Coming soon</div>
+                    <Card variant="compact">
+                        <h3 className="text-sm font-semibold text-gray-900 mb-1">Upcoming Sessions</h3>
+                        <p className="text-xs text-gray-500">Coming soon</p>
                     </Card>
 
-                    {/* Current Plan Widget */}
-                    <Card className="p-6">
-                        <div className="flex items-start gap-3">
-                            <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center text-purple-600">
-                                <CreditCard className="w-5 h-5" />
+                    <Card variant="compact">
+                        <div className="flex items-center gap-3 mb-3">
+                            <div className="w-9 h-9 rounded-lg bg-primary-50 flex items-center justify-center text-primary-600 shrink-0">
+                                <CreditCard className="w-4 h-4" />
                             </div>
-                            <div>
-                                <p className="text-xs text-gray-500">Current Plan</p>
-                                <h4 className="font-bold text-[#635BFF]">{profile?.tier || 'STANDARD'} Plan</h4>
-
-                                {profile?.subscription_status === 'trialing' && (
-                                    <span className="inline-block mt-1 text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded">Free Trial</span>
+                            <div className="min-w-0">
+                                <p className="text-xs text-gray-500">Current plan</p>
+                                <p className="text-sm font-semibold text-gray-900">{profile?.tier || 'STANDARD'}</p>
+                                {profile?.subscription_status === 'trialing' && <span className="text-[10px] text-blue-600">Free trial</span>}
+                                {subscriptionDaysLeft != null && !subscriptionExpired && (
+                                    <p className="text-xs text-gray-500">{subscriptionDaysLeft} days left</p>
                                 )}
-
-                                {subscriptionDaysLeft === null ? (
-                                    <p className="text-xs text-gray-500 mt-2">
-                                        Start your subscription to begin your 30-day trial.
-                                    </p>
-                                ) : subscriptionExpired ? (
-                                    <p className="text-xs text-red-600 mt-2">
-                                        Your trial/subscription period has ended. Please subscribe to continue using mentor features.
-                                    </p>
-                                ) : (
-                                    <p className="text-xs text-gray-500 mt-2">
-                                        <span className="font-bold text-gray-900">{subscriptionDaysLeft} days</span> left
-                                    </p>
-                                )}
-
-                                <div className="mt-4">
-                                    <Button
-                                        className="w-full"
-                                        variant={subscriptionExpired || subscriptionDaysLeft === null ? 'primary' : 'outline'}
-                                        onClick={() => (window.location.href = '/subscription-settings')}
-                                    >
-                                        Manage Subscription
-                                    </Button>
-                                </div>
                             </div>
                         </div>
+                        <Button size="sm" variant="outline" className="w-full" onClick={() => (window.location.href = '/subscription-settings')}>
+                            Manage subscription
+                        </Button>
                     </Card>
 
-                    {/* Help & Support Widget */}
-                    <Card className="p-6">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center text-green-600">
-                                <AlertCircle className="w-5 h-5" />
-                            </div>
-                            <div>
-                                <h4 className="font-bold text-gray-900">Need Help?</h4>
-                                <p className="text-xs text-gray-500 mt-1">Contact our support team for assistance.</p>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="mt-3 h-8 text-xs"
-                                    onClick={() => navigate('/help')}
-                                >
-                                    Help & Support
-                                </Button>
-                            </div>
-                        </div>
+                    <Card variant="compact">
+                        <h3 className="text-sm font-semibold text-gray-900 mb-1">Need help?</h3>
+                        <p className="text-xs text-gray-500 mb-3">Contact support for assistance.</p>
+                        <Button size="sm" variant="ghost" onClick={() => navigate('/help')}>Help & support</Button>
                     </Card>
                 </div>
             </div>

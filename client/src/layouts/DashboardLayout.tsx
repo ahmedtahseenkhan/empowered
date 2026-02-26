@@ -1,7 +1,6 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import logo from '../assets/logo.svg';
 
 import {
     User,
@@ -12,7 +11,6 @@ import {
     CreditCard,
     LogOut,
     Settings,
-    HelpCircle,
     Bot,
 } from 'lucide-react';
 
@@ -54,62 +52,52 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
     };
 
     return (
-        <div className="min-h-screen bg-gray-50 flex">
-            {/* Sidebar */}
-            <aside className="w-64 bg-white border-r border-gray-200 fixed h-full z-10 hidden md:flex flex-col">
-                <div className="p-6 flex-shrink-0">
-                    <Link to="/" className="flex items-center gap-2 mb-6">
-                        {/* Logo Placeholder */}
-                        <img src={logo} alt="EmpowerEd Learnings" className="h-40 w-auto" />
+        <div className="min-h-screen bg-gray-50/80 flex">
+            <aside className="w-56 bg-white border-r border-gray-200 fixed h-full z-10 hidden md:flex flex-col">
+                <div className="p-4 flex-shrink-0">
+                    <Link to="/" className="flex items-center gap-2 mb-4">
+                        <span className="text-[17px] font-bold text-gray-900">Empower<span className="text-empowered-orange">Ed</span> Learnings</span>
                     </Link>
-
-                    {/* User Info Below Logo */}
-                    <div className="flex items-center gap-3 pb-4 border-b border-gray-100">
-                        <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center text-primary-700 font-bold">
+                    <div className="flex items-center gap-2.5 py-3 border-b border-gray-100">
+                        <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center text-primary-700 text-sm font-semibold shrink-0">
                             {user?.username?.charAt(0).toUpperCase() || 'U'}
                         </div>
-                        <div>
-                            <p className="text-sm font-medium text-gray-900">{user?.username || 'User'}</p>
-                            <p className="text-xs text-green-600 font-medium">★ 0 (0 reviews)</p>
+                        <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">{user?.username || 'User'}</p>
+                            <p className="text-xs text-gray-500">★ 0 reviews</p>
                         </div>
                     </div>
                 </div>
 
-                <nav className="flex-1 px-4 space-y-2 mt-2 overflow-y-auto min-h-0">
+                <nav className="flex-1 px-2 py-2 space-y-0.5 overflow-y-auto min-h-0">
                     {menuItems.map((item) => (
                         <Link
                             key={item.label}
                             to={item.path}
-                            className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${location.pathname === item.path
-                                ? 'bg-primary-50 text-primary-900'
+                            className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${location.pathname === item.path
+                                ? 'bg-primary-50 text-primary-700'
                                 : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                                 }`}
                         >
-                            {item.icon}
-                            {item.label}
+                            <span className="shrink-0 [&>svg]:w-4 [&>svg]:h-4">{item.icon}</span>
+                            <span className="truncate">{item.label}</span>
                         </Link>
                     ))}
                 </nav>
 
-                <div className="p-4 border-t border-gray-100 space-y-1 flex-shrink-0">
-                    <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-600 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors">
-                        <LogOut className="w-5 h-5" />
-                        Log out
-                    </button>
-                    <Link to="/help" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-lg hidden">
-                        <HelpCircle className="w-5 h-5" />
-                        Help & Support
-                    </Link>
-                    <Link to="/settings" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-lg">
-                        <Settings className="w-5 h-5" />
+                <div className="p-2 border-t border-gray-100 space-y-0.5 flex-shrink-0">
+                    <Link to="/settings" className="flex items-center gap-2.5 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-lg">
+                        <Settings className="w-4 h-4 shrink-0" />
                         Settings
                     </Link>
+                    <button onClick={handleLogout} className="w-full flex items-center gap-2.5 px-3 py-2 text-sm font-medium text-gray-600 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors text-left">
+                        <LogOut className="w-4 h-4 shrink-0" />
+                        Log out
+                    </button>
                 </div>
             </aside>
 
-            {/* Main Content */}
-            <main className="flex-1 md:ml-64 p-8">
-
+            <main className="flex-1 md:ml-56 p-6 lg:p-8">
                 {children}
             </main>
         </div>

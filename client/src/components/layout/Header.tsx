@@ -27,7 +27,7 @@ export const Header: React.FC = () => {
                     {/* Logo */}
                     <Link to="/" className="flex items-center gap-3">
                         <img src={logo} alt="EmpowerEd Learnings" className="h-24 w-auto" />
-                        <span className="text-xl font-bold text-gray-900">Empowered Learnings</span>
+                        <span className="text-xl font-bold text-gray-900">Empower<span className="text-empowered-orange">Ed</span> Learnings</span>
                     </Link>
 
                     {/* Desktop Navigation */}
