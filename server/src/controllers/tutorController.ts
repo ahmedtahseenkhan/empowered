@@ -15,8 +15,6 @@ export const listPublicTutors = async (req: Request, res: Response) => {
         const category = (req.query.category as string | undefined)?.trim();
         const majorCategoryId = (req.query.majorCategoryId as string | undefined)?.trim();
         const subcategoryId = (req.query.subcategoryId as string | undefined)?.trim();
-        const subcategoryIdsRaw = (req.query.subcategoryIds as string | undefined)?.trim();
-        const areaIdsRaw = (req.query.areaIds as string | undefined)?.trim();
 
         const where: any = {};
 
@@ -46,16 +44,18 @@ export const listPublicTutors = async (req: Request, res: Response) => {
             };
         }
 
-        const parseCsv = (v: string | undefined) => {
-            if (!v) return [];
-            return v.split(',').map((x) => x.trim()).filter(Boolean);
+        const parseCsv = (v: string | string[] | undefined) => {
+            if (v == null) return [];
+            const str = Array.isArray(v) ? v.join(',') : String(v);
+            return str.split(',').map((x) => x.trim()).filter(Boolean);
         };
 
-        const areaIds = parseCsv(areaIdsRaw);
-        const subcategoryIdsParsed = parseCsv(subcategoryIdsRaw);
+        const areaIds = parseCsv(req.query.areaIds as string | string[] | undefined);
+        const subcategoryIdsParsed = parseCsv(req.query.subcategoryIds as string | string[] | undefined);
         const subcategoryIds = subcategoryIdsParsed.length > 0 ? subcategoryIdsParsed : (subcategoryId ? [subcategoryId] : []);
 
-        // OR logic: mentor appears if they match ANY selected subcategory OR ANY selected area of expertise
+        // Show mentors who have at least one of the selected areas of expertise (or subcategory).
+        // OR logic: mentor appears if they match ANY selected area OR ANY selected subcategory.
         const categoryConditions: any[] = [];
         if (areaIds.length > 0) {
             categoryConditions.push({ category_id: { in: areaIds } });

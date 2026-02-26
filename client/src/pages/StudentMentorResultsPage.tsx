@@ -118,10 +118,14 @@ const StudentMentorResultsPage: React.FC = () => {
         if (draftAreaIds.length) params.set('areaIds', draftAreaIds.join(','));
         else params.delete('areaIds');
 
-        // Optional keyword from selected areas (helps relevance ordering when q is used)
-        const generatedQ = areas.filter((a) => draftAreaIds.includes(a.id)).map((a) => a.name).join(' ').trim();
-        if (generatedQ) params.set('q', generatedQ);
-        else params.delete('q');
+        // When filtering by Areas of Expertise, do not set q: results are by category IDs only so any mentor
+        // who has that area appears even if the word is not in their bio.
+        if (draftAreaIds.length) params.delete('q');
+        else {
+            const generatedQ = areas.filter((a) => draftAreaIds.includes(a.id)).map((a) => a.name).join(' ').trim();
+            if (generatedQ) params.set('q', generatedQ);
+            else params.delete('q');
+        }
 
         navigate(`/student/mentors?${params.toString()}`);
     };

@@ -262,8 +262,8 @@ const FindMentorPage: React.FC = () => {
         if (formData.subcategoryId) params.set('subcategoryId', formData.subcategoryId);
         params.set('areaIds', formData.areaIds.join(','));
         params.set('fromAssessment', '1');
-        const q = areas.filter((a) => formData.areaIds.includes(a.id)).map((a) => a.name).join(' ');
-        if (q.trim()) params.set('q', q);
+        // Do not set q from area names: search is by area IDs so mentors with that expertise appear
+        // even if the word is not in their bio.
 
         const username = `${formData.firstName.trim()} ${formData.lastName.trim()}`.trim();
 
