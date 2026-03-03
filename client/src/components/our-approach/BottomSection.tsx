@@ -15,7 +15,7 @@ const BottomSection = () => {
             <div className="max-w-7xl mx-auto mt-24 mb-12 px-4">
                 <div className="pt-16 bg-[#F9F9F9] pb-[70px] md:pb-[120px] mt-10 relative rounded-3xl border border-gray-100">
                     <div className="flex flex-col justify-center items-center">
-                        <div className="w-[80%] md:w-[50%] mr-0 md:mr-[100px] lg:mr-[200px] mx-auto z-10">
+                        <div className="w-[80%] md:w-[50%] mx-auto z-10">
                             <p className="text-center text-[#8228BB] font-poppins text-xl md:text-2xl font-medium leading-relaxed">
                                 EmpowerEd Learnings provides personalized guidance at every step
                                 — because success isn’t one-size-fits-all.

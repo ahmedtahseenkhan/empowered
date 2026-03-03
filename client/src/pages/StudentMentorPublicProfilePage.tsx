@@ -64,6 +64,9 @@ const StudentMentorPublicProfilePage: React.FC = () => {
     const [freeBookingBusy, setFreeBookingBusy] = useState(false);
     const [freeConfirmSlot, setFreeConfirmSlot] = useState<{ start: string; end: string } | null>(null);
 
+    const [freeEligibilityBusy, setFreeEligibilityBusy] = useState(false);
+    const [freeEligible, setFreeEligible] = useState<boolean>(true);
+
     const [profileTab, setProfileTab] = useState<'EXPERIENCE' | 'EDUCATION' | 'CERTIFICATIONS'>('EXPERIENCE');
 
     const studentTimezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', []);
@@ -83,6 +86,29 @@ const StudentMentorPublicProfilePage: React.FC = () => {
         };
         fetchMentor();
     }, [id]);
+
+    useEffect(() => {
+        const fetchEligibility = async () => {
+            if (!mentor?.id || isPreview) return;
+            if (!mentor.free_session_enabled) {
+                setFreeEligible(false);
+                return;
+            }
+
+            try {
+                setFreeEligibilityBusy(true);
+                const res = await api.get('/bookings/free-session/eligibility', { params: { tutorId: mentor.id } });
+                setFreeEligible(!!res.data?.eligible);
+            } catch (e) {
+                // Fail open on eligibility check so we don't incorrectly hide free sessions.
+                setFreeEligible(true);
+            } finally {
+                setFreeEligibilityBusy(false);
+            }
+        };
+
+        fetchEligibility();
+    }, [mentor?.id, mentor?.free_session_enabled, isPreview]);
 
     const strengths = useMemo(() => {
         if (!mentor?.key_strengths) return [];
@@ -269,6 +295,11 @@ const StudentMentorPublicProfilePage: React.FC = () => {
     useEffect(() => {
         const fetchFreeSlots = async () => {
             if (!mentor?.id || !mentor?.free_session_enabled) return;
+            if (!freeEligible) {
+                setFreeSlots([]);
+                setFreeSelectedDayKey('');
+                return;
+            }
             try {
                 setFreeSlotsBusy(true);
                 const from = new Date();
@@ -305,7 +336,7 @@ const StudentMentorPublicProfilePage: React.FC = () => {
             }
         };
         fetchFreeSlots();
-    }, [mentor?.id, mentor?.free_session_enabled]);
+    }, [mentor?.id, mentor?.free_session_enabled, freeEligible]);
 
     useEffect(() => {
         if (!freeCalendarMeta || !freeCurrentMonthDayKeys.size) return;
@@ -348,7 +379,7 @@ const StudentMentorPublicProfilePage: React.FC = () => {
                                         <Link to={`/student/mentors?frequency=${encodeURIComponent(frequency)}`}>
                                             <Button variant="outline">Back</Button>
                                         </Link>
-                                        {!isPreview && mentor.free_session_enabled && (
+                                        {!isPreview && mentor.free_session_enabled && freeEligible && !freeEligibilityBusy && (
                                             <Button
                                                 variant="outline"
                                                 className="border-green-500 text-green-700 hover:bg-green-50"
@@ -453,7 +484,7 @@ const StudentMentorPublicProfilePage: React.FC = () => {
                                     </div>
                                 </Card>
 
-                                {mentor.free_session_enabled && (
+                                {mentor.free_session_enabled && freeEligible && !freeEligibilityBusy && (
                                     <Card id="free-session-card" className="p-6 border-green-200 bg-green-50/30">
                                         <h2 className="text-lg font-bold text-gray-900 mb-1">Free 25-min introductory session</h2>
                                         <p className="text-sm text-gray-600 mb-4">Try a short session with this mentor at no cost. Select a time below to book.</p>

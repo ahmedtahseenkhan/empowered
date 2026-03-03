@@ -6,95 +6,112 @@ export const TermsOfServicePage: React.FC = () => {
         <PageLayout>
             <section className="section-container">
                 <div className="max-w-4xl mx-auto">
-                    <h1 className="heading-xl mb-8 text-center">Terms and Conditions</h1>
+                    <h1 className="heading-xl mb-8 text-center">Terms of Service</h1>
 
                     <div className="prose prose-lg max-w-none space-y-6 text-gray-700">
                         <p className="text-lg text-gray-600 leading-relaxed">
-                            Welcome to EmpowerEd Learnings! These Terms and Conditions outline the terms of use for students and parents engaging with our platform and services. Our mission is to provide flexible, personalized learning experiences, empowering both students and mentors to succeed.
+                            Welcome to EmpowerEd Learnings. By creating an account, booking sessions, subscribing, or using the platform, you agree to these Terms of Service. EmpowerEd is a technology marketplace that connects students/parents with independent mentors and provides mentors with tools (visibility, profile, scheduling, and payment facilitation). EmpowerEd does not provide tutoring/educational services and is not an employer, agent, or partner of any mentor.
                         </p>
 
                         <section>
-                            <h2 className="text-2xl font-semibold text-gray-900 mt-8 mb-4">1. Scope of Services</h2>
-                            <ul className="list-disc list-inside space-y-3 text-gray-700">
-                                <li>EmpowerEd Learnings provides a platform that connects students with verified mentors specializing in Academic Success, Skill Development, and Personal Growth.</li>
-                                <li>Students can select mentors, schedule sessions, and track progress through their personal dashboard.</li>
-                                <li>All mentors are independent professionals, responsible for their own scheduling, availability, teaching methods, and payment arrangements with students.</li>
-                                <li>All mentors undergo a credential verification and rigorous screening process before their profiles are approved and published.</li>
-                            </ul>
-                        </section>
+                            <h2 className="text-2xl font-semibold text-gray-900 mt-8 mb-4">SECTION A — Students &amp; Parents/Guardians</h2>
 
-                        <section>
-                            <h2 className="text-2xl font-semibold text-gray-900 mt-8 mb-4">2. Payments</h2>
+                            <h3 className="text-xl font-semibold text-gray-900 mt-6 mb-3">1) Eligibility &amp; Parent Responsibility</h3>
                             <ul className="list-disc list-inside space-y-3 text-gray-700">
-                                <li><strong>Learning Plans:</strong> Choose from three flexible options — once a week, twice a week — billed weekly.</li>
-                                <li><strong>Recurring Payments:</strong> Your chosen plan will automatically renew each week unless canceled.</li>
-                                <li><strong>Rescheduling Policy:</strong> Students may reschedule up to 24 hours before the session. After 24 hours, the session is considered used.</li>
-                                <li><strong>Cancellation Policy:</strong> You may cancel at any time, but to avoid charges for the next billing cycle.</li>
-                                <li><strong>Unforeseen Circumstances:</strong> In rare unforeseen circumstances where a scheduled session cannot take place due to technical issues or emergencies, the mentor may issue a makeup session credit at their discretion. Credits can be applied toward a future session.</li>
-                                <li><strong>Secure Processing:</strong> Payments are securely processed via Stripe. EmpowerEd Learnings does not store your payment information.</li>
-                                <li>EmpowerEd Learnings does not take any commission from mentor earnings.</li>
+                                <li>Students under 18 must use the platform through a parent/legal guardian.</li>
+                                <li>Parents/guardians are responsible for bookings, payments, and supervising minors as appropriate.</li>
+                                <li>If a student is under 13, a parent/guardian must create/manage the account and provide any required consent.</li>
                             </ul>
-                        </section>
 
-                        <section>
-                            <h2 className="text-2xl font-semibold text-gray-900 mt-8 mb-4">3. Free Trial and Class Cancellations</h2>
+                            <h3 className="text-xl font-semibold text-gray-900 mt-6 mb-3">2) Booking &amp; Payments (Not Recurring)</h3>
                             <ul className="list-disc list-inside space-y-3 text-gray-700">
-                                <li><strong>Trial Classes:</strong> Some mentors offer a free trial session. Look for this option in the mentor's profile before booking.</li>
-                                <li><strong>Rescheduling:</strong> Sessions may only be rescheduled if requested at least 24 hours before the scheduled start time.</li>
-                                <li><strong>Cancellations:</strong> Missed sessions without prior notice may not be refunded or rescheduled, at the mentor's discretion.</li>
+                                <li>Sessions are paid weekly, per upcoming session.</li>
+                                <li>A session is confirmed only after payment is completed.</li>
+                                <li>After completing a session, the next session must be paid to remain confirmed.</li>
+                                <li>If payment is not completed by the required time shown in the dashboard and/or reminders, the session may be unconfirmed and the time slot released.</li>
+                                <li>Payments are processed securely through Stripe (or another integrated provider). EmpowerEd does not store full payment card details.</li>
                             </ul>
-                        </section>
 
-                        <section>
-                            <h2 className="text-2xl font-semibold text-gray-900 mt-8 mb-4">4. Confidentiality and Privacy</h2>
+                            <h3 className="text-xl font-semibold text-gray-900 mt-6 mb-3">3) Rescheduling &amp; Missed Sessions</h3>
                             <ul className="list-disc list-inside space-y-3 text-gray-700">
-                                <li>Your privacy is important to us. We do not sell or share personal information with third parties.</li>
-                                <li>Information you provide is securely stored and used only to improve your learning experience.</li>
+                                <li>Sessions may be rescheduled only if requested at least 24 hours before the scheduled start time.</li>
+                                <li>Sessions cannot be rescheduled within 24 hours.</li>
+                                <li>Missed sessions are typically considered used and non-refundable unless the mentor chooses otherwise.</li>
                             </ul>
-                        </section>
 
-                        <section>
-                            <h2 className="text-2xl font-semibold text-gray-900 mt-8 mb-4">5. Code of Conduct</h2>
+                            <h3 className="text-xl font-semibold text-gray-900 mt-6 mb-3">4) Refunds (Students/Parents)</h3>
                             <ul className="list-disc list-inside space-y-3 text-gray-700">
-                                <li><strong>Respectful Engagement:</strong> Students, parents, and mentors are expected to communicate respectfully and maintain a positive learning environment.</li>
-                                <li><strong>Preparedness:</strong> Arrive on time and ready to engage in your sessions.</li>
-                                <li><strong>Platform Use:</strong> Use your personal dashboard to manage your schedule, view materials, track progress, and communicate with your mentor.</li>
+                                <li>EmpowerEd does not guarantee refunds.</li>
+                                <li>We strongly encourage students/parents to book a free trial (if offered by the mentor) before making a longer-term commitment.</li>
+                                <li>Refunds, credits, or makeup sessions are determined by the mentor’s stated policy.</li>
+                                <li>EmpowerEd does not facilitate or mediate refund disputes between mentors and students/parents.</li>
                             </ul>
-                        </section>
 
-                        <section>
-                            <h2 className="text-2xl font-semibold text-gray-900 mt-8 mb-4">6. Refund Policy</h2>
-                            <ul className="list-disc list-inside space-y-3 text-gray-700">
-                                <li>EmpowerEd Learnings does not process refunds.</li>
-                                <li>Any refund for unused sessions is at the mentor's sole discretion and must be arranged directly with them.</li>
-                                <li>EmpowerEd Learnings is not responsible for disputes regarding refunds.</li>
-                            </ul>
-                        </section>
-
-                        <section>
-                            <h2 className="text-2xl font-semibold text-gray-900 mt-8 mb-4">7. Marketing and Promotional Use</h2>
+                            <h3 className="text-xl font-semibold text-gray-900 mt-6 mb-3">5) Educational Outcomes</h3>
                             <p>
-                                With your permission, EmpowerEd Learnings may use testimonials, photos, or video content shared by students, parents, or mentors for marketing purposes.
+                                All mentors on EmpowerEd go through admin review and verification before their profile goes live. However, we do not guarantee academic improvement, results, grades, admissions outcomes, or performance outcomes. Mentors are independent and responsible for their services.
                             </p>
                         </section>
 
                         <section>
-                            <h2 className="text-2xl font-semibold text-gray-900 mt-8 mb-4">8. Limitation of Liability</h2>
+                            <h2 className="text-2xl font-semibold text-gray-900 mt-8 mb-4">SECTION B — Mentors</h2>
+
+                            <h3 className="text-xl font-semibold text-gray-900 mt-6 mb-3">6) Independent Contractor Status</h3>
+                            <p>Mentors are independent contractors, not employees or agents of EmpowerEd. Mentors are responsible for:</p>
                             <ul className="list-disc list-inside space-y-3 text-gray-700">
-                                <li>EmpowerEd Learnings serves as a facilitator, connecting students with independent mentors.</li>
-                                <li>We are not responsible for the content, outcomes, or results of sessions, nor for any damages or losses arising from mentor-student interactions.</li>
-                                <li>By using the platform, you acknowledge that mentors are independent contractors and that EmpowerEd Learnings does not control their teaching methods.</li>
+                                <li>Service quality, methods, and content</li>
+                                <li>Pricing and policies (including refunds/credits)</li>
+                                <li>Taxes, compliance, and any required licenses/insurance</li>
+                                <li>Professional conduct and communications</li>
+                            </ul>
+
+                            <h3 className="text-xl font-semibold text-gray-900 mt-6 mb-3">7) Subscription Plans &amp; Fees (No-Commission Marketplace)</h3>
+                            <p>EmpowerEd is subscription-based for mentors. We do not take commission from mentor earnings. Current annual plans:</p>
+                            <ul className="list-disc list-inside space-y-3 text-gray-700">
+                                <li>Standard: $25/year</li>
+                                <li>Pro: $45/year</li>
+                                <li>Premium: $85/year</li>
+                            </ul>
+
+                            <h3 className="text-xl font-semibold text-gray-900 mt-6 mb-3">8) Subscription Cancellation (Mentors)</h3>
+                            <ul className="list-disc list-inside space-y-3 text-gray-700">
+                                <li>You may cancel your subscription before the next billing cycle to stop future charges.</li>
+                                <li>Your access may continue through the remainder of your paid term, depending on platform settings.</li>
+                                <li>Subscription fees are generally non-refundable unless required by law.</li>
+                            </ul>
+
+                            <h3 className="text-xl font-semibold text-gray-900 mt-6 mb-3">9) Profile Accuracy, Verification, and Conduct</h3>
+                            <ul className="list-disc list-inside space-y-3 text-gray-700">
+                                <li>Mentors must provide accurate, truthful, and complete profile information.</li>
+                                <li>All mentors must submit verifiable credentials (degrees, certifications, licenses, relevant work history) and any external reviews before their profile goes live.</li>
+                                <li>Our admin team reviews submitted documents as part of our internal verification process. Approved profiles may display a verified badge or trust icon.</li>
+                                <li>Verification is a platform trust measure and does not constitute a guarantee of accuracy or ongoing validity of credentials.</li>
+                                <li>Providing false, misleading, or fraudulent credentials will result in immediate suspension or permanent termination without refund.</li>
+                                <li>Mentors must maintain professional, respectful, and lawful conduct at all times.</li>
+                                <li>Harassment, discrimination, inappropriate communication, unsafe behavior (especially involving minors), repeated complaints, or failure to meet scheduling obligations may result in reduced visibility, suspension, or permanent removal from the platform without refund.</li>
                             </ul>
                         </section>
 
-                        <section className="bg-primary-50 rounded-2xl p-6 mt-8">
-                            <h2 className="text-2xl font-semibold text-gray-900 mb-4">Acknowledgment</h2>
-                            <p className="text-gray-700">
-                                By accessing or using EmpowerEd Learnings, you agree to these Terms & Conditions. Our mission is to provide a safe, supportive, and empowering space for students to achieve their full potential.
+                        <section>
+                            <h2 className="text-2xl font-semibold text-gray-900 mt-8 mb-4">GENERAL TERMS (Applies to Everyone)</h2>
+
+                            <h3 className="text-xl font-semibold text-gray-900 mt-6 mb-3">10) Platform Role &amp; Limitation of Liability</h3>
+                            <p>EmpowerEd is a facilitator platform only. To the maximum extent permitted by law:</p>
+                            <ul className="list-disc list-inside space-y-3 text-gray-700">
+                                <li>We are not responsible for mentor services, session outcomes, or disputes between users.</li>
+                                <li>We are not liable for indirect or consequential damages.</li>
+                            </ul>
+
+                            <h3 className="text-xl font-semibold text-gray-900 mt-6 mb-3">11) Communications</h3>
+                            <p>
+                                You agree to receive service-related communications (booking confirmations, reminders, payment notices, account/security messages). Marketing communications (if any) can be unsubscribed.
                             </p>
-                            <p className="text-gray-700 mt-3 font-medium">
-                                We look forward to supporting your learning journey!
-                            </p>
+
+                            <h3 className="text-xl font-semibold text-gray-900 mt-6 mb-3">12) Termination</h3>
+                            <p>We may suspend or terminate accounts for violations, fraud, misuse, or safety concerns (especially involving minors).</p>
+
+                            <h3 className="text-xl font-semibold text-gray-900 mt-6 mb-3">13) Governing Law</h3>
+                            <p>These Terms are governed by the laws of the State of Texas.</p>
                         </section>
                     </div>
                 </div>

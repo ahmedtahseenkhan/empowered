@@ -17,7 +17,6 @@ const CardComponent: React.FC<TestimonialCardProps> = ({
     name,
     title,
     testimonial,
-    by,
     color,
 }) => {
     const [isOpen, setIsOpen] = useState(false);
@@ -28,7 +27,7 @@ const CardComponent: React.FC<TestimonialCardProps> = ({
 
     return (
         <div
-            className={`rounded-3xl p-6 m-4 w-full md:w-[600px] lg:w-[800px] shadow-lg transition-all duration-300 relative`}
+            className={`rounded-3xl p-5 m-3 w-full md:w-[420px] lg:w-[520px] shadow-lg transition-all duration-300 relative`}
             style={{ backgroundColor: color }}
         >
             <div className="flex flex-col md:flex-row gap-6 items-start">

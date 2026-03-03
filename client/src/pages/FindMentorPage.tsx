@@ -451,7 +451,7 @@ const FindMentorPage: React.FC = () => {
     const renderSubcategory = () => (
         <div className="space-y-6">
             <h2 className="text-2xl md:text-3xl font-bold text-gray-900">
-                {isLife ? 'Please indicate where improvement is needed:' : 'Which subject(s) do you need help with?'}
+                {isLife ? 'Please indicate where improvement is needed:' : 'Which skill(s) do you need help with?'}
             </h2>
             {subcategories.length === 0 ? (
                 <div className="text-sm text-gray-600">No subcategories found for this category.</div>

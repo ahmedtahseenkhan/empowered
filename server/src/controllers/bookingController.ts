@@ -211,6 +211,40 @@ export const createBooking = async (req: AuthRequest, res: Response) => {
     }
 };
 
+export const getFreeSessionEligibility = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user?.id;
+        const role = req.user?.role;
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+        if (role !== 'STUDENT') return res.status(403).json({ error: 'Only students can view free session eligibility' });
+
+        const tutorId = (req.query?.tutorId as string | undefined)?.trim();
+        if (!tutorId) return res.status(400).json({ error: 'tutorId is required' });
+
+        const student = await prisma.studentProfile.findUnique({ where: { user_id: userId } });
+        if (!student) return res.status(404).json({ error: 'Student profile not found' });
+
+        const existing = await prisma.lesson.findFirst({
+            where: {
+                tutor_id: tutorId,
+                student_id: student.id,
+                billing_type: 'FREE_INTRO',
+            },
+            select: { id: true, status: true, start_time: true },
+        });
+
+        return res.json({
+            eligible: !existing,
+            existing_free_session: existing
+                ? { id: existing.id, status: existing.status, start_time: existing.start_time.toISOString() }
+                : null,
+        });
+    } catch (e) {
+        console.error('getFreeSessionEligibility error:', e);
+        return res.status(500).json({ error: 'Failed to check free session eligibility' });
+    }
+};
+
 /** Create a free 25-min introductory session. No payment; booking is auto-confirmed. */
 export const createFreeSessionBooking = async (req: AuthRequest, res: Response) => {
     try {
@@ -233,6 +267,19 @@ export const createFreeSessionBooking = async (req: AuthRequest, res: Response) 
 
         const student = await prisma.studentProfile.findUnique({ where: { user_id: userId } });
         if (!student) return res.status(404).json({ error: 'Student profile not found' });
+
+        const existingFreeSession = await prisma.lesson.findFirst({
+            where: {
+                tutor_id: tutorId,
+                student_id: student.id,
+                billing_type: 'FREE_INTRO',
+            },
+            select: { id: true },
+        });
+
+        if (existingFreeSession) {
+            return res.status(409).json({ error: 'You have already booked a free session with this mentor.' });
+        }
 
         const available = await isFreeSessionSlotAvailable({ tutorId, start });
         if (!available) return res.status(409).json({ error: 'Selected time is no longer available' });

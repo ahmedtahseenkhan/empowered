@@ -10,6 +10,15 @@ type OutboxRow = {
     attempts: number;
 };
 
+const humanizeBookingFrequency = (frequency: unknown) => {
+    const f = String(frequency || '').toUpperCase();
+    if (f === 'WEEKLY') return 'Once weekly';
+    if (f === 'TWICE_WEEKLY') return 'Twice weekly';
+    if (f === 'THRICE_WEEKLY') return 'Thrice weekly';
+    if (f === 'ONCE') return 'One time';
+    return String(frequency || '');
+};
+
 const formatDatePart = (d: Date) => {
     return d.toLocaleDateString(undefined, {
         weekday: 'short',
@@ -71,7 +80,7 @@ async function sendOutboxRow(row: OutboxRow) {
                 mentorName: booking.tutor?.username || row.payload?.tutorName || 'Mentor',
                 firstSessionDate: start ? formatDatePart(start) : '',
                 firstSessionTime: start ? formatTimePart(start) : '',
-                frequency: String(booking.frequency || ''),
+                frequency: humanizeBookingFrequency(booking.frequency),
                 totalSessions: Array.isArray(booking.lessons) ? booking.lessons.length : 0,
                 meetingLink: firstLesson?.meeting_link || '',
             });
@@ -117,7 +126,7 @@ async function sendOutboxRow(row: OutboxRow) {
                 studentName: booking.student?.username || 'Student',
                 firstSessionDate: start ? formatDatePart(start) : '',
                 firstSessionTime: start ? formatTimePart(start) : '',
-                frequency: String(booking.frequency || ''),
+                frequency: humanizeBookingFrequency(booking.frequency),
                 meetingLink: firstLesson?.meeting_link || '',
             });
         }

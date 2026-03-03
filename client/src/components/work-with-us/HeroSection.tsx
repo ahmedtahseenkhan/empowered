@@ -11,7 +11,7 @@ export default function HeroSection() {
     return (
         <section className="max-w-7xl mx-auto px-5 py-8 md:px-0">
             <h1 className="text-center text-4xl font-bold font-poppins text-gray-900">
-                Become a Mentor with Empower<span style={{ color: PURPLE }}>Ed</span>{" "}
+                Become a Mentor with Empower<span className="text-empowered-orange">Ed</span>{" "}
                 Learnings
             </h1>
             <p className="text-center mt-2 text-lg" style={{ color: GRAY }}>
@@ -47,14 +47,14 @@ export default function HeroSection() {
             </div>
 
             <div className="flex flex-col items-center max-w-4xl mx-auto">
-                <p className="text-center text-xl mb-6 text-gray-800 leading-relaxed">
+                <p className="text-center text-lg mb-5 text-gray-800 leading-relaxed">
                     At <span style={{ color: PURPLE, fontWeight: 'bold' }}>EmpowerEd Learnings</span>, we
                     connect passionate tutors, coaches, and instructors with students
                     worldwide. We give you the tools, marketing, and freedom to run your
                     business your way—and keep 100% of your earnings.
                 </p>
                 <p
-                    className="text-xl text-center hidden lg:block font-medium"
+                    className="text-lg text-center hidden lg:block font-medium"
                     style={{ color: PURPLE }}
                 >
                     Take advantage of our special offer and see how we can help you grow

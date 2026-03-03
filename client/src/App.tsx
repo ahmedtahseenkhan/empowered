@@ -54,6 +54,7 @@ import StudentMentorResultsPage from './pages/StudentMentorResultsPage';
 import StudentMentorPublicProfilePage from './pages/StudentMentorPublicProfilePage';
 import StudentBookMentorPage from './pages/StudentBookMentorPage';
 import StudentBookingConfirmationPage from './pages/StudentBookingConfirmationPage';
+import StudentBookingPaymentReviewPage from './pages/StudentBookingPaymentReviewPage';
 import TutorAIAssistPage from './pages/TutorAIAssistPage';
 import StudentSessionsPage from './pages/StudentSessionsPage';
 import ConnectAccountPage from './pages/ConnectAccountPage';
@@ -256,6 +257,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <StudentBookingConfirmationPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/student/booking/review"
+            element={
+              <ProtectedRoute>
+                <StudentBookingPaymentReviewPage />
               </ProtectedRoute>
             }
           />

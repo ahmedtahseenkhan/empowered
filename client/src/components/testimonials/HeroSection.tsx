@@ -1,4 +1,3 @@
-import React from 'react';
 import { HeroSection_image, space_rocket, spiral_arrow } from '../../assets';
 
 const HeroSection = () => {
@@ -11,7 +10,7 @@ const HeroSection = () => {
                         {/* Responsive heading */}
                         <h1 className="text-3xl md:text-4xl lg:text-5xl font-poppins tracking-wide text-center md:text-left font-semibold text-gray-900 leading-tight">
                             Transformative Journeys with Empower
-                            <span className="text-[#4A148C]">Ed</span> Learnings
+                            <span className="text-empowered-orange">Ed</span> Learnings
                         </h1>
 
                         {/* Responsive paragraph */}

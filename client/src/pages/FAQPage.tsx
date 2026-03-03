@@ -10,115 +10,118 @@ interface FAQItem {
 const studentFaqs: FAQItem[] = [
     {
         question: 'How does EmpowerEd Learnings work?',
-        answer: 'We connect students with expert mentors in three categories: Academic Success, Skill Development, and Personal Growth. Choose your mentor, select a schedule that works for you, and enjoy personalized learning with flexible options.',
+        answer: 'We connect students with mentors in three categories: Academic Success, Skill Development, and Life Coaching. Choose your mentor, select a time, and pay to confirm your session.',
     },
     {
-        question: 'What types of mentors are available on EmpowerEd Learnings?',
-        answer: 'We offer a diverse range of mentors specializing in Academic Success, Skill Development, and Personal Growth. Whether you need help with core subjects, personal growth, or mastering a new skill, we have the right expert for you.',
+        question: 'How do payments work?',
+        answer: 'Sessions are paid weekly, per upcoming session. A session is confirmed only after payment is completed. After finishing a session, you must pay to confirm the next session. There is no automatic recurring billing.',
     },
     {
-        question: 'How do I get charged?',
-        answer: 'All mentors on the platform offer three tiers of sessions: once a week, twice a week, or three times a week. You can select the option that best fits your learning needs. Payments are billed weekly on a recurring basis through our secure Stripe system.',
+        question: 'Is there a platform fee?',
+        answer: 'Yes. A 10% platform fee is added to each payment. This supports the dashboard tools and technology provided by EmpowerEd Learnings.',
+    },
+    {
+        question: 'What happens if I don’t pay for the next session?',
+        answer: 'If payment is not completed by the required time shown in your dashboard or reminders, the session may be unconfirmed and the time slot released.',
     },
     {
         question: 'What payment methods are accepted?',
-        answer: 'We accept all major credit and debit cards through our secure payment gateway, including Visa, MasterCard, and American Express.',
+        answer: 'We accept major credit and debit cards through Stripe, including Visa, MasterCard, and American Express.',
     },
     {
-        question: 'Are my payments secure?',
-        answer: 'Yes. All payments are securely processed through Stripe, and you can track them at any time in your dashboard.',
-    },
-    {
-        question: 'Can I cancel my payments at any time?',
-        answer: 'Yes. Cancel anytime through your dashboard. To avoid the next week\'s charge, cancel at least 24 hours before your next billing date.',
+        question: 'Are payments secure?',
+        answer: 'Yes. Payments are securely processed through Stripe. EmpowerEd does not store full payment card details.',
     },
     {
         question: 'Can I try a free session before committing?',
-        answer: 'Some mentors offer a free trial session so you can experience their teaching style before committing. Check the mentor\'s profile for availability.',
+        answer: 'Some mentors offer a free trial session. We strongly encourage booking a free trial, if available, before making a longer-term commitment. Please check the mentor’s profile.',
     },
     {
-        question: 'Why should I sign up for at least 4 Sessions?',
-        answer: 'Consistency is key to progress. Research shows that a minimum of 4 sessions helps build momentum and deliver better results. Our flexible weekly options make it easy to stay committed.',
+        question: 'Do I need to commit to multiple sessions?',
+        answer: 'There is no required commitment. However, consistency helps students make meaningful progress, and many families choose to book multiple sessions for better results.',
     },
     {
-        question: 'What features does my personal dashboard include?',
-        answer: (
-            <div>
-                <p className="mb-3">Once you sign up, your dashboard provides tools to enhance your learning experience, including:</p>
-                <ul className="list-disc list-inside space-y-1.5 text-gray-600">
-                    <li>Scheduling and rescheduling sessions</li>
-                    <li>Receiving reminders and notifications</li>
-                    <li>Tracking your progress</li>
-                    <li>Accessing teacher notes</li>
-                    <li>Viewing purchased courses</li>
-                    <li>Upcoming & past payments</li>
-                    <li>Option to cancel payments</li>
-                </ul>
-            </div>
-        ),
+        question: 'What if I want to stop sessions?',
+        answer: 'You can stop booking at any time. Since payments are per session, there is no subscription to cancel.',
     },
     {
-        question: 'What if I need to reschedule a session?',
-        answer: 'Sessions may only be rescheduled if 24 or more hours remain before the scheduled start time. You can reschedule your classes through your dashboard. Simply check the mentor\'s availability and choose a new time that works for both of you.',
+        question: 'Can I reschedule a session?',
+        answer: 'Yes. Sessions may be rescheduled if requested at least 24 hours before the scheduled start time. Sessions cannot be rescheduled within 24 hours.',
     },
     {
-        question: 'How do I communicate with my mentor outside of class time?',
-        answer: 'Your dashboard allows you to send messages to your mentor. This feature makes it easy to ask questions or get additional support as needed.',
+        question: 'What happens if I miss a session?',
+        answer: 'Missed sessions are typically considered used and non-refundable unless the mentor chooses to offer a makeup session.',
     },
     {
-        question: 'Is my information secure on the platform?',
-        answer: 'Yes, we take privacy and data security seriously. All transactions and personal information are encrypted and stored securely.',
+        question: 'Are mentors verified?',
+        answer: 'All mentors go through an admin review and verification process before their profile goes live. However, results and outcomes are not guaranteed.',
     },
     {
-        question: 'Can students leave reviews for their mentors?',
-        answer: 'Yes! Students can leave feedback and ratings for their mentors, which helps others make informed choices when selecting a mentor.',
+        question: 'Can my child use the platform?',
+        answer: 'Yes, but students under 18 must use the platform through a parent or legal guardian account.',
     },
     {
         question: 'Are there any refunds available?',
-        answer: 'EmpowerEd Learnings does not offer refunds. Please ensure you cancel your payment before the next billing cycle to avoid further charges.',
+        answer: 'EmpowerEd does not guarantee refunds and does not facilitate refund disputes between mentors and students. Refunds or credits are determined by the mentor’s stated policy.',
     },
     {
-        question: 'Who should I contact for help and support?',
-        answer: 'For any technical support or issues using the EmpowerEd Learnings platform, our team is here to assist you. However, if you have questions about scheduling, rescheduling, or payments, please reach out directly to your mentor. EmpowerEd Learnings does not take commissions or manage mentor earnings — we\'re dedicated to empowering both students and mentors by providing a seamless platform to connect.',
+        question: 'What does my dashboard allow me to do?',
+        answer: 'Your dashboard allows you to schedule or reschedule sessions, receive reminders, message your mentor, and track upcoming sessions and payment history.',
+    },
+    {
+        question: 'Can students leave reviews?',
+        answer: 'Yes. Students can leave feedback and ratings to help other families make informed decisions.',
+    },
+    {
+        question: 'Who should I contact for support?',
+        answer: 'For technical platform issues, contact EmpowerEd support. For scheduling, session, or refund-related matters, please contact your mentor directly.',
     },
 ];
 
 const mentorFaqs: FAQItem[] = [
     {
-        question: 'What happens after the 1-month free trial?',
-        answer: 'After your free trial ends, the plan you selected will automatically charge you based on your subscription (monthly, bi-annually, or annually). If you wish to cancel, please do so before the trial ends to avoid charges. You can change your plan at any time from your dashboard.',
+        question: 'How does EmpowerEd make money?',
+        answer: 'EmpowerEd is a subscription-based SaaS marketplace. Mentors pay an annual subscription for visibility and business tools. We do not take commission from your session earnings.',
     },
     {
-        question: 'How can I keep track of my payments?',
-        answer: 'We use a secure Stripe payment system. You can track all your payments directly on your personal dashboard, where you\'ll see real-time updates on payments received, upcoming transactions, all clearly laid out for your convenience.',
+        question: 'What are the current subscription plans?',
+        answer: 'We offer three annual plans: Standard ($25/year), Pro ($45/year), and Premium ($85/year). Each plan provides increasing levels of visibility and promotional features.',
     },
     {
-        question: 'What is the demo call?',
-        answer: 'Our admin team will walk you through the platform, explain the different subscription plans, and help you choose the best plan for your business needs during the demo call. It\'s a great way to get an inside look at how everything works.',
+        question: 'Is there a free trial?',
+        answer: 'Yes. A one-month free trial may be offered. If you do not cancel before the trial ends, your selected annual plan will be charged automatically.',
     },
     {
-        question: 'What\'s included with onboarding and tech support?',
-        answer: 'Once you subscribe, a dedicated team member will guide you through setting up your profile, showcasing your offers, and advising on effective marketing strategies. We also provide ongoing support for any technical issues related to the website, platform, or payment system.',
+        question: 'What happens after the free trial ends?',
+        answer: 'Your selected annual plan will be billed. To avoid charges, cancel before the trial period ends. You can manage or change your plan through your dashboard.',
     },
     {
-        question: 'How do you handle marketing for me?',
-        answer: 'Once your marketing efforts are active, our dedicated marketing team takes care of everything. For Pro and Premium plans, we use a mix of strategies like online ads, community events, and more. You can also add video features to ad campaigns for extra visibility. We provide campaign performance reports upon request, detailing reach, engagement, and leads.',
+        question: 'Can I cancel my subscription?',
+        answer: 'Yes. You can cancel before your next billing cycle to stop future charges. Subscription fees are non-refundable.',
+    },
+    {
+        question: 'Can I upgrade or downgrade my plan?',
+        answer: 'Yes. Upgrades take effect immediately. Downgrades apply at the start of the next billing cycle.',
+    },
+    {
+        question: 'Do you take commission from my sessions?',
+        answer: 'No. EmpowerEd does not take commission from your earnings. Payment processing fees may still apply through Stripe.',
+    },
+    {
+        question: 'How do students pay for sessions?',
+        answer: 'Students pay weekly, per upcoming session. A session is confirmed only after payment is completed. There is no automatic recurring billing for students.',
+    },
+    {
+        question: 'How will I get paid by students?',
+        answer: 'Students pay weekly per upcoming session through the platform. Payments are processed via Stripe and transferred to your connected payout account, subject to Stripe’s processing timelines and fees.',
     },
     {
         question: 'How does mentor verification work?',
-        answer: 'We review your credentials, certifications, and external reviews before approving your profile. Once verified, you\'ll receive the Verified Mentor Badge — displayed prominently on your profile to help build trust with students.',
+        answer: 'You must submit verifiable credentials before your profile goes live. Our admin team reviews submitted documents and approved profiles may receive a verified badge.',
     },
     {
-        question: 'Can I sell pre-recorded courses?',
-        answer: 'Yes — with the Premium Plan, you can upload and sell pre-recorded courses directly through your profile, giving you an additional income stream.',
-    },
-    {
-        question: 'What if I want to cancel my subscription? What\'s the refund policy?',
-        answer: 'We do not offer refunds. If you are unsatisfied with the service, please cancel before the next billing cycle to avoid charges. You can cancel your plan directly through your dashboard at any time.',
-    },
-    {
-        question: 'Can I upgrade or downgrade my plan later?',
-        answer: 'Yes, you can change your subscription at any time. Any upgrades take effect immediately, while downgrades will apply at the start of your next billing cycle.',
+        question: 'Am I an employee of EmpowerEd?',
+        answer: 'No. Mentors are independent contractors responsible for their services, pricing, taxes, and compliance.',
     },
 ];
 

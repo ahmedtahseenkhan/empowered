@@ -1,11 +1,5 @@
-import React from 'react';
 import offers from './offeredData';
 import { Crown } from '../../assets';
-
-// Simplified Image component since we don't have Next.js Image
-const Image = ({ src, alt, className, ...props }: any) => (
-    <img src={src} alt={alt} className={className} {...props} />
-);
 
 const Offered = () => {
     return (
@@ -13,7 +7,7 @@ const Offered = () => {
             <div className="max-w-7xl mx-auto px-5 py-10 md:px-0">
                 <div className="flex justify-center text-center">
                     <h1 className="text-2xl md:text-4xl font-bold font-poppins text-gray-900">
-                        Why Mentors Choose Empower<span style={{ color: "#4A148C" }}>Ed</span> Learnings
+                        Why Mentors Choose Empower<span className="text-empowered-orange">Ed</span> Learnings
                     </h1>
                 </div>
                 <div className="flex justify-center mt-2">

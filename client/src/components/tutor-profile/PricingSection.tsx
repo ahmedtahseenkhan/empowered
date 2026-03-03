@@ -8,7 +8,7 @@ interface PricingSectionProps {
 }
 
 export const PricingSection: React.FC<PricingSectionProps> = ({ onBack }) => {
-    const [rate, setRate] = useState('50');
+    const [rate, setRate] = useState('0');
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 

@@ -1,4 +1,3 @@
-import React from 'react';
 import { our_approach_heroSection, overlay } from '../../assets';
 
 const HeroSection = () => {
@@ -11,7 +10,7 @@ const HeroSection = () => {
                         {/* Responsive heading */}
                         <h1 className="text-3xl md:text-4xl font-semibold text-gray-900">
                             Empower
-                            <span className="text-[#4A148C]">Ed</span> Learnings
+                            <span className="text-empowered-orange">Ed</span> Learnings
                         </h1>
 
                         {/* Responsive paragraph */}

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
     Bottom_card1,
     Bottom_card2,
@@ -50,7 +50,7 @@ const WhyUs = () => {
             <div className="max-w-7xl mx-auto px-4">
                 <div className="font-poppins">
                     <h1 className="text-center py-10 text-2xl md:text-4xl font-bold text-gray-900">
-                        Why Choose Empower<span className="text-[#4A148C]">Ed</span>{" "}
+                        Why Choose Empower<span className="text-empowered-orange">Ed</span>{" "}
                         Learnings?
                     </h1>
 
