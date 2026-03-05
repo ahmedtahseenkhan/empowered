@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { Button } from '../components/ui/Button';
 import { Send } from 'lucide-react';
+import api from '../api/axios';
 
 const HelpSupportPage: React.FC = () => {
     const [formData, setFormData] = useState({
@@ -9,6 +10,8 @@ const HelpSupportPage: React.FC = () => {
         message: '',
     });
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+    const [sent, setSent] = useState(false);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
@@ -17,14 +20,20 @@ const HelpSupportPage: React.FC = () => {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        setError('');
         setLoading(true);
-
-        // TODO: Implement actual email sending logic
-        setTimeout(() => {
-            alert('Message sent successfully! We will get back to you soon.');
+        try {
+            await api.post('/support', {
+                subject: formData.subject.trim(),
+                message: formData.message.trim(),
+            });
+            setSent(true);
             setFormData({ subject: '', message: '' });
+        } catch (err: any) {
+            setError(err?.response?.data?.error || 'Failed to send message. Please try again.');
+        } finally {
             setLoading(false);
-        }, 1000);
+        }
     };
 
     return (
@@ -40,6 +49,14 @@ const HelpSupportPage: React.FC = () => {
 
                 {/* Contact Form */}
                 <div className="bg-white rounded-3xl shadow-xl p-12">
+                    {sent && (
+                        <div className="mb-6 p-4 rounded-xl bg-green-50 border border-green-200 text-green-800 text-sm">
+                            Message sent successfully! We will get back to you soon.
+                        </div>
+                    )}
+                    {error && (
+                        <div className="mb-6 p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>
+                    )}
                     <form onSubmit={handleSubmit} className="space-y-8">
                         {/* Subject */}
                         <div>

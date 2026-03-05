@@ -151,10 +151,13 @@ const SupportPage: React.FC = () => {
                                             <h3 className="text-base font-semibold text-gray-900">{ticket.subject}</h3>
                                         </div>
                                         <p className="text-sm text-gray-600 line-clamp-2">{ticket.message}</p>
-                                        <div className="flex items-center gap-3 text-xs text-gray-500 mt-2">
+                                        <div className="flex items-center gap-3 text-xs text-gray-500 mt-2 flex-wrap">
                                             <span className="font-medium text-gray-700">{ticket.user_name}</span>
                                             <span>•</span>
                                             <span>{ticket.user_email}</span>
+                                            {ticket.user_role === 'GUEST' && (
+                                                <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">Website</span>
+                                            )}
                                             <span>•</span>
                                             <span>{format(new Date(ticket.created_at), 'MMM d, yyyy h:mm a')}</span>
                                         </div>
@@ -213,14 +216,14 @@ const SupportPage: React.FC = () => {
                         <div className="p-6 border-t border-gray-100 flex justify-end gap-3">
                             <button
                                 onClick={() => setSelectedTicket(null)}
-                                className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg"
+                                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg transition-colors"
                             >
                                 Cancel
                             </button>
                             <button
                                 onClick={handleReply}
                                 disabled={sendingReply || !replyMessage.trim()}
-                                className="px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-lg disabled:opacity-50 flex items-center gap-2"
+                                className="px-4 py-2 text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 rounded-lg disabled:opacity-50 flex items-center gap-2 transition-colors shadow-sm"
                             >
                                 {sendingReply ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageCircle className="w-4 h-4" />}
                                 Send & Resolve

@@ -626,17 +626,19 @@ enum TicketPriority {
 }
 
 model SupportTicket {
-  id          String         @id @default(uuid())
-  user_id     String
-  user        User           @relation(fields: [user_id], references: [id])
-  
+  id               String         @id @default(uuid())
+  user_id          String?
+  user             User?          @relation(fields: [user_id], references: [id])
+  submitter_name   String?
+  submitter_email  String?
+
   subject     String
   message     String         @db.Text
   status      TicketStatus   @default(OPEN)
   priority    TicketPriority @default(MEDIUM)
-  
+
   admin_notes String?        @db.Text
-  
+
   created_at  DateTime       @default(now())
   updated_at  DateTime       @updatedAt
 

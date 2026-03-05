@@ -18,8 +18,9 @@ class EmailService {
     private fromName: string;
 
     constructor() {
-        this.fromEmail = process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER || 'noreply@empoweredlearnings.com';
-        this.fromName = process.env.SMTP_FROM_NAME || 'EmpowerEd Learnings';
+        // Display "From" address (e.g. info@emplearnings.com). SMTP auth stays SMTP_USER (e.g. Gmail).
+        this.fromEmail = process.env.SMTP_FROM_EMAIL || 'info@emplearnings.com';
+        this.fromName = process.env.SMTP_FROM_NAME || 'Empowered Learnings';
     }
 
     /**
@@ -367,6 +368,22 @@ class EmailService {
     /**
      * ADMIN EMAILS
      */
+
+    async sendNewSupportTicketNotification(data: {
+        adminEmail: string;
+        submitterName: string;
+        submitterEmail: string;
+        subject: string;
+        message: string;
+        source: string;
+    }): Promise<void> {
+        const html = this.renderTemplate('admin/new-support-ticket', data);
+        await this.sendEmail({
+            to: data.adminEmail,
+            subject: `[Queries] ${data.subject}`,
+            html,
+        });
+    }
 
     async sendSupportTicketReply(data: {
         userName: string;

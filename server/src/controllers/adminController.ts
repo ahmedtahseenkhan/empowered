@@ -326,17 +326,20 @@ export const adminListPayments = async (req: AuthRequest, res: Response) => {
 export const adminListTickets = async (req: AuthRequest, res: Response) => {
     try {
         const { status, priority, q } = req.query;
+        const qStr = (q as string)?.trim();
 
         const tickets = await prisma.supportTicket.findMany({
             where: {
                 status: status ? (status as any) : undefined,
                 priority: priority ? (priority as any) : undefined,
-                OR: q
+                OR: qStr
                     ? [
-                        { subject: { contains: q as string, mode: 'insensitive' } },
-                        { user: { email: { contains: q as string, mode: 'insensitive' } } },
-                        { user: { student_profile: { username: { contains: q as string, mode: 'insensitive' } } } },
-                        { user: { tutor_profile: { username: { contains: q as string, mode: 'insensitive' } } } },
+                        { subject: { contains: qStr, mode: 'insensitive' } },
+                        { submitter_name: { contains: qStr, mode: 'insensitive' } },
+                        { submitter_email: { contains: qStr, mode: 'insensitive' } },
+                        { user: { email: { contains: qStr, mode: 'insensitive' } } },
+                        { user: { student_profile: { username: { contains: qStr, mode: 'insensitive' } } } },
+                        { user: { tutor_profile: { username: { contains: qStr, mode: 'insensitive' } } } },
                     ]
                     : undefined,
             },
@@ -362,9 +365,9 @@ export const adminListTickets = async (req: AuthRequest, res: Response) => {
             status: t.status,
             priority: t.priority,
             created_at: t.created_at,
-            user_name: t.user.role === 'STUDENT' ? t.user.student_profile?.username : t.user.tutor_profile?.username,
-            user_email: t.user.email,
-            user_role: t.user.role,
+            user_name: t.submitter_name ?? (t.user?.role === 'STUDENT' ? t.user.student_profile?.username : t.user?.tutor_profile?.username) ?? '—',
+            user_email: t.submitter_email ?? t.user?.email ?? '—',
+            user_role: t.user?.role ?? 'GUEST',
         }));
 
         return res.json({ tickets: formattedTickets });
@@ -402,21 +405,20 @@ export const adminReplyTicket = async (req: AuthRequest, res: Response) => {
             },
         });
 
-        // Send email notification to user
-        try {
-            const userName = ticket.user.role === 'STUDENT'
-                ? ticket.user.student_profile?.username
-                : ticket.user.tutor_profile?.username;
+        const replyEmail = ticket.submitter_email ?? ticket.user?.email;
+        const replyName = ticket.submitter_name ?? (ticket.user?.role === 'STUDENT' ? ticket.user.student_profile?.username : ticket.user?.tutor_profile?.username);
 
-            await emailService.sendSupportTicketReply({
-                userName: userName || 'User',
-                userEmail: ticket.user.email,
-                ticketSubject: ticket.subject,
-                replyMessage: message,
-            });
-        } catch (emailError) {
-            console.error('Failed to send email notification:', emailError);
-            // Don't fail the request if email fails
+        if (replyEmail) {
+            try {
+                await emailService.sendSupportTicketReply({
+                    userName: replyName || 'User',
+                    userEmail: replyEmail,
+                    ticketSubject: ticket.subject,
+                    replyMessage: message,
+                });
+            } catch (emailError) {
+                console.error('Failed to send email notification:', emailError);
+            }
         }
 
         return res.json({ ticket });

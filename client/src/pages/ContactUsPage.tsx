@@ -3,6 +3,7 @@ import { PageLayout } from '../layouts/PageLayout';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
+import api from '../api/axios';
 
 export const ContactUsPage: React.FC = () => {
     const [formData, setFormData] = useState({
@@ -11,12 +12,28 @@ export const ContactUsPage: React.FC = () => {
         subject: '',
         message: '',
     });
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+    const [sent, setSent] = useState(false);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        // TODO: Implement form submission
-        console.log('Form submitted:', formData);
-        alert('Thank you for your message! We\'ll get back to you soon.');
+        setError('');
+        setLoading(true);
+        try {
+            await api.post('/support', {
+                name: formData.name.trim(),
+                email: formData.email.trim(),
+                subject: formData.subject.trim(),
+                message: formData.message.trim(),
+            });
+            setSent(true);
+            setFormData({ name: '', email: '', subject: '', message: '' });
+        } catch (err: any) {
+            setError(err?.response?.data?.error || 'Failed to send message. Please try again.');
+        } finally {
+            setLoading(false);
+        }
     };
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -40,6 +57,14 @@ export const ContactUsPage: React.FC = () => {
                 <div className="max-w-3xl mx-auto">
                     <Card>
                         <h2 className="text-2xl font-semibold mb-6 text-gray-900">Send us a Message</h2>
+                        {sent && (
+                            <div className="mb-6 p-4 rounded-lg bg-green-50 border border-green-200 text-green-800 text-sm">
+                                Thank you for your message! We'll get back to you soon.
+                            </div>
+                        )}
+                        {error && (
+                            <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>
+                        )}
                         <form onSubmit={handleSubmit} className="space-y-6">
                             <Input
                                 label="Name"
@@ -87,8 +112,8 @@ export const ContactUsPage: React.FC = () => {
                                 />
                             </div>
 
-                            <Button type="submit" variant="primary" size="lg" className="w-full">
-                                Send Message
+                            <Button type="submit" variant="primary" size="lg" className="w-full" disabled={loading}>
+                                {loading ? 'Sending...' : 'Send Message'}
                             </Button>
                         </form>
                     </Card>

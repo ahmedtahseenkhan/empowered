@@ -42,6 +42,7 @@ import adminRoutes from './routes/adminRoutes';
 import demoRoutes from './routes/demoRoutes';
 import paymentRoutes from './routes/paymentRoutes';
 import webhookRoutes from './routes/webhookRoutes';
+import supportRoutes from './routes/supportRoutes';
 import { startEmailOutboxProcessor } from './services/emailOutboxProcessor';
 import { startEmailScheduler } from './services/emailScheduler';
 
@@ -72,6 +73,7 @@ app.use('/api/uploads', uploadRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/demo', demoRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/support', supportRoutes);
 
 // Health Check
 app.get('/', (req, res) => {
