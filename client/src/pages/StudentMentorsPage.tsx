@@ -81,9 +81,10 @@ const StudentMentorsPage: React.FC = () => {
                 comment
             });
             alert('Review submitted successfully!');
-        } catch (error) {
+        } catch (error: any) {
             console.error('Failed to submit review:', error);
-            alert('Failed to submit review. Please try again.');
+            const errorMessage = error.response?.data?.error || 'Failed to submit review. Please try again.';
+            alert(errorMessage);
         }
     };
 
