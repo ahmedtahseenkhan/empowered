@@ -18,8 +18,9 @@ class EmailService {
     private fromName: string;
 
     constructor() {
-        // Display "From" address (e.g. info@emplearnings.com). SMTP auth stays SMTP_USER (e.g. Gmail).
-        this.fromEmail = process.env.SMTP_FROM_EMAIL || 'info@emplearnings.com';
+        // Always show brand address so recipients see "From: Empowered Learnings <info@emplearnings.com>".
+        // SMTP login remains SMTP_USER/SMTP_PASSWORD (e.g. Gmail); Gmail "Send mail as" must have info@emplearnings.com verified.
+        this.fromEmail = 'info@emplearnings.com';
         this.fromName = process.env.SMTP_FROM_NAME || 'Empowered Learnings';
     }
 
