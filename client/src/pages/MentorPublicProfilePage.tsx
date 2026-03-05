@@ -35,6 +35,14 @@ type PublicTutorProfile = {
         };
     }[];
     total_students: number;
+    external_reviews?: {
+        id: string;
+        platform: string;
+        reviewer: string;
+        rating: number;
+        comment: string | null;
+        date: string | null;
+    }[];
 };
 
 const MentorPublicProfilePage: React.FC = () => {
@@ -363,11 +371,44 @@ const MentorPublicProfilePage: React.FC = () => {
                                                     )}
                                                 </div>
                                             ) : (
-                                                <div className="text-center py-4">
-                                                    <div className="font-semibold text-gray-900">No External Reviews</div>
-                                                    <div className="text-sm text-gray-600 mt-1">
-                                                        No external reviews available yet.
-                                                    </div>
+                                                <div className="space-y-4">
+                                                    {mentor.external_reviews && mentor.external_reviews.length > 0 ? (
+                                                        mentor.external_reviews.map((review: any) => (
+                                                            <div key={review.id} className="border-b border-gray-100 pb-4 last:border-0 text-left">
+                                                                <div className="flex items-center justify-between mb-2">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-xs font-bold text-blue-600">
+                                                                            {review.reviewer?.charAt(0)?.toUpperCase()}
+                                                                        </div>
+                                                                        <div>
+                                                                            <div className="text-sm font-semibold text-gray-900">{review.reviewer}</div>
+                                                                            <div className="text-[10px] text-gray-500">via {review.platform}</div>
+                                                                        </div>
+                                                                    </div>
+                                                                    {review.date && (
+                                                                        <div className="text-xs text-gray-500">
+                                                                            {new Date(review.date).toLocaleDateString()}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                                <div className="flex items-center gap-1 mb-2">
+                                                                    {[...Array(5)].map((_, i) => (
+                                                                        <span key={i} className={`text-sm ${i < review.rating ? 'text-yellow-400' : 'text-gray-300'}`}>★</span>
+                                                                    ))}
+                                                                </div>
+                                                                {review.comment && (
+                                                                    <p className="text-sm text-gray-700">{review.comment}</p>
+                                                                )}
+                                                            </div>
+                                                        ))
+                                                    ) : (
+                                                        <div className="text-center py-4">
+                                                            <div className="font-semibold text-gray-900">No External Reviews</div>
+                                                            <div className="text-sm text-gray-600 mt-1">
+                                                                No external reviews available yet.
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             )}
                                         </div>

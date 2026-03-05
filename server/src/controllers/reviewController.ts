@@ -32,6 +32,18 @@ export const createReview = async (req: AuthRequest, res: Response) => {
             return res.status(404).json({ error: 'Tutor not found' });
         }
 
+        // Prevent duplicate reviews
+        const existingReview = await prisma.review.findFirst({
+            where: {
+                student_id: studentProfile.id,
+                tutor_id: tutorId
+            }
+        });
+
+        if (existingReview) {
+            return res.status(400).json({ error: 'You have already reviewed this mentor.' });
+        }
+
         // Optional: Check if student has actually had a lesson with this tutor
         // For now, we'll skipping this strict check or you can enforce it if lessonId is provided
 

@@ -37,6 +37,25 @@ type PublicTutorProfile = {
     }[];
     total_students: number;
     free_session_enabled?: boolean;
+    reviews?: {
+        id: string;
+        rating: number;
+        comment: string | null;
+        created_at: string;
+        student: {
+            id: string;
+            username: string;
+            profile_photo: string | null;
+        };
+    }[];
+    external_reviews?: {
+        id: string;
+        platform: string;
+        reviewer: string;
+        rating: number;
+        comment: string | null;
+        date: string | null;
+    }[];
 };
 
 const StudentMentorPublicProfilePage: React.FC = () => {
@@ -475,12 +494,82 @@ const StudentMentorPublicProfilePage: React.FC = () => {
                                     </div>
 
                                     <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-6 text-center">
-                                        <div className="font-semibold text-gray-900">No Reviews Yet</div>
-                                        <div className="text-sm text-gray-600 mt-1">
-                                            {tab === 'REVIEWS'
-                                                ? 'This tutor doesn\'t have any reviews yet.'
-                                                : 'No external reviews available yet.'}
-                                        </div>
+                                        {tab === 'REVIEWS' ? (
+                                            <div className="space-y-4">
+                                                {mentor.reviews && mentor.reviews.length > 0 ? (
+                                                    mentor.reviews.map((review: any) => (
+                                                        <div key={review.id} className="border-b border-gray-200 pb-4 last:border-0 text-left">
+                                                            <div className="flex items-center justify-between mb-2">
+                                                                <div className="flex items-center gap-2">
+                                                                    <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center text-xs font-bold text-purple-700">
+                                                                        {review.student?.username?.charAt(0)?.toUpperCase()}
+                                                                    </div>
+                                                                    <div className="text-sm font-semibold text-gray-900">{review.student?.username}</div>
+                                                                </div>
+                                                                <div className="text-xs text-gray-500">
+                                                                    {new Date(review.created_at).toLocaleDateString()}
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex items-center gap-1 mb-2">
+                                                                {[...Array(5)].map((_, i) => (
+                                                                    <span key={i} className={`text-sm ${i < review.rating ? 'text-yellow-400' : 'text-gray-300'}`}>★</span>
+                                                                ))}
+                                                            </div>
+                                                            {review.comment && (
+                                                                <p className="text-sm text-gray-700">{review.comment}</p>
+                                                            )}
+                                                        </div>
+                                                    ))
+                                                ) : (
+                                                    <div className="text-center py-4">
+                                                        <div className="font-semibold text-gray-900">No Reviews Yet</div>
+                                                        <div className="text-sm text-gray-600 mt-1">
+                                                            This tutor doesn't have any reviews yet.
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-4">
+                                                {mentor.external_reviews && mentor.external_reviews.length > 0 ? (
+                                                    mentor.external_reviews.map((review: any) => (
+                                                        <div key={review.id} className="border-b border-gray-200 pb-4 last:border-0 text-left">
+                                                            <div className="flex items-center justify-between mb-2">
+                                                                <div className="flex items-center gap-2">
+                                                                    <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-xs font-bold text-blue-600">
+                                                                        {review.reviewer?.charAt(0)?.toUpperCase()}
+                                                                    </div>
+                                                                    <div>
+                                                                        <div className="text-sm font-semibold text-gray-900">{review.reviewer}</div>
+                                                                        <div className="text-[10px] text-gray-500">via {review.platform}</div>
+                                                                    </div>
+                                                                </div>
+                                                                {review.date && (
+                                                                    <div className="text-xs text-gray-500">
+                                                                        {new Date(review.date).toLocaleDateString()}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                            <div className="flex items-center gap-1 mb-2">
+                                                                {[...Array(5)].map((_, i) => (
+                                                                    <span key={i} className={`text-sm ${i < review.rating ? 'text-yellow-400' : 'text-gray-300'}`}>★</span>
+                                                                ))}
+                                                            </div>
+                                                            {review.comment && (
+                                                                <p className="text-sm text-gray-700">{review.comment}</p>
+                                                            )}
+                                                        </div>
+                                                    ))
+                                                ) : (
+                                                    <div className="text-center py-4">
+                                                        <div className="font-semibold text-gray-900">No External Reviews</div>
+                                                        <div className="text-sm text-gray-600 mt-1">
+                                                            No external reviews available yet.
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
                                 </Card>
 

@@ -204,6 +204,7 @@ export const getPublicTutorById = async (req: Request, res: Response) => {
                     }
                 },
                 certifications: {
+                    where: { verification_status: 'APPROVED' },
                     select: {
                         id: true,
                         name: true,
@@ -213,6 +214,34 @@ export const getPublicTutorById = async (req: Request, res: Response) => {
                         is_verified: true,
                     }
                 },
+                external_reviews: {
+                    where: { verification_status: 'APPROVED' },
+                    select: {
+                        id: true,
+                        platform: true,
+                        reviewer: true,
+                        rating: true,
+                        comment: true,
+                        date: true,
+                    },
+                    orderBy: { date: 'desc' }
+                },
+                reviews: {
+                    select: {
+                        id: true,
+                        rating: true,
+                        comment: true,
+                        created_at: true,
+                        student: {
+                            select: {
+                                id: true,
+                                username: true,
+                                profile_photo: true,
+                            }
+                        }
+                    },
+                    orderBy: { created_at: 'desc' }
+                }
             }
         });
 
