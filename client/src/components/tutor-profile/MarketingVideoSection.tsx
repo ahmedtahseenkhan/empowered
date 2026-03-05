@@ -28,7 +28,7 @@ export const MarketingVideoSection: React.FC<{ onBack: () => void; tutorUsername
     const [instructions, setInstructions] = useState('');
     const [submission, setSubmission] = useState<MarketingVideoSubmission | null>(null);
 
-    const supportEmail = 'support@empoweredlearnings.com';
+    const supportEmail = 'info@emplearnings.com';
 
     const mailtoHref = useMemo(() => {
         const subject = `Marketing Video Submission - ${tutorUsername || 'Tutor'}`;

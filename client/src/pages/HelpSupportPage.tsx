@@ -111,7 +111,7 @@ const HelpSupportPage: React.FC = () => {
                             <span className="text-3xl">📧</span>
                         </div>
                         <h3 className="font-bold text-gray-900 mb-2">Email Us</h3>
-                        <p className="text-sm text-gray-600">support@empoweredlearnings.com</p>
+                        <p className="text-sm text-gray-600">info@emplearnings.com</p>
                     </div>
 
                     <div className="bg-white rounded-2xl shadow-md p-6 text-center">

@@ -385,7 +385,7 @@ const StudentMentorPublicProfilePage: React.FC = () => {
                                                 className="border-green-500 text-green-700 hover:bg-green-50"
                                                 onClick={() => document.getElementById('free-session-card')?.scrollIntoView({ behavior: 'smooth' })}
                                             >
-                                                Book free 25-min session
+                                                Book a Free intro Session
                                             </Button>
                                         )}
                                         {!isPreview && (
@@ -396,7 +396,7 @@ const StudentMentorPublicProfilePage: React.FC = () => {
                                                     navigate(`/student/book/${mentor.id}?${qs.toString()}`);
                                                 }}
                                             >
-                                                Book Session
+                                                Start Weekly Sessions
                                             </Button>
                                         )}
                                     </div>
@@ -625,43 +625,27 @@ const StudentMentorPublicProfilePage: React.FC = () => {
                                     </Modal>
                                 )}
 
-                                <Card className="p-6">
-                                    <h2 className="text-lg font-bold text-gray-900 mb-3">{isPreview ? 'Availability' : 'Book a Session'}</h2>
-                                    <div className="text-sm text-gray-600 mb-4">Select a date to see available times (shown in your local timezone: {studentTimezone}).</div>
+                                <Card className="p-4">
+                                    <h2 className="text-base font-bold text-gray-900 mb-2">{isPreview ? 'Availability' : 'Book a Session'}</h2>
+                                    <p className="text-xs text-gray-500 mb-3">Select a date (your timezone: {studentTimezone})</p>
 
                                     {slotsBusy ? (
-                                        <div className="text-sm text-gray-600">Loading availability...</div>
+                                        <div className="text-xs text-gray-500 py-2">Loading...</div>
                                     ) : !calendarMeta ? null : (
-                                        <div className="rounded-xl border border-gray-200 bg-white p-4">
-                                            <div className="flex items-center justify-between mb-3">
-                                                <div className="font-bold text-gray-900">{calendarMeta.monthLabel}</div>
-                                                <div className="flex items-center gap-2">
-                                                    <button
-                                                        type="button"
-                                                        className="h-8 w-8 rounded-lg border border-gray-200 hover:bg-gray-50"
-                                                        onClick={() => setMonthOffset((v) => v - 1)}
-                                                    >
-                                                        {'<'}
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        className="h-8 w-8 rounded-lg border border-gray-200 hover:bg-gray-50"
-                                                        onClick={() => setMonthOffset((v) => v + 1)}
-                                                    >
-                                                        {'>'}
-                                                    </button>
+                                        <div className="rounded-lg border border-gray-200 bg-gray-50/50 p-3">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <span className="text-sm font-semibold text-gray-800">{calendarMeta.monthLabel}</span>
+                                                <div className="flex items-center gap-1">
+                                                    <button type="button" className="h-7 w-7 rounded-md border border-gray-200 bg-white hover:bg-gray-50 text-gray-600 text-sm" onClick={() => setMonthOffset((v) => v - 1)}>{'<'}</button>
+                                                    <button type="button" className="h-7 w-7 rounded-md border border-gray-200 bg-white hover:bg-gray-50 text-gray-600 text-sm" onClick={() => setMonthOffset((v) => v + 1)}>{'>'}</button>
                                                 </div>
                                             </div>
-
-                                            <div className="grid grid-cols-7 text-xs text-gray-500 mb-2">
-                                                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
-                                                    <div key={d} className="text-center py-1">{d}</div>
-                                                ))}
+                                            <div className="grid grid-cols-7 text-[10px] text-gray-500 mb-1">
+                                                {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <div key={i} className="text-center">{d}</div>)}
                                             </div>
-
-                                            <div className="grid grid-cols-7 gap-2">
+                                            <div className="grid grid-cols-7 gap-1">
                                                 {calendarMeta.cells.map((c, idx) => {
-                                                    if (!c.day || !c.dayKey) return <div key={idx} className="h-10" />;
+                                                    if (!c.day || !c.dayKey) return <div key={idx} className="h-7" />;
                                                     const isAvailable = availableDayKeys.has(c.dayKey);
                                                     const isSelected = selectedDayKey === c.dayKey;
                                                     return (
@@ -670,34 +654,29 @@ const StudentMentorPublicProfilePage: React.FC = () => {
                                                             type="button"
                                                             disabled={!isAvailable}
                                                             onClick={() => setSelectedDayKey(c.dayKey || '')}
-                                                            className={`h-10 rounded-lg text-sm border transition-colors ${!isAvailable
-                                                                ? 'bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed'
-                                                                : isSelected
-                                                                    ? 'bg-purple-600 text-white border-purple-600'
-                                                                    : 'bg-white text-gray-900 border-green-300 hover:bg-green-50'}`}
+                                                            className={`h-7 min-w-0 rounded text-xs font-medium transition-colors ${!isAvailable ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : isSelected ? 'bg-purple-600 text-white shadow-sm' : 'bg-white text-gray-700 border border-gray-200 hover:border-purple-300 hover:bg-purple-50/50'}`}
                                                         >
                                                             {c.day}
                                                         </button>
                                                     );
                                                 })}
                                             </div>
-
-                                            <div className="flex items-center gap-4 text-xs text-gray-600 mt-4">
-                                                <div className="flex items-center gap-2"><span className="inline-block h-3 w-3 rounded border border-green-400 bg-white" /> Available</div>
-                                                <div className="flex items-center gap-2"><span className="inline-block h-3 w-3 rounded border border-gray-200 bg-gray-50" /> Not available</div>
+                                            <div className="flex items-center gap-3 mt-2 text-[10px] text-gray-500">
+                                                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-400" /> Available</span>
+                                                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-gray-200" /> Unavailable</span>
                                             </div>
                                         </div>
                                     )}
 
                                     {selectedDayKey && (slotsByDay.get(selectedDayKey) || []).length > 0 && (
-                                        <div className="mt-4">
-                                            <div className="text-sm font-bold text-gray-900 mb-2">Available times</div>
-                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                                {(slotsByDay.get(selectedDayKey) || []).slice(0, 12).map((s) => (
+                                        <div className="mt-3 pt-3 border-t border-gray-100">
+                                            <p className="text-xs font-semibold text-gray-700 mb-2">Available times</p>
+                                            <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5">
+                                                {(slotsByDay.get(selectedDayKey) || []).slice(0, 8).map((s) => (
                                                     <button
                                                         key={s.start}
                                                         type="button"
-                                                        className={`px-3 py-2 rounded-lg text-sm border border-gray-200 ${isPreview ? 'bg-gray-50 text-gray-400 cursor-not-allowed' : 'hover:bg-gray-50'}`}
+                                                        className="px-2 py-1.5 rounded-md text-xs font-medium border border-gray-200 bg-white hover:bg-purple-50 hover:border-purple-200 text-gray-700 disabled:opacity-50"
                                                         disabled={isPreview}
                                                         onClick={() => {
                                                             if (isPreview) return;
@@ -713,18 +692,9 @@ const StudentMentorPublicProfilePage: React.FC = () => {
                                                 ))}
                                             </div>
                                             {!isPreview && (
-                                                <div className="mt-4">
-                                                    <Button
-                                                        onClick={() => {
-                                                            const qs = new URLSearchParams();
-                                                            qs.set('frequency', frequency);
-                                                            if (selectedDayKey) qs.set('day', selectedDayKey);
-                                                            navigate(`/student/book/${mentor.id}?${qs.toString()}`);
-                                                        }}
-                                                    >
-                                                        Continue to Booking
-                                                    </Button>
-                                                </div>
+                                                <Button size="sm" className="mt-3 w-full" onClick={() => { const qs = new URLSearchParams(); qs.set('frequency', frequency); if (selectedDayKey) qs.set('day', selectedDayKey); navigate(`/student/book/${mentor.id}?${qs.toString()}`); }}>
+                                                    Continue to Booking
+                                                </Button>
                                             )}
                                         </div>
                                     )}

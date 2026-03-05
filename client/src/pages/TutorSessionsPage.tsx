@@ -109,6 +109,7 @@ const TutorSessionsPage: React.FC = () => {
 
     const mapBillingToBadge = (lesson: Lesson) => {
         const billing = (lesson.billing_type || '').toUpperCase();
+        const status = (lesson.status || '').toUpperCase();
         if (billing === 'FREE_INTRO') {
             return (
                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-50 text-green-700 border border-green-200">
@@ -116,22 +117,15 @@ const TutorSessionsPage: React.FC = () => {
                 </span>
             );
         }
-        if (billing === 'FREE_TRIAL') {
+        if (status === 'PENDING' || status === 'BOOKED') {
             return (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                    Free trial
-                </span>
-            );
-        }
-        if (lesson.booking?.frequency && lesson.booking.frequency !== 'ONCE') {
-            return (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
-                    Subscription
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                    Pending
                 </span>
             );
         }
         return (
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
                 Paid
             </span>
         );
@@ -172,7 +166,7 @@ const TutorSessionsPage: React.FC = () => {
                                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                                     <div>
                                         <div className="flex items-center gap-2 flex-wrap">
-                                            <span className="text-sm text-gray-500">{l.status}</span>
+                                            <span className="text-sm text-gray-500 capitalize">{l.status.toLowerCase()}</span>
                                             {mapBillingToBadge(l)}
                                         </div>
                                         <div className="text-lg font-bold text-gray-900 mt-1">{l.student?.username || 'Student'}</div>

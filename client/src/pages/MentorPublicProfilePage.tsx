@@ -248,7 +248,7 @@ const MentorPublicProfilePage: React.FC = () => {
                                                         navigate(`/book/${mentor.id}?${qs.toString()}`);
                                                     }}
                                                 >
-                                                    Book Session
+                                                    Start Weekly Sessions
                                                 </Button>
                                             )}
                                         </div>

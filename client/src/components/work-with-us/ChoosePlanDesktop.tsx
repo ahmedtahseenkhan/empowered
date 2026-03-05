@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { FaRocket, FaStar, FaCrown, FaCheck, FaShieldAlt, FaUsers } from 'react-icons/fa';
+import { FaRocket, FaStar, FaCrown, FaCheck, FaTimes, FaShieldAlt, FaUsers } from 'react-icons/fa';
 import { Clock, Star } from '../../assets';
 
 const ChoosePlanDesktop = ({
@@ -31,14 +31,14 @@ const ChoosePlanDesktop = ({
                 "1-month free trial",
             ],
             notIncluded: [
-                "Featured mentor badge + marketplace boost",
-                "Intro video on public profile",
-                "Profile highlights + outside reviews",
-                "Social media spotlight",
-                "Profile performance insights (views & clicks)",
-                "Weekly dedicated ad placement (platform channel)",
+                "Marketplace boost",
+                "Intro video on profile",
+                "Profile highlights & outside reviews",
+                "Social media promotion",
+                "Dedicated ad placement",
+                "AI-assisted lesson planning",
                 "Sell pre-recorded courses",
-                "Multiple searchable listings",
+                "Profile performance insights",
             ],
         },
         {
@@ -70,9 +70,10 @@ const ChoosePlanDesktop = ({
                 "1-month free trial",
             ],
             notIncluded: [
-                "Weekly dedicated ad placement (platform channel)",
-                "Sell pre-recorded courses",
-                "Multiple major categories",
+                "Weekly promotion",
+                "Dedicated ad placement",
+                "AI-assisted lesson planning",
+                "Multiple Major Categories",
             ],
         },
         {
@@ -104,6 +105,7 @@ const ChoosePlanDesktop = ({
                 "Student portal access",
                 "1-month free trial",
             ],
+            notIncluded: [],
         },
     ];
 
@@ -174,7 +176,7 @@ const ChoosePlanDesktop = ({
                                 </div>
 
                                 {/* Features */}
-                                <div className="space-y-4 mb-8 flex-grow">
+                                <div className="space-y-4 mb-4 flex-grow">
                                     {plan.features.map((feature, featureIndex) => (
                                         <div key={featureIndex} className="flex items-start gap-3">
                                             <div className="mt-1 p-1 rounded-full bg-green-100 flex-shrink-0">
@@ -184,6 +186,19 @@ const ChoosePlanDesktop = ({
                                         </div>
                                     ))}
                                 </div>
+
+                                {(plan.notIncluded?.length ?? 0) > 0 && (
+                                    <div className="mb-6 pt-4 border-t border-gray-200 space-y-2">
+                                        {plan.notIncluded.map((item, idx) => (
+                                            <div key={idx} className="flex items-start gap-3">
+                                                <div className="mt-0.5 p-1 rounded-full bg-red-50 flex-shrink-0">
+                                                    <FaTimes className="w-3 h-3 text-red-500" />
+                                                </div>
+                                                <p className="text-sm text-gray-500 leading-snug">{item}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
 
                                 {/* CTA Button */}
                                 <button

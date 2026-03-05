@@ -5,7 +5,7 @@ import { PageLayout } from '../layouts/PageLayout';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
-import { Check, Shield, CreditCard, Mail } from 'lucide-react';
+import { Check, X, Shield, CreditCard, Mail } from 'lucide-react';
 import api from '../api/axios';
 
 const STEPS = [
@@ -37,14 +37,15 @@ const TutorRegisterPage: React.FC = () => {
             id: 'STANDARD',
             priceId: 'price_1StboAByCQ0ee0A8u7BMs9cl',
             name: 'Standard',
-            priceLabel: '$35',
+            priceLabel: '$25',
             billingLabel: '/month',
-            tagline: 'For those seeking a strong online presence',
+            tagline: 'For mentors building their online presence',
             highlights: [
-                'Public mentor profile (searchable)',
-                'Session scheduling & rescheduling',
+                'Primary public mentor profile',
+                '1 searchable listing (1 major category + 1 subcategory)',
+                'Online scheduling & session management',
                 'Weekly recurring session setup',
-                'Secure payments with weekly billing',
+                'Secure student payments (weekly billing)',
                 'Automated email reminders',
                 'Dedicated meeting link for each session',
                 'Student portal access',
@@ -52,41 +53,78 @@ const TutorRegisterPage: React.FC = () => {
                 'Platform onboarding & support',
                 '1-month free trial',
             ],
+            notIncluded: [
+                'Marketplace boost',
+                'Intro video on profile',
+                'Profile highlights & outside reviews',
+                'Social media promotion',
+                'Dedicated ad placement',
+                'AI-assisted lesson planning',
+                'Sell pre-recorded courses',
+                'Profile performance insights',
+            ],
         },
         {
             id: 'PRO',
             priceId: 'price_1StboXByCQ0ee0A8GeuDW77K',
             name: 'Pro',
-            priceLabel: '$65',
+            priceLabel: '$45',
             billingLabel: '/month',
-            tagline: 'For the growing business ready to scale',
+            tagline: 'For mentors ready to grow visibility',
             highlights: [
-                'Public mentor profile with intro video',
-                'AI-assisted lesson planning',
-                'Featured mentor listing on marketplace',
-                'Featured mentor badge',
-                'Social media spotlight',
+                'Primary public mentor profile',
+                'Up to 3 searchable listings (1 major + up to 3 subcategories)',
+                'Featured mentor badge + marketplace boost',
+                'Intro video on public profile',
+                'Profile highlights + outside reviews',
+                'Monthly social media spotlight',
                 'Profile performance insights (views & clicks)',
+                'Online scheduling & session management',
+                'Weekly recurring session setup',
+                'Secure student payments (weekly billing)',
+                'Automated email reminders',
+                'Dedicated meeting link for each session',
+                'Student portal access',
+                'Mentor dashboard',
                 'Platform onboarding & support',
                 '1-month free trial',
+            ],
+            notIncluded: [
+                'Weekly promotion',
+                'Dedicated ad placement',
+                'AI-assisted lesson planning',
+                'Multiple Major Categories',
             ],
         },
         {
             id: 'PREMIUM',
             priceId: 'price_1StbozByCQ0ee0A8vJMmBvce',
             name: 'Premium',
-            priceLabel: '$135',
+            priceLabel: '$85',
             billingLabel: '/month',
-            tagline: 'For those looking to diversify their reach and maximize revenue',
+            tagline: 'For mentors maximizing reach & revenue',
             popular: true,
             highlights: [
-                'Premium mentor profile design',
+                'Primary public mentor profile',
+                'Multiple searchable listings (up to 3 major categories + 3 subcategories)',
+                'Maximum marketplace visibility',
+                'Featured mentor badge + priority placement',
+                'Intro video on profile',
+                'Weekly social media highlight',
+                'Weekly dedicated ad placement (platform channel)',
+                'AI-assisted lesson planning (templates + outlines)',
                 'Sell pre-recorded courses',
-                'Monthly social media spotlight',
-                'Ability to list services in multiple categories',
+                'Profile performance insights',
                 'Priority onboarding & support',
+                'Online scheduling & session management',
+                'Weekly recurring session setup',
+                'Secure student payments (weekly billing)',
+                'Automated email reminders',
+                'Dedicated meeting link for each session',
+                'Student portal access',
                 '1-month free trial',
             ],
+            notIncluded: [],
         },
     ];
 
@@ -232,28 +270,28 @@ const TutorRegisterPage: React.FC = () => {
                     <div className="space-y-6">
                         <h2 className="text-2xl font-bold text-gray-900">Terms & Conditions</h2>
                         <div className="h-64 overflow-y-auto border border-gray-200 rounded-lg p-4 text-sm text-gray-600 bg-gray-50 prose prose-sm max-w-none">
-                            <p className="text-xs text-gray-500 mb-4">Last updated: {new Date().toLocaleDateString()}</p>
+                            <p className="text-gray-600 mb-4">By joining EmpowerEd Learnings as a mentor, you agree to the following:</p>
 
                             <h3 className="font-bold text-gray-900 mt-4 mb-2">1. Mentor Responsibilities</h3>
-                            <p>As a mentor on EmpowerEd Learnings, you agree to provide high-quality educational services, maintain professional conduct, and adhere to scheduled sessions with students.</p>
+                            <p>You agree to provide professional, high-quality services, maintain respectful conduct, and honor scheduled sessions. You are responsible for your session content, communications, and clearly stating your refund or session-credit policy (if any). If a refund or session credit is issued, it must follow the Platform's policies and the terms shown to students at checkout/booking.</p>
 
-                            <h3 className="font-bold text-gray-900 mt-4 mb-2">2. Payment Structure</h3>
-                            <p>Mentors keep 100% of their earnings. You set your own rates and payment is processed through our secure payment system. Payments are typically released within 3-5 business days after session completion.</p>
+                            <h3 className="font-bold text-gray-900 mt-4 mb-2">2. Independent Contractor Status</h3>
+                            <p>You are an independent contractor and not an employee, partner, or agent of EmpowerEd Learnings. You are responsible for your own taxes, compliance, licenses, and business obligations.</p>
 
-                            <h3 className="font-bold text-gray-900 mt-4 mb-2">3. Code of Conduct</h3>
-                            <p>Mentors must maintain professional behavior at all times, respect student privacy, and provide a safe, inclusive learning environment. Any violation may result in account suspension or termination.</p>
+                            <h3 className="font-bold text-gray-900 mt-4 mb-2">3. Payment Structure</h3>
+                            <p>Mentors keep 100% of session earnings. EmpowerEd does not take commission. Payments are processed through Stripe, and payment processing fees apply per the provider's fee structure. Payout timing is subject to the payment processor's schedule.</p>
 
-                            <h3 className="font-bold text-gray-900 mt-4 mb-2">4. Intellectual Property</h3>
-                            <p>You retain all rights to your teaching materials and content. By using our platform, you grant EmpowerEd Learnings a limited license to display your profile and materials for the purpose of connecting you with students.</p>
+                            <h3 className="font-bold text-gray-900 mt-4 mb-2">4. Code of Conduct</h3>
+                            <p>You must maintain professional, lawful, and respectful conduct and provide a safe learning environment. Violations, repeated complaints, or unsafe behavior, especially involving minors, may result in suspension or termination without refund.</p>
 
-                            <h3 className="font-bold text-gray-900 mt-4 mb-2">5. Cancellation Policy</h3>
-                            <p>Mentors should provide at least 24 hours notice for session cancellations. Repeated last-minute cancellations may affect your mentor rating and account standing.</p>
+                            <h3 className="font-bold text-gray-900 mt-4 mb-2">5. Intellectual Property</h3>
+                            <p>You retain ownership of your teaching materials. You grant EmpowerEd a limited license to display your profile and related materials to operate and promote the marketplace.</p>
 
-                            <h3 className="font-bold text-gray-900 mt-4 mb-2">6. Termination</h3>
-                            <p>Either party may terminate this agreement at any time. Upon termination, you will receive payment for all completed sessions, and your profile will be removed from the platform.</p>
+                            <h3 className="font-bold text-gray-900 mt-4 mb-2">6. Cancellations</h3>
+                            <p>The platform does not allow last-minute cancellations (within 24 hours of the session start time) by either students or mentors. Last-minute cancellations may result in a forfeited session and loss of payment.</p>
 
-                            <h3 className="font-bold text-gray-900 mt-4 mb-2">7. Contact</h3>
-                            <p>For questions about this agreement, please contact us at mentors@emplearnings.com</p>
+                            <h3 className="font-bold text-gray-900 mt-4 mb-2">7. Termination & Subscription Cancellation</h3>
+                            <p>EmpowerEd may suspend or terminate accounts immediately for violations of platform policies or safety concerns. You may cancel your subscription at any time before the next billing cycle to stop future charges. Upon cancellation/termination, you will receive payment for completed sessions processed prior to termination (subject to processor timelines), and your profile will be removed from the platform. Subscription fees are non-refundable unless required by law.</p>
                         </div>
                         <div className="flex items-center gap-2">
                             <input type="checkbox" id="accept-terms" className="w-4 h-4 text-primary-600 rounded" />
@@ -313,6 +351,18 @@ const TutorRegisterPage: React.FC = () => {
                                                 </div>
                                             ))}
                                         </div>
+                                        {plan.notIncluded?.length > 0 && (
+                                            <div className="mt-4 pt-4 border-t border-gray-100 space-y-2">
+                                                {plan.notIncluded.map((item, idx) => (
+                                                    <div key={idx} className="flex items-start gap-3">
+                                                        <div className="mt-0.5 rounded-full bg-red-50 p-1 flex-shrink-0">
+                                                            <X className="w-3 h-3 text-red-500" />
+                                                        </div>
+                                                        <div className="text-sm text-gray-500 leading-snug">{item}</div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
                                     </button>
                                 );
                             })}

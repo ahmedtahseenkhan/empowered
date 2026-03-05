@@ -9,63 +9,56 @@ export const MentorAgreementPage: React.FC = () => {
                     <h1 className="heading-xl mb-8 text-center">Mentor Agreement</h1>
 
                     <div className="prose prose-lg max-w-none space-y-6 text-gray-700">
-                        <p className="text-sm text-gray-500">Last updated: {new Date().toLocaleDateString()}</p>
+                        <p className="text-gray-600 leading-relaxed">
+                            By joining EmpowerEd Learnings as a mentor, you agree to the following:
+                        </p>
 
                         <section>
                             <h2 className="text-2xl font-semibold text-gray-900 mt-8 mb-4">1. Mentor Responsibilities</h2>
                             <p>
-                                As a mentor on EmpowerEd Learnings, you agree to provide high-quality educational services,
-                                maintain professional conduct, and adhere to scheduled sessions with students.
+                                You agree to provide professional, high-quality services, maintain respectful conduct, and honor scheduled sessions. You are responsible for your session content, communications, and clearly stating your refund or session-credit policy (if any). If a refund or session credit is issued, it must follow the Platform's policies and the terms shown to students at checkout/booking.
                             </p>
                         </section>
 
                         <section>
-                            <h2 className="text-2xl font-semibold text-gray-900 mt-8 mb-4">2. Payment Structure</h2>
+                            <h2 className="text-2xl font-semibold text-gray-900 mt-8 mb-4">2. Independent Contractor Status</h2>
                             <p>
-                                Mentors keep 100% of their earnings. You set your own rates and payment is processed through
-                                our secure payment system. Payments are typically released within 3-5 business days after
-                                session completion.
+                                You are an independent contractor and not an employee, partner, or agent of EmpowerEd Learnings. You are responsible for your own taxes, compliance, licenses, and business obligations.
                             </p>
                         </section>
 
                         <section>
-                            <h2 className="text-2xl font-semibold text-gray-900 mt-8 mb-4">3. Code of Conduct</h2>
+                            <h2 className="text-2xl font-semibold text-gray-900 mt-8 mb-4">3. Payment Structure</h2>
                             <p>
-                                Mentors must maintain professional behavior at all times, respect student privacy, and provide
-                                a safe, inclusive learning environment. Any violation may result in account suspension or
-                                termination.
+                                Mentors keep 100% of session earnings. EmpowerEd does not take commission. Payments are processed through Stripe, and payment processing fees apply per the provider's fee structure. Payout timing is subject to the payment processor's schedule.
                             </p>
                         </section>
 
                         <section>
-                            <h2 className="text-2xl font-semibold text-gray-900 mt-8 mb-4">4. Intellectual Property</h2>
+                            <h2 className="text-2xl font-semibold text-gray-900 mt-8 mb-4">4. Code of Conduct</h2>
                             <p>
-                                You retain all rights to your teaching materials and content. By using our platform, you grant
-                                EmpowerEd Learnings a limited license to display your profile and materials for the purpose of
-                                connecting you with students.
+                                You must maintain professional, lawful, and respectful conduct and provide a safe learning environment. Violations, repeated complaints, or unsafe behavior, especially involving minors, may result in suspension or termination without refund.
                             </p>
                         </section>
 
                         <section>
-                            <h2 className="text-2xl font-semibold text-gray-900 mt-8 mb-4">5. Cancellation Policy</h2>
+                            <h2 className="text-2xl font-semibold text-gray-900 mt-8 mb-4">5. Intellectual Property</h2>
                             <p>
-                                Mentors should provide at least 24 hours notice for session cancellations. Repeated last-minute
-                                cancellations may affect your mentor rating and account standing.
+                                You retain ownership of your teaching materials. You grant EmpowerEd a limited license to display your profile and related materials to operate and promote the marketplace.
                             </p>
                         </section>
 
                         <section>
-                            <h2 className="text-2xl font-semibold text-gray-900 mt-8 mb-4">6. Termination</h2>
+                            <h2 className="text-2xl font-semibold text-gray-900 mt-8 mb-4">6. Cancellations</h2>
                             <p>
-                                Either party may terminate this agreement at any time. Upon termination, you will receive payment
-                                for all completed sessions, and your profile will be removed from the platform.
+                                The platform does not allow last-minute cancellations (within 24 hours of the session start time) by either students or mentors. Last-minute cancellations may result in a forfeited session and loss of payment.
                             </p>
                         </section>
 
                         <section>
-                            <h2 className="text-2xl font-semibold text-gray-900 mt-8 mb-4">7. Contact</h2>
+                            <h2 className="text-2xl font-semibold text-gray-900 mt-8 mb-4">7. Termination & Subscription Cancellation</h2>
                             <p>
-                                For questions about this agreement, please contact us at mentors@emplearnings.com
+                                EmpowerEd may suspend or terminate accounts immediately for violations of platform policies or safety concerns. You may cancel your subscription at any time before the next billing cycle to stop future charges. Upon cancellation/termination, you will receive payment for completed sessions processed prior to termination (subject to processor timelines), and your profile will be removed from the platform. Subscription fees are non-refundable unless required by law.
                             </p>
                         </section>
                     </div>

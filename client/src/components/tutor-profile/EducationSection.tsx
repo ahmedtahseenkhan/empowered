@@ -95,6 +95,18 @@ export const EducationSection: React.FC<EducationSectionProps> = ({ onBack }) =>
     }, []);
 
     const handleSave = async () => {
+        // If degree and field of study are selected, institution and year are required
+        if (degree && fieldOfStudy.trim()) {
+            if (!institution?.trim()) {
+                alert("Please select or enter Institution Name when you have selected a degree and field of study.");
+                return;
+            }
+            if (!gradYear) {
+                alert("Please select Graduation Year when you have selected a degree and field of study.");
+                return;
+            }
+        }
+
         setSaving(true);
         try {
             // Update Bio for Key Strengths (shared endpoint)
@@ -245,10 +257,11 @@ export const EducationSection: React.FC<EducationSectionProps> = ({ onBack }) =>
                                 onChange={(e) => setDegree(e.target.value)}
                             >
                                 <option value="">Select...</option>
+                                <option value="High School Diploma">High School Diploma</option>
+                                <option value="Associate">Associate</option>
                                 <option value="Bachelors">Bachelor's</option>
                                 <option value="Masters">Master's</option>
                                 <option value="PhD">PhD</option>
-                                <option value="Associate">Associate</option>
                             </select>
                         </div>
                         <Input
@@ -258,13 +271,13 @@ export const EducationSection: React.FC<EducationSectionProps> = ({ onBack }) =>
                             placeholder="your field of study ..."
                         />
                         <Input
-                            label="Institution Name"
+                            label={degree && fieldOfStudy ? "Institution Name*" : "Institution Name"}
                             value={institution}
                             onChange={(e) => setInstitution(e.target.value)}
                             placeholder="Your Institution name ..."
                         />
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Graduation Year</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">{degree && fieldOfStudy ? "Graduation Year*" : "Graduation Year"}</label>
                             <select
                                 className="w-full border border-gray-300 rounded-lg p-3 bg-white"
                                 value={gradYear}

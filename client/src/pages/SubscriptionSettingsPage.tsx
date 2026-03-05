@@ -38,14 +38,14 @@ const plans = [
             '1-month free trial',
         ],
         notIncluded: [
-            'Featured mentor badge + marketplace boost',
-            'Intro video on public profile',
-            'Profile highlights + outside reviews',
-            'Social media spotlight',
-            'Profile performance insights (views & clicks)',
-            'Weekly dedicated ad placement (platform channel)',
+            'Marketplace boost',
+            'Intro video on profile',
+            'Profile highlights & outside reviews',
+            'Social media promotion',
+            'Dedicated ad placement',
+            'AI-assisted lesson planning',
             'Sell pre-recorded courses',
-            'Multiple searchable listings',
+            'Profile performance insights',
         ],
     },
     {
@@ -79,9 +79,10 @@ const plans = [
             '1-month free trial',
         ],
         notIncluded: [
-            'Weekly dedicated ad placement (platform channel)',
-            'Sell pre-recorded courses',
-            'Multiple major categories',
+            'Weekly promotion',
+            'Dedicated ad placement',
+            'AI-assisted lesson planning',
+            'Multiple Major Categories',
         ],
     },
     {
@@ -304,10 +305,10 @@ const SubscriptionSettingsPage: React.FC = () => {
                                 <div
                                     key={plan.id}
                                     className={`relative bg-white rounded-xl border-2 transition-all duration-300 hover:shadow-md ${plan.popular && !isCurrentPlan
-                                            ? 'border-purple-400 shadow-sm'
-                                            : isCurrentPlan
-                                                ? 'border-green-400 bg-green-50/30'
-                                                : 'border-gray-200 hover:border-gray-300'
+                                        ? 'border-purple-400 shadow-sm'
+                                        : isCurrentPlan
+                                            ? 'border-green-400 bg-green-50/30'
+                                            : 'border-gray-200 hover:border-gray-300'
                                         }`}
                                 >
                                     {/* Popular badge */}
@@ -349,8 +350,8 @@ const SubscriptionSettingsPage: React.FC = () => {
                                             <p className="text-[11px] text-gray-400">{plan.billingNote}</p>
                                         </div>
 
-                                        {/* Features */}
-                                        <div className="mb-4">
+                                        {/* Features (included) */}
+                                        <div className="mb-3">
                                             <ul className="space-y-1.5">
                                                 {plan.features.slice(0, isExpanded ? undefined : 5).map((feature, idx) => (
                                                     <li key={idx} className="flex items-start gap-2 text-xs text-gray-600">
@@ -358,16 +359,6 @@ const SubscriptionSettingsPage: React.FC = () => {
                                                         <span>{feature}</span>
                                                     </li>
                                                 ))}
-                                                {plan.notIncluded.length > 0 && isExpanded && (
-                                                    <>
-                                                        {plan.notIncluded.map((feature, idx) => (
-                                                            <li key={`not-${idx}`} className="flex items-start gap-2 text-xs text-gray-400">
-                                                                <X className="w-3.5 h-3.5 text-gray-300 flex-shrink-0 mt-0.5" />
-                                                                <span className="line-through">{feature}</span>
-                                                            </li>
-                                                        ))}
-                                                    </>
-                                                )}
                                             </ul>
                                             {plan.features.length > 5 && (
                                                 <button
@@ -378,6 +369,26 @@ const SubscriptionSettingsPage: React.FC = () => {
                                                 </button>
                                             )}
                                         </div>
+                                        {plan.notIncluded.length > 0 && (
+                                            <>
+                                                <ul className="space-y-1.5 pt-2 border-t border-gray-100">
+                                                    {plan.notIncluded.slice(0, isExpanded ? undefined : 4).map((feature, idx) => (
+                                                        <li key={`not-${idx}`} className="flex items-start gap-2 text-xs text-gray-500">
+                                                            <X className="w-3.5 h-3.5 text-red-500 flex-shrink-0 mt-0.5" />
+                                                            <span>{feature}</span>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                                {plan.notIncluded.length > 4 && (
+                                                    <button
+                                                        onClick={() => setExpandedPlan(isExpanded ? null : plan.id)}
+                                                        className="text-[11px] text-gray-500 font-medium mt-1 hover:underline"
+                                                    >
+                                                        {isExpanded ? 'Show less' : `+${plan.notIncluded.length - 4} more`}
+                                                    </button>
+                                                )}
+                                            </>
+                                        )}
 
                                         {/* CTA Button */}
                                         {isCurrentPlan ? (
@@ -388,10 +399,10 @@ const SubscriptionSettingsPage: React.FC = () => {
                                             <Button
                                                 size="sm"
                                                 className={`w-full text-sm ${plan.popular
-                                                        ? 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white'
-                                                        : plan.id === 'PREMIUM'
-                                                            ? 'bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white'
-                                                            : 'bg-gray-900 hover:bg-gray-800 text-white'
+                                                    ? 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white'
+                                                    : plan.id === 'PREMIUM'
+                                                        ? 'bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white'
+                                                        : 'bg-gray-900 hover:bg-gray-800 text-white'
                                                     }`}
                                                 onClick={() => handleChangePlan(plan.id, plan.priceId)}
                                             >

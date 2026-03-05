@@ -548,11 +548,11 @@ const TutorDashboard: React.FC = () => {
                                                                 </div>
                                                                 {lessonInfo.free > 0 && lessonInfo.paid > 0 && (
                                                                     <div className="text-[9px] text-gray-500">
-                                                                        {lessonInfo.free} free, {lessonInfo.paid} paid
+                                                                        {lessonInfo.free} intro, {lessonInfo.paid} paid
                                                                     </div>
                                                                 )}
                                                                 {lessonInfo.free > 0 && lessonInfo.paid === 0 && (
-                                                                    <div className="text-[9px] text-green-600">{lessonInfo.free} free</div>
+                                                                    <div className="text-[9px] text-green-600">{lessonInfo.free} free intro</div>
                                                                 )}
                                                                 {lessonInfo.paid > 0 && lessonInfo.free === 0 && (
                                                                     <div className="text-[9px] text-purple-600">{lessonInfo.paid} paid</div>
@@ -684,14 +684,14 @@ const TutorDashboard: React.FC = () => {
                                                         if (startMinutes < 0 || endMinutes > (endHour - startHour) * 60) return null;
 
                                                         const isFreeIntro = l.billing_type === 'FREE_INTRO';
-                                                        const isFreeTrial = l.billing_type === 'FREE_TRIAL';
-                                                        const isFree = isFreeIntro || isFreeTrial;
-                                                        const label = isFreeIntro ? 'Free intro' : isFreeTrial ? 'Free trial' : 'Paid';
+                                                        const isPending = l.billing_type === 'FREE_TRIAL' || l.status === 'PENDING' || l.status === 'BOOKED';
+                                                        const label = isFreeIntro ? 'Free intro' : isPending ? 'Pending' : 'Paid';
 
+                                                        const blockClass = isFreeIntro ? 'bg-green-50 border border-green-200 text-green-900' : (label === 'Pending' ? 'bg-amber-50 border border-amber-200 text-amber-900' : 'bg-purple-50 border border-purple-200 text-purple-900');
                                                         return (
                                                             <div
                                                                 key={l.id}
-                                                                className={`absolute left-1 right-1 rounded-md px-2 py-1 text-[10px] ${isFree ? 'bg-green-50 border border-green-200 text-green-900' : 'bg-purple-50 border border-purple-200 text-purple-900'}`}
+                                                                className={`absolute left-1 right-1 rounded-md px-2 py-1 text-[10px] ${blockClass}`}
                                                                 style={{ top, height }}
                                                                 title={`${l.student?.username || 'Student'} · ${label} (${l.status})`}
                                                                 onMouseDown={(e) => e.stopPropagation()}

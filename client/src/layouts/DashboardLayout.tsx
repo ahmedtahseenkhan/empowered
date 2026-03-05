@@ -62,9 +62,14 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
                         <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center text-primary-700 text-sm font-semibold shrink-0">
                             {user?.username?.charAt(0).toUpperCase() || 'U'}
                         </div>
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                             <p className="text-sm font-medium text-gray-900 truncate">{user?.username || 'User'}</p>
                             <p className="text-xs text-gray-500">★ 0 reviews</p>
+                            {user?.role !== 'STUDENT' && (
+                                <Link to="/profile/preview" className="text-xs text-primary-600 hover:text-primary-700 font-medium mt-1 inline-block">
+                                    View my profile
+                                </Link>
+                            )}
                         </div>
                     </div>
                 </div>
