@@ -134,7 +134,12 @@ export class StripeService {
                     },
                 ],
                 subscription_data: {
-                    trial_period_days: 60, // 2 months free trial
+                    trial_period_days: 60, // 2 months free trial — no charge today; first charge after trial
+                    trial_settings: {
+                        end_behavior: {
+                            missing_payment_method: 'cancel',
+                        },
+                    },
                     metadata: normalizedMetadata,
                 },
                 success_url: successUrl,

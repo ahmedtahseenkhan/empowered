@@ -20,19 +20,19 @@ const PLANS = [
     {
         id: 'STANDARD',
         productName: 'Standard Plan - $25/month (billed annually)',
-        productDescription: 'You will be charged $300 today, then $300 each year. Monthly equivalent $25.',
+        productDescription: '2 months free, then $300 per year. No charge today. Monthly equivalent $25.',
         annualAmountCents: 30000, // $300
     },
     {
         id: 'PRO',
         productName: 'Pro Plan - $45/month (billed annually)',
-        productDescription: 'You will be charged $540 today, then $540 each year. Monthly equivalent $45.',
+        productDescription: '2 months free, then $540 per year. No charge today. Monthly equivalent $45.',
         annualAmountCents: 54000, // $540
     },
     {
         id: 'PREMIUM',
         productName: 'Premium Plan - $85/month (billed annually)',
-        productDescription: 'You will be charged $1,020 today, then $1,020 each year. Monthly equivalent $85.',
+        productDescription: '2 months free, then $1,020 per year. No charge today. Monthly equivalent $85.',
         annualAmountCents: 102000, // $1020
     },
 ];

@@ -33,6 +33,7 @@ const TutorRegisterPage: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [serverPlans, setServerPlans] = useState<Array<{ id: string; priceId: string; annualAmount: number }>>([]);
 
+    // Same plan content as front page (ChoosePlanDesktop / SubscriptionSettingsPage)
     const plansBase = [
         {
             id: 'STANDARD',
@@ -41,10 +42,11 @@ const TutorRegisterPage: React.FC = () => {
             name: 'Standard',
             priceLabel: '$25',
             billingLabel: '/month',
+            billingNote: 'Billed annually',
             tagline: 'For mentors building their online presence',
             highlights: [
                 'Primary public mentor profile',
-                '1 searchable listing (1 major category + 1 subcategory)',
+                '1 searchable listing (listed in 1 major category + 1 subcategory)',
                 'Online scheduling & session management',
                 'Weekly recurring session setup',
                 'Secure student payments (weekly billing)',
@@ -73,10 +75,12 @@ const TutorRegisterPage: React.FC = () => {
             name: 'Pro',
             priceLabel: '$45',
             billingLabel: '/month',
+            billingNote: 'Billed annually',
             tagline: 'For mentors ready to grow visibility',
+            popular: true,
             highlights: [
                 'Primary public mentor profile',
-                'Up to 3 searchable listings (1 major + up to 3 subcategories)',
+                'Up to 3 searchable listings (1 major category + up to 3 subcategories)',
                 'Featured mentor badge + marketplace boost',
                 'Intro video on public profile',
                 'Profile highlights + outside reviews',
@@ -106,8 +110,8 @@ const TutorRegisterPage: React.FC = () => {
             name: 'Premium',
             priceLabel: '$85',
             billingLabel: '/month',
+            billingNote: 'Billed annually',
             tagline: 'For mentors maximizing reach & revenue',
-            popular: true,
             highlights: [
                 'Primary public mentor profile',
                 'Multiple searchable listings (up to 3 major categories + 3 subcategories)',
@@ -359,6 +363,9 @@ const TutorRegisterPage: React.FC = () => {
                                             <span className="text-4xl font-extrabold text-gray-900">{plan.priceLabel}</span>
                                             <span className="text-sm font-medium text-gray-600">{plan.billingLabel}</span>
                                         </div>
+                                        {plan.billingNote && (
+                                            <p className="text-sm text-gray-500 mt-1">{plan.billingNote}</p>
+                                        )}
                                         <div className="mt-5 space-y-3">
                                             {plan.highlights.map((h) => (
                                                 <div key={h} className="flex items-start gap-3">
