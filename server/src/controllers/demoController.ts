@@ -45,6 +45,20 @@ function getChicagoStartUTC(date: Date): Date {
     return new Date(Date.UTC(y, m, d, utcHour, 0, 0));
 }
 
+/** Convert Chicago local time (HH:MM) on the given UTC date to a UTC Date. */
+function chicagoTimeToUTC(cursor: Date, timeStr: string): Date {
+    const [h, m] = timeStr.split(':').map(Number);
+    if (Number.isNaN(h) || Number.isNaN(m)) return new Date(0);
+    const nineAmUTC = getChicagoStartUTC(new Date(cursor));
+    const minutesFromMidnight = h * 60 + m;
+    const minutesFromNine = minutesFromMidnight - 9 * 60;
+    return new Date(nineAmUTC.getTime() + minutesFromNine * 60 * 1000);
+}
+
+function overlap(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date): boolean {
+    return aStart < bEnd && bStart < aEnd;
+}
+
 export async function getDemoSlots(req: Request, res: Response) {
     try {
         const fromStr = (req.query.from as string)?.trim();
@@ -59,42 +73,56 @@ export async function getDemoSlots(req: Request, res: Response) {
         }
 
         const now = new Date();
+        const toEnd = new Date(to.getTime() + 24 * 60 * 60 * 1000);
+
+        const [availabilityRules, blocks, booked] = await Promise.all([
+            prisma.adminDemoAvailability.findMany({ orderBy: [{ day_of_week: 'asc' }, { start_time: 'asc' }] }),
+            prisma.adminDemoTimeBlock.findMany({
+                where: { start_time: { lt: toEnd }, end_time: { gt: from } },
+                select: { start_time: true, end_time: true },
+            }),
+            prisma.demoBooking.findMany({
+                where: { slot_start_time: { gte: from }, slot_end_time: { lte: toEnd } },
+                select: { slot_start_time: true, slot_end_time: true },
+            }),
+        ]);
+
         const slots: { start: string; end: string }[] = [];
         const cursor = new Date(from);
         cursor.setUTCHours(0, 0, 0, 0);
 
         while (cursor <= to) {
-            const startOfDay = getChicagoStartUTC(new Date(cursor));
-            let slotStart = new Date(startOfDay);
-            const endOfDay = new Date(slotStart);
-            endOfDay.setUTCHours(slotStart.getUTCHours() + (ADMIN_END_HOUR - ADMIN_START_HOUR), 0, 0);
+            const dayOfWeek = cursor.getUTCDay();
+            const windows = availabilityRules.filter((r) => r.day_of_week === dayOfWeek);
 
-            while (slotStart < endOfDay) {
-                const slotEnd = new Date(slotStart.getTime() + SLOT_DURATION_MINUTES * 60 * 1000);
-                const isPast = slotEnd.getTime() <= now.getTime();
-                if (slotEnd <= endOfDay && !isPast && slotStart >= from && slotEnd <= new Date(to.getTime() + 24 * 60 * 60 * 1000)) {
-                    slots.push({
-                        start: slotStart.toISOString(),
-                        end: slotEnd.toISOString(),
-                    });
+            for (const w of windows) {
+                const windowStart = chicagoTimeToUTC(cursor, w.start_time);
+                const windowEnd = chicagoTimeToUTC(cursor, w.end_time);
+                if (windowStart >= windowEnd) continue;
+
+                let slotStart = new Date(windowStart);
+                while (slotStart.getTime() + SLOT_DURATION_MINUTES * 60 * 1000 <= windowEnd.getTime()) {
+                    const slotEnd = new Date(slotStart.getTime() + SLOT_DURATION_MINUTES * 60 * 1000);
+                    const isPast = slotEnd.getTime() <= now.getTime();
+                    const inRange = slotStart >= from && slotEnd <= toEnd;
+                    if (!isPast && inRange) {
+                        const blocked = blocks.some((b) =>
+                            overlap(slotStart, slotEnd, b.start_time, b.end_time)
+                        );
+                        const alreadyBooked = booked.some((b) =>
+                            overlap(slotStart, slotEnd, b.slot_start_time, b.slot_end_time)
+                        );
+                        if (!blocked && !alreadyBooked) {
+                            slots.push({ start: slotStart.toISOString(), end: slotEnd.toISOString() });
+                        }
+                    }
+                    slotStart = slotEnd;
                 }
-                slotStart = slotEnd;
             }
             cursor.setUTCDate(cursor.getUTCDate() + 1);
         }
 
-        const booked = await prisma.demoBooking.findMany({
-            where: {
-                slot_start_time: { gte: from },
-                slot_end_time: { lte: new Date(to.getTime() + 24 * 60 * 60 * 1000) },
-            },
-            select: { slot_start_time: true },
-        });
-        const bookedSet = new Set(booked.map((b) => b.slot_start_time.toISOString()));
-
-        const available = slots.filter((s) => !bookedSet.has(s.start));
-
-        return res.json({ slots: available });
+        return res.json({ slots });
     } catch (e) {
         console.error('getDemoSlots error:', e);
         return res.status(500).json({ error: 'Failed to fetch demo slots' });

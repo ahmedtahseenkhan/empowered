@@ -19,6 +19,12 @@ import {
     adminReplyTicket,
     adminGetAnalytics,
     adminListDemoBookings,
+    adminGetDemoAvailability,
+    adminPutDemoAvailability,
+    adminListDemoBlocks,
+    adminCreateDemoBlock,
+    adminUpdateDemoBlock,
+    adminDeleteDemoBlock,
 } from '../controllers/adminController';
 
 const router = express.Router();
@@ -51,5 +57,13 @@ router.get('/support', adminListTickets);
 router.put('/support/:id/reply', adminReplyTicket);
 
 router.get('/demo-bookings', adminListDemoBookings);
+
+router.get('/demo-availability', adminGetDemoAvailability);
+router.put('/demo-availability', adminPutDemoAvailability);
+
+router.get('/demo-blocks', adminListDemoBlocks);
+router.post('/demo-blocks', adminCreateDemoBlock);
+router.put('/demo-blocks/:id', adminUpdateDemoBlock);
+router.delete('/demo-blocks/:id', adminDeleteDemoBlock);
 
 export default router;

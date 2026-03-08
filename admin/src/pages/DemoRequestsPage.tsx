@@ -112,7 +112,7 @@ const DemoRequestsPage: React.FC = () => {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">Demo Requests</h1>
-                    <p className="text-gray-600 mt-1">All demo call bookings (9 AM – 5 PM Dallas, TX).</p>
+                    <p className="text-gray-600 mt-1">All demo call bookings. Manage availability in Demo Availability.</p>
                 </div>
                 <div className="flex items-center gap-2">
                     <button

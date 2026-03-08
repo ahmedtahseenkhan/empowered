@@ -11,6 +11,7 @@ import SubscriptionsPage from './pages/SubscriptionsPage';
 import PaymentsPage from './pages/PaymentsPage';
 import SupportPage from './pages/SupportPage';
 import DemoRequestsPage from './pages/DemoRequestsPage';
+import DemoAvailabilityPage from './pages/DemoAvailabilityPage';
 import ProtectedRoute from './routes/ProtectedRoute';
 
 function App() {
@@ -31,6 +32,7 @@ function App() {
             <Route path="payments" element={<PaymentsPage />} />
             <Route path="support" element={<SupportPage />} />
             <Route path="demo-requests" element={<DemoRequestsPage />} />
+            <Route path="demo-availability" element={<DemoAvailabilityPage />} />
           </Route>
         </Route>
 

@@ -609,3 +609,154 @@ export const adminListDemoBookings = async (req: AuthRequest, res: Response) => 
         return res.status(500).json({ error: 'Server error' });
     }
 };
+
+// --- Demo availability (admin configurable hours per day, e.g. Mon 9–11 & 3–5) ---
+const TIME_RE = /^\d{1,2}:\d{2}$/;
+
+export const adminGetDemoAvailability = async (_req: AuthRequest, res: Response) => {
+    try {
+        const rules = await prisma.adminDemoAvailability.findMany({
+            orderBy: [{ day_of_week: 'asc' }, { start_time: 'asc' }],
+        });
+        return res.json({ rules });
+    } catch (error) {
+        console.error('adminGetDemoAvailability error:', error);
+        return res.status(500).json({ error: 'Server error' });
+    }
+};
+
+export const adminPutDemoAvailability = async (req: AuthRequest, res: Response) => {
+    try {
+        const rules = req.body?.rules as Array<{ day_of_week: number; start_time: string; end_time: string }> | undefined;
+        if (!Array.isArray(rules)) {
+            return res.status(400).json({ error: 'rules must be an array' });
+        }
+        for (const r of rules) {
+            if (typeof r.day_of_week !== 'number' || r.day_of_week < 0 || r.day_of_week > 6) {
+                return res.status(400).json({ error: 'day_of_week must be 0–6 (Sun–Sat)' });
+            }
+            if (!TIME_RE.test(r.start_time) || !TIME_RE.test(r.end_time)) {
+                return res.status(400).json({ error: 'start_time and end_time must be HH:MM' });
+            }
+            const [sh, sm] = r.start_time.split(':').map(Number);
+            const [eh, em] = r.end_time.split(':').map(Number);
+            if (sh * 60 + sm >= eh * 60 + em) {
+                return res.status(400).json({ error: 'start_time must be before end_time' });
+            }
+        }
+
+        await prisma.adminDemoAvailability.deleteMany({});
+        if (rules.length > 0) {
+            await prisma.adminDemoAvailability.createMany({
+                data: rules.map((r) => ({
+                    day_of_week: r.day_of_week,
+                    start_time: r.start_time,
+                    end_time: r.end_time,
+                })),
+            });
+        }
+
+        const updated = await prisma.adminDemoAvailability.findMany({
+            orderBy: [{ day_of_week: 'asc' }, { start_time: 'asc' }],
+        });
+        return res.json({ rules: updated });
+    } catch (error) {
+        console.error('adminPutDemoAvailability error:', error);
+        return res.status(500).json({ error: 'Server error' });
+    }
+};
+
+// --- Demo time blocks (block specific times when admin is not available) ---
+export const adminListDemoBlocks = async (req: AuthRequest, res: Response) => {
+    try {
+        const fromStr = (req.query.from as string)?.trim();
+        const toStr = (req.query.to as string)?.trim();
+        const where: { start_time?: { gte?: Date }; end_time?: { lte?: Date } } = {};
+        if (fromStr) {
+            const from = new Date(fromStr);
+            if (!Number.isNaN(from.getTime())) where.start_time = { gte: from };
+        }
+        if (toStr) {
+            const to = new Date(toStr);
+            if (!Number.isNaN(to.getTime())) where.end_time = { lte: to };
+        }
+
+        const blocks = await prisma.adminDemoTimeBlock.findMany({
+            where: Object.keys(where).length ? where : undefined,
+            orderBy: { start_time: 'asc' },
+        });
+        return res.json({ blocks });
+    } catch (error) {
+        console.error('adminListDemoBlocks error:', error);
+        return res.status(500).json({ error: 'Server error' });
+    }
+};
+
+export const adminCreateDemoBlock = async (req: AuthRequest, res: Response) => {
+    try {
+        const { start_time, end_time, reason } = req.body as { start_time?: string; end_time?: string; reason?: string };
+        if (!start_time || !end_time) {
+            return res.status(400).json({ error: 'start_time and end_time (ISO strings) are required' });
+        }
+        const start = new Date(start_time);
+        const end = new Date(end_time);
+        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+            return res.status(400).json({ error: 'Invalid start_time or end_time' });
+        }
+        if (start >= end) {
+            return res.status(400).json({ error: 'start_time must be before end_time' });
+        }
+
+        const block = await prisma.adminDemoTimeBlock.create({
+            data: { start_time: start, end_time: end, reason: reason?.trim() || null },
+        });
+        return res.status(201).json({ block });
+    } catch (error) {
+        console.error('adminCreateDemoBlock error:', error);
+        return res.status(500).json({ error: 'Server error' });
+    }
+};
+
+export const adminUpdateDemoBlock = async (req: AuthRequest, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { start_time, end_time, reason } = req.body as { start_time?: string; end_time?: string; reason?: string };
+        if (!id) return res.status(400).json({ error: 'Block id is required' });
+
+        const update: { start_time?: Date; end_time?: Date; reason?: string | null } = {};
+        if (start_time !== undefined) {
+            const start = new Date(start_time);
+            if (Number.isNaN(start.getTime())) return res.status(400).json({ error: 'Invalid start_time' });
+            update.start_time = start;
+        }
+        if (end_time !== undefined) {
+            const end = new Date(end_time);
+            if (Number.isNaN(end.getTime())) return res.status(400).json({ error: 'Invalid end_time' });
+            update.end_time = end;
+        }
+        if (reason !== undefined) update.reason = reason?.trim() || null;
+
+        const block = await prisma.adminDemoTimeBlock.update({
+            where: { id },
+            data: update,
+        });
+        return res.json({ block });
+    } catch (error: any) {
+        if (error?.code === 'P2025') return res.status(404).json({ error: 'Block not found' });
+        console.error('adminUpdateDemoBlock error:', error);
+        return res.status(500).json({ error: 'Server error' });
+    }
+};
+
+export const adminDeleteDemoBlock = async (req: AuthRequest, res: Response) => {
+    try {
+        const { id } = req.params;
+        if (!id) return res.status(400).json({ error: 'Block id is required' });
+        await prisma.adminDemoTimeBlock.delete({ where: { id } });
+        return res.status(204).send();
+    } catch (error: any) {
+        if (error?.code === 'P2025') return res.status(404).json({ error: 'Block not found' });
+        console.error('adminDeleteDemoBlock error:', error);
+        return res.status(500).json({ error: 'Server error' });
+    }
+};

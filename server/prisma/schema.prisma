@@ -703,3 +703,22 @@ model DemoBooking {
 
   @@index([slot_start_time])
 }
+
+// Admin demo availability: configurable windows per day (e.g. Monday 9–11, 3–5). If empty, fallback to 9–17.
+model AdminDemoAvailability {
+  id          String @id @default(uuid())
+  day_of_week Int    // 0=Sunday, 1=Monday, ... 6=Saturday
+  start_time  String // "09:00"
+  end_time    String // "11:00"
+}
+
+// Admin demo time blocks: block specific times when admin is not available (like mentor blocks).
+model AdminDemoTimeBlock {
+  id         String   @id @default(uuid())
+  start_time DateTime
+  end_time   DateTime
+  reason     String?
+  created_at DateTime @default(now())
+
+  @@index([start_time, end_time])
+}
