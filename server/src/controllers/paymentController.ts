@@ -4,6 +4,35 @@ import { PaymentAnalyticsService } from '../services/paymentAnalyticsService';
 import prisma from '../config/db';
 import { z } from 'zod';
 
+/** Mentor subscription plans: annual billing. Price IDs from env or fallback for backward compatibility. */
+export const MENTOR_PLANS = [
+    {
+        id: 'STANDARD' as const,
+        name: 'Standard',
+        priceMonthly: 25,
+        annualAmount: 300,
+        priceId: process.env.STRIPE_PRICE_STANDARD_ANNUAL || 'price_1StboAByCQ0ee0A8u7BMs9cl',
+    },
+    {
+        id: 'PRO' as const,
+        name: 'Pro',
+        priceMonthly: 45,
+        annualAmount: 540,
+        priceId: process.env.STRIPE_PRICE_PRO_ANNUAL || 'price_1StboXByCQ0ee0A8GeuDW77K',
+    },
+    {
+        id: 'PREMIUM' as const,
+        name: 'Premium',
+        priceMonthly: 85,
+        annualAmount: 1020,
+        priceId: process.env.STRIPE_PRICE_PREMIUM_ANNUAL || 'price_1StbozByCQ0ee0A8vJMmBvce',
+    },
+];
+
+export const getMentorPlans = async (_req: Request, res: Response) => {
+    return res.json({ plans: MENTOR_PLANS });
+};
+
 const CreateSubscriptionSchema = z.object({
     priceId: z.string().min(1, 'Price ID is required'),
     tier: z.enum(['STANDARD', 'PRO', 'PREMIUM'] as const),

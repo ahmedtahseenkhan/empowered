@@ -12,7 +12,9 @@ interface TutorProfile {
     subscription_end_date?: string | null;
 }
 
-const plans = [
+type ServerPlan = { id: string; name: string; priceMonthly: number; annualAmount: number; priceId: string };
+
+const plansConfig = [
     {
         id: 'STANDARD',
         name: 'Standard',
@@ -20,7 +22,8 @@ const plans = [
         billing: '/month',
         billingNote: 'Billed annually',
         description: 'For mentors building their online presence',
-        priceId: 'price_1StboAByCQ0ee0A8u7BMs9cl',
+        defaultPriceId: 'price_1StboAByCQ0ee0A8u7BMs9cl',
+        annualAmount: 300,
         icon: Shield,
         gradient: 'from-slate-500 to-slate-700',
         accentColor: 'slate',
@@ -56,7 +59,8 @@ const plans = [
         billingNote: 'Billed annually',
         description: 'For mentors ready to grow visibility',
         popular: true,
-        priceId: 'price_1StboXByCQ0ee0A8GeuDW77K',
+        defaultPriceId: 'price_1StboXByCQ0ee0A8GeuDW77K',
+        annualAmount: 540,
         icon: Zap,
         gradient: 'from-purple-600 to-indigo-600',
         accentColor: 'purple',
@@ -87,12 +91,13 @@ const plans = [
     },
     {
         id: 'PREMIUM',
-        priceId: 'price_1StbozByCQ0ee0A8vJMmBvce',
         name: 'Premium',
         price: '$85',
         billing: '/month',
         billingNote: 'Billed annually',
         description: 'Maximize your reach & revenue',
+        defaultPriceId: 'price_1StbozByCQ0ee0A8vJMmBvce',
+        annualAmount: 1020,
         icon: Crown,
         gradient: 'from-amber-500 to-orange-600',
         accentColor: 'amber',
@@ -131,9 +136,16 @@ const SubscriptionSettingsPage: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [showCancelModal, setShowCancelModal] = useState(false);
     const [expandedPlan, setExpandedPlan] = useState<string | null>(null);
+    const [serverPlans, setServerPlans] = useState<ServerPlan[] | null>(null);
 
     useEffect(() => {
         fetchProfile();
+    }, []);
+
+    useEffect(() => {
+        api.get('/payments/plans')
+            .then((res) => setServerPlans(res.data?.plans || []))
+            .catch(() => setServerPlans(null));
     }, []);
 
     const fetchProfile = async () => {
@@ -156,6 +168,15 @@ const SubscriptionSettingsPage: React.FC = () => {
     const hasStripeSubscription = !!profile?.stripe_subscription_id;
     const isActiveOrTrial = status === 'active' || status === 'trialing';
     const paymentRequired = !hasStripeSubscription || !isActiveOrTrial || !hasValidEnd || expired;
+
+    const plans = plansConfig.map((c) => {
+        const server = serverPlans?.find((s) => s.id === c.id);
+        return {
+            ...c,
+            priceId: server?.priceId ?? c.defaultPriceId,
+            annualAmount: server?.annualAmount ?? c.annualAmount,
+        };
+    });
 
     const currentPlan = plans.find(p => p.id === profile?.tier);
 
@@ -348,6 +369,7 @@ const SubscriptionSettingsPage: React.FC = () => {
                                                 <span className="text-sm text-gray-500">{plan.billing}</span>
                                             </div>
                                             <p className="text-[11px] text-gray-400">{plan.billingNote}</p>
+                                            <p className="text-xs font-medium text-gray-700 mt-1">Charged ${plan.annualAmount} today (annual)</p>
                                         </div>
 
                                         {/* Features (included) */}
@@ -440,7 +462,7 @@ const SubscriptionSettingsPage: React.FC = () => {
                             <div className="flex items-start gap-2">
                                 <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
                                 <div className="text-xs text-amber-800">
-                                    <p className="mb-1"><strong>Upcoming:</strong> {currentPlan?.price} (billed annually)</p>
+                                    <p className="mb-1"><strong>Upcoming:</strong> ${currentPlan?.annualAmount ?? 0} (billed annually)</p>
                                     <p><strong>Warning:</strong> Cancel before your next billing cycle to avoid charges.</p>
                                 </div>
                             </div>

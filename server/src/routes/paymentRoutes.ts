@@ -14,11 +14,15 @@ import {
     getTutorUpcomingPayments,
     getTutorSubscriptionInfo,
     exportPaymentHistoryCSV,
+    getMentorPlans,
 } from '../controllers/paymentController';
 
 const router = express.Router();
 
-// All routes require authentication
+// Public: mentor plan config (price IDs, annual amounts) for pricing pages and checkout
+router.get('/plans', getMentorPlans);
+
+// All other routes require authentication
 router.use(authenticateToken);
 
 // Mentor Subscription

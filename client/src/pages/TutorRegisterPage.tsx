@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { PageLayout } from '../layouts/PageLayout';
@@ -31,11 +31,13 @@ const TutorRegisterPage: React.FC = () => {
     });
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [serverPlans, setServerPlans] = useState<Array<{ id: string; priceId: string; annualAmount: number }>>([]);
 
-    const plans = [
+    const plansBase = [
         {
             id: 'STANDARD',
-            priceId: 'price_1StboAByCQ0ee0A8u7BMs9cl',
+            defaultPriceId: 'price_1StboAByCQ0ee0A8u7BMs9cl',
+            annualAmount: 300,
             name: 'Standard',
             priceLabel: '$25',
             billingLabel: '/month',
@@ -66,7 +68,8 @@ const TutorRegisterPage: React.FC = () => {
         },
         {
             id: 'PRO',
-            priceId: 'price_1StboXByCQ0ee0A8GeuDW77K',
+            defaultPriceId: 'price_1StboXByCQ0ee0A8GeuDW77K',
+            annualAmount: 540,
             name: 'Pro',
             priceLabel: '$45',
             billingLabel: '/month',
@@ -98,7 +101,8 @@ const TutorRegisterPage: React.FC = () => {
         },
         {
             id: 'PREMIUM',
-            priceId: 'price_1StbozByCQ0ee0A8vJMmBvce',
+            defaultPriceId: 'price_1StbozByCQ0ee0A8vJMmBvce',
+            annualAmount: 1020,
             name: 'Premium',
             priceLabel: '$85',
             billingLabel: '/month',
@@ -127,6 +131,21 @@ const TutorRegisterPage: React.FC = () => {
             notIncluded: [],
         },
     ];
+
+    const plans = plansBase.map((p) => {
+        const server = serverPlans.find((s) => s.id === p.id);
+        return {
+            ...p,
+            priceId: server?.priceId ?? p.defaultPriceId,
+            annualAmount: server?.annualAmount ?? p.annualAmount,
+        };
+    });
+
+    useEffect(() => {
+        api.get('/payments/plans')
+            .then((res) => setServerPlans(res.data?.plans || []))
+            .catch(() => setServerPlans([]));
+    }, []);
 
     const { login } = useAuth();
     const navigate = useNavigate();
@@ -340,6 +359,7 @@ const TutorRegisterPage: React.FC = () => {
                                             <span className="text-4xl font-extrabold text-gray-900">{plan.priceLabel}</span>
                                             <span className="text-sm font-medium text-gray-600">{plan.billingLabel}</span>
                                         </div>
+                                        <p className="mt-1 text-sm text-gray-600">Billed annually: ${plan.annualAmount} today</p>
 
                                         <div className="mt-5 space-y-3">
                                             {plan.highlights.map((h) => (

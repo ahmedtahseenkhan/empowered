@@ -13,6 +13,7 @@ const ChoosePlanDesktop = ({
             name: "Standard",
             tagline: "For mentors building their online presence",
             price: 25,
+            annualAmount: 300,
             billingCycle: "month",
             description: "Billed annually",
             color: "from-blue-500 to-blue-600",
@@ -46,6 +47,7 @@ const ChoosePlanDesktop = ({
             name: "Pro",
             tagline: "For mentors ready to grow visibility",
             price: 45,
+            annualAmount: 540,
             billingCycle: "month",
             description: "Billed annually",
             color: "from-purple-600 to-purple-700",
@@ -81,6 +83,7 @@ const ChoosePlanDesktop = ({
             name: "Premium",
             tagline: "For mentors maximizing reach & revenue",
             price: 85,
+            annualAmount: 1020,
             billingCycle: "month",
             description: "Billed annually",
             color: "from-yellow-500 to-yellow-600",
@@ -173,6 +176,9 @@ const ChoosePlanDesktop = ({
                                     <p className="text-sm mt-2 text-gray-500 font-medium bg-gray-100 inline-block px-3 py-1 rounded-full">
                                         {plan.description}
                                     </p>
+                                    {plan.annualAmount != null && (
+                                        <p className="text-xs mt-1 text-gray-600">Charged ${plan.annualAmount} today (annual)</p>
+                                    )}
                                 </div>
 
                                 {/* Features */}
