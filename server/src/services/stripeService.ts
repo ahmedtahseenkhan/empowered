@@ -134,7 +134,7 @@ export class StripeService {
                     },
                 ],
                 subscription_data: {
-                    trial_period_days: 30,
+                    trial_period_days: 60, // 2 months free trial
                     metadata: normalizedMetadata,
                 },
                 success_url: successUrl,

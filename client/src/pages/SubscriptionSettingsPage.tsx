@@ -38,7 +38,7 @@ const plansConfig = [
             'Student portal access',
             'Mentor dashboard',
             'Platform onboarding & support',
-            '1-month free trial',
+            '2-month free trial',
         ],
         notIncluded: [
             'Marketplace boost',
@@ -80,7 +80,7 @@ const plansConfig = [
             'Student portal access',
             'Mentor dashboard',
             'Platform onboarding & support',
-            '1-month free trial',
+            '2-month free trial',
         ],
         notIncluded: [
             'Weekly promotion',
@@ -119,7 +119,7 @@ const plansConfig = [
             'Automated email reminders',
             'Dedicated meeting link for each session',
             'Student portal access',
-            '1-month free trial',
+            '2-month free trial',
         ],
         notIncluded: [],
     },
@@ -261,7 +261,7 @@ const SubscriptionSettingsPage: React.FC = () => {
                             <h2 className="text-sm font-semibold text-red-800">Subscription Required</h2>
                             <p className="text-xs text-red-700 mt-0.5">
                                 {!hasStripeSubscription
-                                    ? 'Start your subscription to activate your 30-day free trial and access mentor features.'
+                                    ? 'Start your subscription to activate your 2-month free trial and access mentor features.'
                                     : expired
                                         ? 'Your trial/subscription period has ended. Choose a plan to continue.'
                                         : 'Your subscription is not active. Please select a plan to continue.'}
@@ -369,7 +369,6 @@ const SubscriptionSettingsPage: React.FC = () => {
                                                 <span className="text-sm text-gray-500">{plan.billing}</span>
                                             </div>
                                             <p className="text-[11px] text-gray-400">{plan.billingNote}</p>
-                                            <p className="text-xs font-medium text-gray-700 mt-1">Charged ${plan.annualAmount} today (annual)</p>
                                         </div>
 
                                         {/* Features (included) */}
@@ -462,7 +461,7 @@ const SubscriptionSettingsPage: React.FC = () => {
                             <div className="flex items-start gap-2">
                                 <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
                                 <div className="text-xs text-amber-800">
-                                    <p className="mb-1"><strong>Upcoming:</strong> ${currentPlan?.annualAmount ?? 0} (billed annually)</p>
+                                    <p className="mb-1"><strong>Upcoming:</strong> {currentPlan?.name} (billed annually)</p>
                                     <p><strong>Warning:</strong> Cancel before your next billing cycle to avoid charges.</p>
                                 </div>
                             </div>

@@ -53,7 +53,7 @@ const TutorRegisterPage: React.FC = () => {
                 'Student portal access',
                 'Mentor dashboard',
                 'Platform onboarding & support',
-                '1-month free trial',
+                '2-month free trial',
             ],
             notIncluded: [
                 'Marketplace boost',
@@ -90,7 +90,7 @@ const TutorRegisterPage: React.FC = () => {
                 'Student portal access',
                 'Mentor dashboard',
                 'Platform onboarding & support',
-                '1-month free trial',
+                '2-month free trial',
             ],
             notIncluded: [
                 'Weekly promotion',
@@ -126,7 +126,7 @@ const TutorRegisterPage: React.FC = () => {
                 'Automated email reminders',
                 'Dedicated meeting link for each session',
                 'Student portal access',
-                '1-month free trial',
+                '2-month free trial',
             ],
             notIncluded: [],
         },
@@ -359,8 +359,6 @@ const TutorRegisterPage: React.FC = () => {
                                             <span className="text-4xl font-extrabold text-gray-900">{plan.priceLabel}</span>
                                             <span className="text-sm font-medium text-gray-600">{plan.billingLabel}</span>
                                         </div>
-                                        <p className="mt-1 text-sm text-gray-600">Billed annually: ${plan.annualAmount} today</p>
-
                                         <div className="mt-5 space-y-3">
                                             {plan.highlights.map((h) => (
                                                 <div key={h} className="flex items-start gap-3">

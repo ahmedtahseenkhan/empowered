@@ -395,9 +395,15 @@ const StudentMentorPublicProfilePage: React.FC = () => {
                                     </div>
 
                                     <div className="flex flex-wrap gap-3">
-                                        <Link to={`/student/mentors?frequency=${encodeURIComponent(frequency)}`}>
-                                            <Button variant="outline">Back</Button>
-                                        </Link>
+                                        {isPreview ? (
+                                            <Link to="/dashboard">
+                                                <Button variant="outline">Back to Dashboard</Button>
+                                            </Link>
+                                        ) : (
+                                            <Link to={`/student/mentors?frequency=${encodeURIComponent(frequency)}`}>
+                                                <Button variant="outline">Back</Button>
+                                            </Link>
+                                        )}
                                         {!isPreview && mentor.free_session_enabled && freeEligible && !freeEligibilityBusy && (
                                             <Button
                                                 variant="outline"

@@ -33,7 +33,7 @@ const PublicProfilePage: React.FC = () => {
             setProfile(response.data);
 
             if (response.data?.id) {
-                navigate(`/mentors/${encodeURIComponent(response.data.id)}?preview=1`, { replace: true });
+                navigate(`/student/mentors/${encodeURIComponent(response.data.id)}?frequency=WEEKLY&preview=1`, { replace: true });
             }
         } catch (error) {
             console.error('Failed to fetch profile:', error);

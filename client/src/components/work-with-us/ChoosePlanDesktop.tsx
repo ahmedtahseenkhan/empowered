@@ -29,7 +29,7 @@ const ChoosePlanDesktop = ({
                 "Student portal access",
                 "Mentor dashboard",
                 "Platform onboarding & support",
-                "1-month free trial",
+                "2-month free trial",
             ],
             notIncluded: [
                 "Marketplace boost",
@@ -69,7 +69,7 @@ const ChoosePlanDesktop = ({
                 "Student portal access",
                 "Mentor dashboard",
                 "Platform onboarding & support",
-                "1-month free trial",
+                "2-month free trial",
             ],
             notIncluded: [
                 "Weekly promotion",
@@ -106,7 +106,7 @@ const ChoosePlanDesktop = ({
                 "Automated email reminders",
                 "Dedicated meeting link for each session",
                 "Student portal access",
-                "1-month free trial",
+                "2-month free trial",
             ],
             notIncluded: [],
         },
@@ -176,9 +176,6 @@ const ChoosePlanDesktop = ({
                                     <p className="text-sm mt-2 text-gray-500 font-medium bg-gray-100 inline-block px-3 py-1 rounded-full">
                                         {plan.description}
                                     </p>
-                                    {plan.annualAmount != null && (
-                                        <p className="text-xs mt-1 text-gray-600">Charged ${plan.annualAmount} today (annual)</p>
-                                    )}
                                 </div>
 
                                 {/* Features */}

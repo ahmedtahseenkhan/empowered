@@ -89,11 +89,11 @@ const mentorFaqs: FAQItem[] = [
     },
     {
         question: 'Is there a free trial?',
-        answer: 'Yes. A one-month free trial may be offered. If you do not cancel before the trial ends, your selected annual plan will be charged automatically.',
+        answer: 'Yes. A two-month free trial may be offered. If you do not cancel before the trial ends, your selected annual plan will be charged automatically.',
     },
     {
         question: 'What happens after the free trial ends?',
-        answer: 'Your selected annual plan will be billed. To avoid charges, cancel before the trial period ends. You can manage or change your plan through your dashboard.',
+        answer: 'After the 2-month free trial, your selected annual plan will be billed. To avoid charges, cancel before the trial period ends. You can manage or change your plan through your dashboard.',
     },
     {
         question: 'Can I cancel my subscription?',
