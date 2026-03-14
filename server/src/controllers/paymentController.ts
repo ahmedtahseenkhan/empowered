@@ -63,15 +63,13 @@ export const createMentorSubscriptionCheckout = async (req: Request, res: Respon
         if (!tutor) return res.status(404).json({ error: 'Tutor profile not found' });
 
         // 1. Reuse or create Stripe Customer for this tutor (avoid duplicates)
-        // Type assertion for stripe_customer_id so this compiles before Prisma client is regenerated (e.g. on deploy)
-        const tutorWithStripe = tutor as typeof tutor & { stripe_customer_id?: string | null };
-        let customerId = tutorWithStripe.stripe_customer_id ?? null;
+        let customerId = tutor.stripe_customer_id ?? null;
         if (!customerId) {
             const newCustomer = await StripeService.createCustomer(tutor.user.email, tutor.username);
             customerId = newCustomer.id;
             await prisma.tutorProfile.update({
                 where: { id: tutor.id },
-                data: { stripe_customer_id: customerId } as any,
+                data: { stripe_customer_id: customerId },
             });
             console.log('[Payments] Created and saved stripe_customer_id for tutor', tutor.id);
         }
