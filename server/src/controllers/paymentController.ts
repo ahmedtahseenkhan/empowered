@@ -107,6 +107,44 @@ export const createMentorSubscriptionCheckout = async (req: Request, res: Respon
     }
 };
 
+/** Activate 2-month trial without Stripe (no payment collection). For use when Stripe checkout is disabled. */
+const ActivateTrialSchema = z.object({
+    tier: z.enum(['STANDARD', 'PRO', 'PREMIUM'] as const),
+});
+
+export const activateMentorTrial = async (req: Request, res: Response) => {
+    try {
+        const userId = (req as any).user.id;
+        const { tier } = ActivateTrialSchema.parse(req.body);
+
+        const tutor = await prisma.tutorProfile.findUnique({
+            where: { user_id: userId },
+        });
+        if (!tutor) return res.status(404).json({ error: 'Tutor profile not found' });
+
+        const trialEnd = new Date();
+        trialEnd.setDate(trialEnd.getDate() + 60); // 2 months
+
+        await prisma.tutorProfile.update({
+            where: { id: tutor.id },
+            data: {
+                tier: tier as any,
+                subscription_status: 'trialing',
+                subscription_end_date: trialEnd,
+                // stripe_subscription_id stays null
+            },
+        });
+
+        return res.json({ success: true, subscription_status: 'trialing', subscription_end_date: trialEnd });
+    } catch (error: any) {
+        if (error instanceof z.ZodError) {
+            return res.status(400).json({ error: error.issues });
+        }
+        console.error('Activate trial error:', error);
+        return res.status(500).json({ error: error?.message || 'Failed to activate trial' });
+    }
+};
+
 // ... (existing code)
 
 export const disconnectStripeAccount = async (req: Request, res: Response) => {

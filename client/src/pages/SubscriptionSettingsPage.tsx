@@ -167,7 +167,8 @@ const SubscriptionSettingsPage: React.FC = () => {
 
     const hasStripeSubscription = !!profile?.stripe_subscription_id;
     const isActiveOrTrial = status === 'active' || status === 'trialing';
-    const paymentRequired = !hasStripeSubscription || !isActiveOrTrial || !hasValidEnd || expired;
+    // Allow access for trialing/active with valid end date even without Stripe (e.g. trial activated without payment)
+    const paymentRequired = !isActiveOrTrial || !hasValidEnd || expired;
 
     const plans = plansConfig.map((c) => {
         const server = serverPlans?.find((s) => s.id === c.id);
@@ -181,14 +182,10 @@ const SubscriptionSettingsPage: React.FC = () => {
     const currentPlan = plans.find(p => p.id === profile?.tier);
 
     const handleChangePlan = async (planId: string, priceId: string | undefined) => {
-        if (!priceId) {
-            alert('Price ID missing for this plan.');
-            return;
-        }
-
         try {
             setLoading(true);
-            if (!paymentRequired && profile?.stripe_subscription_id) {
+            // If they have a Stripe subscription, update via Stripe; otherwise activate/update trial without payment
+            if (!paymentRequired && profile?.stripe_subscription_id && priceId) {
                 await api.put('/payments/mentor/subscription', {
                     newPriceId: priceId,
                     tier: planId
@@ -196,21 +193,9 @@ const SubscriptionSettingsPage: React.FC = () => {
                 await fetchProfile();
                 alert('Subscription updated successfully!');
             } else {
-                const successUrl = `${window.location.origin}/subscription-settings`;
-                const cancelUrl = `${window.location.origin}/subscription-settings`;
-
-                const res = await api.post('/payments/mentor/subscription', {
-                    priceId,
-                    tier: planId,
-                    successUrl,
-                    cancelUrl
-                });
-
-                if (res.data?.url) {
-                    window.location.href = res.data.url;
-                    return;
-                }
-                alert('Unable to start checkout.');
+                await api.post('/payments/mentor/subscription/activate-trial', { tier: planId });
+                await fetchProfile();
+                alert(profile?.subscription_status ? 'Plan updated.' : 'Trial activated.');
             }
         } catch (error: any) {
             console.error('Failed to update plan:', error);

@@ -176,37 +176,17 @@ const TutorRegisterPage: React.FC = () => {
 
 
 
-    // STEP 4: Plan Selection -> Create Subscription Checkout
+    // STEP 4: Plan Selection -> Activate 2-month trial (no Stripe; trial without payment)
     const handlePlanSubmit = async () => {
         setLoading(true);
         setError('');
         try {
             await api.put('/tutor/me/tier', { tier: formData.plan });
-
-            // Initiate Stripe Checkout
-            const selectedPlan = plans.find(p => p.id === formData.plan);
-            if (!selectedPlan?.priceId) {
-                // If checking out for free/beta, just move next. 
-                // But user wants payment now.
-                throw new Error("Plan not configured for payment");
-            }
-
-            const res = await api.post('/payments/mentor/subscription', {
-                priceId: selectedPlan.priceId,
-                tier: formData.plan, // Add tier to match CreateSubscriptionSchema
-                successUrl: `${window.location.origin}/tutor-register?step=5`, // Come back to Step 5
-                cancelUrl: window.location.href
-            });
-
-            if (res.data.url) {
-                window.location.href = res.data.url;
-            } else {
-                // If it was skipped/free (unlikely for these plans but safe guard)
-                setCurrentStep(5);
-            }
+            await api.post('/payments/mentor/subscription/activate-trial', { tier: formData.plan });
+            setCurrentStep(5);
         } catch (err: any) {
             console.error(err);
-            setError(err.response?.data?.error || 'Failed to initiate payment.');
+            setError(err.response?.data?.error || 'Failed to activate trial.');
         } finally {
             setLoading(false);
         }

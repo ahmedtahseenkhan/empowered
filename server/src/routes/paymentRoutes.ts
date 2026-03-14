@@ -2,6 +2,7 @@ import express from 'express';
 import { authenticateToken } from '../middleware/authMiddleware';
 import {
     createMentorSubscriptionCheckout,
+    activateMentorTrial,
     createConnectOnboardingLink,
     getConnectAccountStatus,
     getSubscriptionStatus,
@@ -27,6 +28,7 @@ router.use(authenticateToken);
 
 // Mentor Subscription
 router.post('/mentor/subscription', createMentorSubscriptionCheckout);
+router.post('/mentor/subscription/activate-trial', activateMentorTrial);
 router.put('/mentor/subscription', updateMentorSubscription);
 router.get('/mentor/status', getSubscriptionStatus);
 
