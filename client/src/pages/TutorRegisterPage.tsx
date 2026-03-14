@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { PageLayout } from '../layouts/PageLayout';
 import { Button } from '../components/ui/Button';
@@ -148,7 +148,6 @@ const TutorRegisterPage: React.FC = () => {
     }, []);
 
     const { login } = useAuth();
-    const navigate = useNavigate();
 
     // STEP 1: Basic Info Submission
     const handleBasicInfoSubmit = async (e: React.FormEvent) => {
