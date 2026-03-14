@@ -135,6 +135,7 @@ const SubscriptionSettingsPage: React.FC = () => {
     const [profile, setProfile] = useState<TutorProfile | null>(null);
     const [loading, setLoading] = useState(true);
     const [confirming, setConfirming] = useState(false);
+    const [syncing, setSyncing] = useState(false);
     const [showCancelModal, setShowCancelModal] = useState(false);
     const [expandedPlan, setExpandedPlan] = useState<string | null>(null);
     const [serverPlans, setServerPlans] = useState<ServerPlan[] | null>(null);
@@ -149,18 +150,26 @@ const SubscriptionSettingsPage: React.FC = () => {
         const sessionId = params.get('session_id');
         if (!sessionId) return;
 
+        // Persist so "Sync my subscription" can retry if confirm fails or page is refreshed
+        try {
+            sessionStorage.setItem('pendingSubscriptionSessionId', sessionId);
+        } catch (_) {}
+
         let cancelled = false;
         setConfirming(true);
+        console.log('[Subscription] Found session_id in URL, calling confirm...');
         api.post('/payments/mentor/subscription/confirm', { session_id: sessionId })
             .then(() => {
                 if (cancelled) return;
+                console.log('[Subscription] Confirm success');
+                try { sessionStorage.removeItem('pendingSubscriptionSessionId'); } catch (_) {}
                 window.history.replaceState({}, '', window.location.pathname);
                 return fetchProfile();
             })
             .catch((err: any) => {
                 if (cancelled) return;
                 const msg = err.response?.data?.error ?? err.message ?? 'Failed to confirm subscription';
-                console.error('Confirm subscription error:', err.response?.data ?? err);
+                console.error('[Subscription] Confirm error:', err.response?.data ?? err);
                 alert(msg);
             })
             .finally(() => {
@@ -248,6 +257,35 @@ const SubscriptionSettingsPage: React.FC = () => {
         }
     };
 
+    /** Retry confirm using session_id from URL or sessionStorage (e.g. after return from Stripe or page refresh). */
+    const retryConfirmSubscription = async () => {
+        const fromUrl = new URLSearchParams(window.location.search).get('session_id');
+        const fromStorage = (() => { try { return sessionStorage.getItem('pendingSubscriptionSessionId'); } catch { return null; } })();
+        const sessionId = fromUrl || fromStorage;
+        if (!sessionId) {
+            alert('No checkout session found. Complete "Start Free Trial" and you’ll be redirected back here; the page will then activate your trial.');
+            return;
+        }
+        setSyncing(true);
+        try {
+            await api.post('/payments/mentor/subscription/confirm', { session_id: sessionId });
+            try { sessionStorage.removeItem('pendingSubscriptionSessionId'); } catch (_) {}
+            window.history.replaceState({}, '', window.location.pathname);
+            await fetchProfile();
+        } catch (err: any) {
+            const msg = err.response?.data?.error ?? err.message ?? 'Sync failed';
+            console.error('[Subscription] Retry confirm error:', err.response?.data ?? err);
+            alert(msg);
+        } finally {
+            setSyncing(false);
+        }
+    };
+
+    const hasPendingSessionId = typeof window !== 'undefined' && (
+        new URLSearchParams(window.location.search).get('session_id') ||
+        (() => { try { return !!sessionStorage.getItem('pendingSubscriptionSessionId'); } catch { return false; } })()
+    );
+
     const handleCancelSubscription = () => {
         setShowCancelModal(true);
     };
@@ -287,7 +325,7 @@ const SubscriptionSettingsPage: React.FC = () => {
                         <div className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center flex-shrink-0 mt-0.5">
                             <AlertTriangle className="w-4 h-4 text-red-600" />
                         </div>
-                        <div>
+                        <div className="flex-1">
                             <h2 className="text-sm font-semibold text-red-800">Subscription Required</h2>
                             <p className="text-xs text-red-700 mt-0.5">
                                 {!hasStripeSubscription
@@ -296,6 +334,17 @@ const SubscriptionSettingsPage: React.FC = () => {
                                         ? 'Your trial/subscription period has ended. Choose a plan to continue.'
                                         : 'Your subscription is not active. Please select a plan to continue.'}
                             </p>
+                            {hasPendingSessionId && (
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    className="mt-2"
+                                    onClick={retryConfirmSubscription}
+                                    disabled={syncing}
+                                >
+                                    {syncing ? 'Syncing...' : 'I completed checkout — sync my subscription'}
+                                </Button>
+                            )}
                         </div>
                     </div>
                 )}

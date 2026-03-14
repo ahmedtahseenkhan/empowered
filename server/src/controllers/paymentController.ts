@@ -62,28 +62,17 @@ export const createMentorSubscriptionCheckout = async (req: Request, res: Respon
 
         if (!tutor) return res.status(404).json({ error: 'Tutor profile not found' });
 
-        // 1. Ensure Tutor has a Stripe Customer ID (create if missing)
-        // Note: Tutors act as Customers when *paying* for the platform subscription.
-        // They act as Accounts when *receiving* money from students.
-        // We'll reuse stripe_customer_id if we have one (usually on StudentProfile, 
-        // but a Tutor might need one too. For now let's check or create a customer object).
-
-        // Actually, Tutors don't store stripe_customer_id in our current schema (only StudentProfile does).
-        // We should probably store it on TutorProfile too if they are paying us, 
-        // OR just create a customer on the fly if we don't want to change schema again right now.
-        // Ideally, add stripe_customer_id to TutorProfile.
-
-        // WORKAROUND: For now, we'll check if we can find a customer by email, or create one.
-        // Better: Add stripe_customer_id to TutorProfile in next migration.
-        // For this step, I'll assume we can create/retrieve by email.
-
-        let customerId = '';
-        // Look up via email on Stripe side to avoid duplicates
-        const existingCustomers = await StripeService.createCustomer(tutor.user.email, tutor.username);
-        // Wait, createCustomer actually creates. 
-        // Let's just create one for now. Stripe allows duplicate emails. 
-        // Ideally we save this ID.
-        customerId = existingCustomers.id;
+        // 1. Reuse or create Stripe Customer for this tutor (avoid duplicates)
+        let customerId = tutor.stripe_customer_id ?? null;
+        if (!customerId) {
+            const newCustomer = await StripeService.createCustomer(tutor.user.email, tutor.username);
+            customerId = newCustomer.id;
+            await prisma.tutorProfile.update({
+                where: { id: tutor.id },
+                data: { stripe_customer_id: customerId },
+            });
+            console.log('[Payments] Created and saved stripe_customer_id for tutor', tutor.id);
+        }
 
         // 2. Create Checkout Session
         const session = await StripeService.createSubscriptionCheckoutSession(
