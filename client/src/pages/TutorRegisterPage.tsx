@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { PageLayout } from '../layouts/PageLayout';
 import { Button } from '../components/ui/Button';
@@ -17,7 +17,7 @@ const STEPS = [
 ];
 
 const TutorRegisterPage: React.FC = () => {
-    const [searchParams, setSearchParams] = useSearchParams();
+    const [searchParams] = useSearchParams();
     const planIdFromUrl = searchParams.get('planId');
     const stepFromUrl = searchParams.get('step');
 
@@ -31,36 +31,7 @@ const TutorRegisterPage: React.FC = () => {
     });
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
-    const [confirming, setConfirming] = useState(false);
     const [serverPlans, setServerPlans] = useState<Array<{ id: string; priceId: string; annualAmount: number }>>([]);
-
-    // On return from Stripe Checkout: sync subscription using session_id (same as SubscriptionSettingsPage)
-    useEffect(() => {
-        const sessionId = searchParams.get('session_id');
-        if (!sessionId) return;
-
-        let cancelled = false;
-        setConfirming(true);
-        setError('');
-        api.post('/payments/mentor/subscription/confirm', { session_id: sessionId })
-            .then(() => {
-                if (cancelled) return;
-                setCurrentStep(5);
-                const next = new URLSearchParams(searchParams);
-                next.delete('session_id');
-                setSearchParams(next, { replace: true });
-            })
-            .catch((err: any) => {
-                if (cancelled) return;
-                const msg = err.response?.data?.error ?? err.message ?? 'Failed to activate subscription.';
-                console.error('Confirm subscription error:', err.response?.data ?? err);
-                setError(msg);
-            })
-            .finally(() => {
-                if (!cancelled) setConfirming(false);
-            });
-        return () => { cancelled = true; };
-    }, []);
 
     // Same plan content as front page (ChoosePlanDesktop / SubscriptionSettingsPage)
     const plansBase = [
@@ -450,19 +421,6 @@ const TutorRegisterPage: React.FC = () => {
                 return null;
         }
     };
-
-    if (confirming) {
-        return (
-            <PageLayout>
-                <section className="section-container min-h-[80vh] flex items-center justify-center bg-gray-50">
-                    <div className="max-w-2xl mx-auto w-full text-center">
-                        <div className="w-12 h-12 border-4 border-primary-200 border-t-primary-900 rounded-full animate-spin mx-auto mb-3" />
-                        <p className="text-gray-600">Activating your subscription...</p>
-                    </div>
-                </section>
-            </PageLayout>
-        );
-    }
 
     return (
         <PageLayout>
