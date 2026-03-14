@@ -377,7 +377,7 @@ const TutorRegisterPage: React.FC = () => {
                         </div>
                         <h2 className="text-2xl font-bold text-gray-900">Setup Payments</h2>
                         <p className="text-gray-600">
-                            Connect with Stripe to receive payouts from your students.
+                            Connect with Stripe to receive payouts from your students. You can do this now or later from your dashboard.
                         </p>
                         <Button
                             className="w-full bg-[#635BFF] hover:bg-[#5349E0] text-white"
@@ -386,7 +386,14 @@ const TutorRegisterPage: React.FC = () => {
                         >
                             {loading ? 'Connecting...' : 'Connect Stripe'}
                         </Button>
-
+                        <Button
+                            type="button"
+                            variant="outline"
+                            className="w-full"
+                            onClick={() => { window.location.href = '/dashboard'; }}
+                        >
+                            Skip for now — go to Dashboard
+                        </Button>
                     </div>
                 );
             default:
