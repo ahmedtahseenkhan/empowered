@@ -20,6 +20,14 @@ import {
 
 const router = express.Router();
 
+// Log payment route hits (helps debug when logs show "nothing")
+router.use((req, _res, next) => {
+    if (req.path.includes('subscription') || req.path === '/mentor/subscription' || req.path === '/mentor/subscription/confirm') {
+        console.log('[Payments]', req.method, req.path);
+    }
+    next();
+});
+
 // Public: mentor plan config (price IDs, annual amounts) for pricing pages and checkout
 router.get('/plans', getMentorPlans);
 

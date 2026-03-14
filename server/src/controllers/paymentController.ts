@@ -49,9 +49,11 @@ const CreateConnectLinkSchema = z.object({
 type CreateConnectLinkInput = z.infer<typeof CreateConnectLinkSchema>;
 
 export const createMentorSubscriptionCheckout = async (req: Request, res: Response) => {
+    console.log('[Payments] POST /mentor/subscription (create checkout) received');
     try {
         const userId = (req as any).user.id;
         const { priceId, tier, successUrl, cancelUrl } = CreateSubscriptionSchema.parse(req.body);
+        console.log('[Payments] Create checkout: userId=', userId, 'tier=', tier, 'successUrl=', successUrl);
 
         const tutor = await prisma.tutorProfile.findUnique({
             where: { user_id: userId },
@@ -97,11 +99,12 @@ export const createMentorSubscriptionCheckout = async (req: Request, res: Respon
             }
         );
 
+        console.log('[Payments] Checkout session created, url=', session.url ? 'present' : 'missing');
         res.json({ url: session.url });
     } catch (error: any) {
         const message = error?.message ?? 'Failed to create checkout session';
-        console.error('[Create subscription checkout]', message);
-        console.error('[Create subscription checkout] stack:', error?.stack);
+        console.error('[Payments] Create subscription checkout error:', message);
+        console.error('[Payments] Create subscription checkout stack:', error?.stack);
         if (error instanceof z.ZodError) {
             return res.status(400).json({ error: error.issues });
         }
@@ -299,9 +302,11 @@ const ConfirmSubscriptionSchema = z.object({
 
 /** Sync mentor subscription after return from Stripe Checkout (when webhook may not have run yet). */
 export const confirmMentorSubscription = async (req: Request, res: Response) => {
+    console.log('[Payments] POST /mentor/subscription/confirm received', { body: req.body });
     try {
         const userId = (req as any).user.id;
         const { session_id } = ConfirmSubscriptionSchema.parse(req.body);
+        console.log('[Payments] Confirm: userId=', userId, 'session_id=', session_id);
 
         const tutor = await prisma.tutorProfile.findUnique({
             where: { user_id: userId },
