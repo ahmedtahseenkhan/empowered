@@ -162,9 +162,8 @@ model TutorProfile {
 
   // Stripe Connect & Subscription
   stripe_account_id      String? // Connect Account ID (for payouts)
-  stripe_customer_id     String? // Stripe Customer ID (for platform subscription payments)
   stripe_subscription_id String? // ID of their subscription to the platform (Standard/Pro/Premium)
-  subscription_status    String? // active, past_due, canceled, trialing
+  subscription_status    String? // active, past_due, canceled
   subscription_end_date  DateTime? // When their current paid period ends
 
   progress_notes ProgressNote[]
