@@ -35,6 +35,7 @@ type PublicTutorProfile = {
         };
     }[];
     total_students: number;
+    student_levels?: string[];
     external_reviews?: {
         id: string;
         platform: string;
@@ -641,6 +642,23 @@ const MentorPublicProfilePage: React.FC = () => {
                                             <div className="text-sm text-gray-600">No categories added yet.</div>
                                         )}
                                     </Card>
+
+                                    {mentor.student_levels && mentor.student_levels.length > 0 && (
+                                        <Card className="p-6">
+                                            <h2 className="text-lg font-bold text-gray-900 mb-2">Student Levels</h2>
+                                            <div className="text-sm text-gray-700">
+                                                {(mentor.student_levels as string[]).map((id) => {
+                                                    const labels: Record<string, string> = {
+                                                        ELEMENTARY_SCHOOL: 'Elementary School',
+                                                        MIDDLE_SCHOOL: 'Middle School',
+                                                        HIGH_SCHOOL: 'High School',
+                                                        COLLEGE_ADULT: 'College & Adult Learners',
+                                                    };
+                                                    return labels[id] || id;
+                                                }).join(' • ')}
+                                            </div>
+                                        </Card>
+                                    )}
 
                                     {mentor.certifications?.length > 0 && (
                                         <Card className="p-6">

@@ -26,9 +26,17 @@ interface GroupedService {
     expertise: Category[];
 }
 
+const STUDENT_LEVEL_OPTIONS: { id: string; label: string }[] = [
+    { id: 'ELEMENTARY_SCHOOL', label: 'Elementary School (Grades 1–5)' },
+    { id: 'MIDDLE_SCHOOL', label: 'Middle School (Grades 6–8)' },
+    { id: 'HIGH_SCHOOL', label: 'High School (Grades 9–12)' },
+    { id: 'COLLEGE_ADULT', label: 'College & Adult Learners' },
+];
+
 export const ServicesSection: React.FC<ServicesSectionProps> = ({ onBack }) => {
     const [allCategories, setAllCategories] = useState<Category[]>([]); // Root categories
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [studentLevels, setStudentLevels] = useState<string[]>([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -57,6 +65,7 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({ onBack }) => {
                 // Initialize selection
                 const existing = profileRes.data.categories?.map((c: any) => c.category.id) || [];
                 setSelectedIds(new Set(existing));
+                setStudentLevels(Array.isArray(profileRes.data.student_levels) ? profileRes.data.student_levels : []);
             } catch (err) {
                 console.error("Failed to load data", err);
                 setError("Failed to load services. Please check your connection or try logging in again.");
@@ -266,13 +275,22 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({ onBack }) => {
         setSelectedIds(newSet);
     };
 
-    // Persistence
+    const toggleStudentLevel = (id: string) => {
+        setStudentLevels(prev => prev.includes(id) ? prev.filter(l => l !== id) : [...prev, id]);
+    };
+
+    // Persistence (at least one student level required)
     const handleSaveToServer = async () => {
+        if (studentLevels.length === 0) {
+            setError('Please select at least one Student Level / Age Group before saving.');
+            return;
+        }
         setSaving(true);
         setError(null);
         try {
             const categoryIds = Array.from(selectedIds);
             await api.put('/tutor/me/services', { categoryIds });
+            await api.put('/tutor/me/student-levels', { studentLevels });
             onBack();
         } catch (err: any) {
             console.error("Failed to save services", err);
@@ -411,12 +429,35 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({ onBack }) => {
                 </div>
             </Card>
 
+            <Card className="overflow-hidden border border-gray-200 shadow">
+                <div className="bg-gray-50 border-b border-gray-200 p-4">
+                    <h3 className="font-bold text-lg text-gray-900">Student Level / Age Group</h3>
+                    <p className="text-sm text-gray-600 mt-1">
+                        Select the student levels you are comfortable mentoring. This helps students and parents find the right mentor.
+                    </p>
+                </div>
+                <div className="p-4 space-y-2">
+                    {STUDENT_LEVEL_OPTIONS.map((opt) => (
+                        <label key={opt.id} className="flex items-center gap-3 cursor-pointer group">
+                            <input
+                                type="checkbox"
+                                checked={studentLevels.includes(opt.id)}
+                                onChange={() => toggleStudentLevel(opt.id)}
+                                className="w-4 h-4 rounded border-gray-300 text-[#4A1D96] focus:ring-[#4A1D96]"
+                            />
+                            <span className="text-gray-700 group-hover:text-gray-900">{opt.label}</span>
+                        </label>
+                    ))}
+                    <p className="text-xs text-amber-600 mt-2">At least one selection is required before saving.</p>
+                </div>
+            </Card>
+
             <div className="flex justify-end gap-3">
                 <Button variant="outline" onClick={onBack} disabled={saving}>Cancel</Button>
                 <Button
                     onClick={handleSaveToServer}
-                    disabled={saving}
-                    className="bg-[#4A1D96] hover:bg-[#3a1676] text-white px-8"
+                    disabled={saving || studentLevels.length === 0}
+                    className="bg-[#4A1D96] hover:bg-[#3a1676] text-white px-8 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     {saving ? 'Saving...' : 'Continue'}
                 </Button>

@@ -132,6 +132,7 @@ model TutorProfile {
   timezone         String  @default("UTC")
   key_strengths    String? // Stored as comma-separated or JSON string
   is_verified      Boolean @default(false) // Admin verification
+  student_levels   String[] @default([]) // ELEMENTARY_SCHOOL, MIDDLE_SCHOOL, HIGH_SCHOOL, COLLEGE_ADULT
 
   tier TutorTier @default(STANDARD) // Subscription plan
 

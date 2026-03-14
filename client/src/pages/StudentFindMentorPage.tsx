@@ -5,6 +5,7 @@ import { Card } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import api from '../api/axios';
+import { MENTOR_SEARCH_AGE_OPTIONS } from '../constants/mentorSearch';
 
 type Frequency = 'ONCE' | 'WEEKLY' | 'TWICE_WEEKLY' | 'THRICE_WEEKLY';
 
@@ -260,10 +261,9 @@ const StudentFindMentorPage: React.FC = () => {
                                 onChange={(e) => setFormData({ ...formData, age: e.target.value })}
                             >
                                 <option value="">Select age</option>
-                                {Array.from({ length: 18 }).map((_, idx) => {
-                                    const a = String(idx + 1);
-                                    return <option key={a} value={a}>{a}</option>;
-                                })}
+                                {MENTOR_SEARCH_AGE_OPTIONS.map(({ value, label }) => (
+                                    <option key={value} value={value}>{label}</option>
+                                ))}
                             </select>
 
                             <div className="flex items-center gap-3 justify-center">

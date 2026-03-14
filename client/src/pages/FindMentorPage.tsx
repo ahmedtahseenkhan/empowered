@@ -6,6 +6,7 @@ import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
+import { MENTOR_SEARCH_AGE_OPTIONS } from '../constants/mentorSearch';
 
 type Frequency = 'WEEKLY' | 'TWICE_WEEKLY';
 
@@ -106,11 +107,12 @@ const FindMentorPage: React.FC = () => {
         return [...arr, value];
     };
 
+    // Logged-in students see the same Find Your Perfect Mentor flow as home (starting at category selection)
     React.useEffect(() => {
         if (user?.role === 'STUDENT' && step === 1) {
-            navigate('/student/mentors', { replace: true });
+            setStep(2);
         }
-    }, [navigate, step, user?.role]);
+    }, [user?.role]); // only when role becomes known; step 1 for student → show step 2
 
     React.useEffect(() => {
         const fetchCategories = async () => {
@@ -240,7 +242,8 @@ const FindMentorPage: React.FC = () => {
 
     const onBack = () => {
         setError('');
-        setStep((s) => Math.max(1, s - 1));
+        const minStep = user?.role === 'STUDENT' ? 2 : 1;
+        setStep((s) => Math.max(minStep, s - 1));
     };
 
     const handleFinish = async () => {
@@ -249,7 +252,8 @@ const FindMentorPage: React.FC = () => {
             setError('Please select at least one area of expertise.');
             return;
         }
-        if (!canSubmitSignUp) {
+        const isLoggedInStudent = user?.role === 'STUDENT';
+        if (!isLoggedInStudent && !canSubmitSignUp) {
             setError('Please complete sign up (name, valid email, password min 6 characters).');
             return;
         }
@@ -262,24 +266,26 @@ const FindMentorPage: React.FC = () => {
         if (formData.subcategoryId) params.set('subcategoryId', formData.subcategoryId);
         params.set('areaIds', formData.areaIds.join(','));
         params.set('fromAssessment', '1');
-        // Do not set q from area names: search is by area IDs so mentors with that expertise appear
-        // even if the word is not in their bio.
+
+        sessionStorage.setItem('assessmentAnswers', JSON.stringify({
+            grade: formData.grade,
+            age: formData.age,
+            majorCategoryId,
+            subcategoryId: formData.subcategoryId,
+            areaIds: formData.areaIds,
+            goals: formData.goals,
+            proficiency: formData.proficiency,
+            frequency: formData.frequency,
+        }));
+
+        if (isLoggedInStudent) {
+            navigate(`/student/mentors?${params.toString()}`);
+            return;
+        }
 
         const username = `${formData.firstName.trim()} ${formData.lastName.trim()}`.trim();
-
         try {
             setBusy(true);
-            sessionStorage.setItem('assessmentAnswers', JSON.stringify({
-                grade: formData.grade,
-                age: formData.age,
-                majorCategoryId,
-                subcategoryId: formData.subcategoryId,
-                areaIds: formData.areaIds,
-                goals: formData.goals,
-                proficiency: formData.proficiency,
-                frequency: formData.frequency,
-            }));
-
             let authRes: any;
             try {
                 authRes = await api.post('/auth/register', {
@@ -347,7 +353,7 @@ const FindMentorPage: React.FC = () => {
                 {catsBusy ? (
                     <div className="text-sm text-gray-600 text-center py-8">Loading categories...</div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-stretch">
                         {MAJOR_CATEGORIES.map((major) => {
                             const active = formData.majorCategoryKey === major.key;
                             const style = categoryIcons[major.key];
@@ -356,7 +362,7 @@ const FindMentorPage: React.FC = () => {
                                     key={major.key}
                                     type="button"
                                     onClick={() => setFormData({ ...formData, majorCategoryKey: major.key, subcategoryId: '', areaIds: [], goals: [], proficiency: '' })}
-                                    className={`relative group p-5 rounded-2xl border-2 text-left transition-all duration-300 hover:shadow-lg hover:-translate-y-1 ${active
+                                    className={`relative group p-5 rounded-2xl border-2 text-left transition-all duration-300 hover:shadow-lg hover:-translate-y-1 flex flex-col h-full min-h-[200px] ${active
                                         ? 'border-purple-600 bg-gradient-to-br from-purple-50 to-indigo-50 shadow-md ring-2 ring-purple-200'
                                         : 'border-gray-200 bg-white hover:border-purple-300'
                                         }`}
@@ -371,18 +377,18 @@ const FindMentorPage: React.FC = () => {
                                     )}
 
                                     {/* Icon */}
-                                    <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${style.gradient} flex items-center justify-center text-xl mb-3 group-hover:scale-110 transition-transform duration-300 shadow-sm`}>
+                                    <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${style.gradient} flex items-center justify-center text-xl mb-3 group-hover:scale-110 transition-transform duration-300 shadow-sm shrink-0`}>
                                         {style.icon}
                                     </div>
 
                                     {/* Title */}
-                                    <h3 className="font-bold text-gray-900 text-base mb-1.5">{major.title}</h3>
+                                    <h3 className="font-bold text-gray-900 text-base mb-1.5 shrink-0">{major.title}</h3>
 
-                                    {/* Description */}
-                                    <p className="text-xs text-gray-500 leading-relaxed">{major.description}</p>
+                                    {/* Description - flex-1 so all cards match height */}
+                                    <p className="text-xs text-gray-500 leading-relaxed flex-1 min-h-0">{major.description}</p>
 
                                     {/* Bottom accent */}
-                                    <div className={`mt-3 h-1 rounded-full bg-gradient-to-r ${style.gradient} transition-all duration-300 ${active ? 'w-full opacity-100' : 'w-0 opacity-0 group-hover:w-1/2 group-hover:opacity-60'}`} />
+                                    <div className={`mt-3 h-1 rounded-full bg-gradient-to-r ${style.gradient} transition-all duration-300 shrink-0 ${active ? 'w-full opacity-100' : 'w-0 opacity-0 group-hover:w-1/2 group-hover:opacity-60'}`} />
                                 </button>
                             );
                         })}
@@ -425,8 +431,8 @@ const FindMentorPage: React.FC = () => {
                 onChange={(e) => setFormData({ ...formData, age: e.target.value })}
             >
                 <option value="">Select age</option>
-                {Array.from({ length: 22 }, (_, i) => i + 5).map((a) => (
-                    <option key={a} value={String(a)}>{a}</option>
+                {MENTOR_SEARCH_AGE_OPTIONS.map(({ value, label }) => (
+                    <option key={value} value={value}>{label}</option>
                 ))}
             </select>
             <div className="flex items-center gap-3 justify-center">
@@ -451,7 +457,7 @@ const FindMentorPage: React.FC = () => {
     const renderSubcategory = () => (
         <div className="space-y-6">
             <h2 className="text-2xl md:text-3xl font-bold text-gray-900">
-                {isLife ? 'Please indicate where improvement is needed:' : 'Which skill(s) do you need help with?'}
+                {isLife ? 'Please indicate where improvement is needed:' : isAcademic ? 'Which subject(s) do you need help with?' : 'Which skill(s) do you need help with?'}
             </h2>
             {subcategories.length === 0 ? (
                 <div className="text-sm text-gray-600">No subcategories found for this category.</div>

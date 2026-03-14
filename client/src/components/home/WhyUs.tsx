@@ -11,19 +11,19 @@ const WhyUs = () => {
         {
             title: "Diverse Mentors",
             description:
-                "We match you with experts who align with your specific needs and goals. Our diverse pool of mentors ensures that you receive the exact support you need",
+                "We match you with experts who align with your specific needs and goals. Our diverse pool of mentors ensures that you receive the exact support you need.",
             image: Bottom_card1,
         },
         {
             title: "Flexible Learning Options",
             description:
-                "Enjoy personalized options including 1:1 live sessions, pre-recorded courses, test prep, and tutorials tailored to your pace and goals",
+                "Enjoy personalized options including 1:1 live sessions, pre-recorded courses, test prep, and tutorials tailored to your pace and goals.",
             image: Bottom_card2,
         },
         {
             title: "Quality Experience",
             description:
-                "Access your mentor’s notes, learning materials, and timely updates through your personal dashboard for an organized and engaging experience",
+                "Access your mentor’s notes, learning materials, and timely updates through your personal dashboard for an organized and engaging experience.",
             image: Bottom_card3,
         },
         {

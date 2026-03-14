@@ -82,6 +82,29 @@ export const listPublicTutors = async (req: Request, res: Response) => {
             };
         }
 
+        // Optional: filter by student level (from grade/age). Maps grade or age to level.
+        const grade = (req.query.grade as string | undefined)?.trim();
+        const ageParam = (req.query.age as string | undefined)?.trim();
+        const studentLevel = (req.query.studentLevel as string | undefined)?.trim();
+        let levelFilter: string | undefined;
+        if (studentLevel) {
+            levelFilter = studentLevel;
+        } else if (grade) {
+            const g = parseInt(grade, 10);
+            if (g >= 1 && g <= 5) levelFilter = 'ELEMENTARY_SCHOOL';
+            else if (g >= 6 && g <= 8) levelFilter = 'MIDDLE_SCHOOL';
+            else if (g >= 9 && g <= 12) levelFilter = 'HIGH_SCHOOL';
+        } else if (ageParam) {
+            const a = parseInt(ageParam, 10);
+            if (a >= 18) levelFilter = 'COLLEGE_ADULT';
+            else if (a >= 14) levelFilter = 'HIGH_SCHOOL';
+            else if (a >= 11) levelFilter = 'MIDDLE_SCHOOL';
+            else if (a >= 6) levelFilter = 'ELEMENTARY_SCHOOL';
+        }
+        if (levelFilter) {
+            where.student_levels = { has: levelFilter };
+        }
+
         const select = {
             id: true,
             username: true,
@@ -98,6 +121,7 @@ export const listPublicTutors = async (req: Request, res: Response) => {
             rating: true,
             review_count: true,
             total_students: true,
+            student_levels: true,
             categories: {
                 include: { category: true }
             },
@@ -161,6 +185,7 @@ export const getPublicTutorById = async (req: Request, res: Response) => {
                 rating: true,
                 review_count: true,
                 total_students: true,
+                student_levels: true,
                 free_session_enabled: true,
                 categories: {
                     select: {
@@ -713,6 +738,38 @@ export const updateServices = async (req: AuthenticatedRequest, res: Response) =
 
     } catch (error) {
         console.error('Update Services Error:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+};
+
+const STUDENT_LEVELS = ['ELEMENTARY_SCHOOL', 'MIDDLE_SCHOOL', 'HIGH_SCHOOL', 'COLLEGE_ADULT'] as const;
+
+// Update Student Levels / Age Group (multi-select)
+export const updateStudentLevels = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+        const userId = req.user?.id;
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+        const { studentLevels } = req.body;
+        if (!Array.isArray(studentLevels)) {
+            return res.status(400).json({ error: 'studentLevels must be an array' });
+        }
+        const valid = studentLevels.every((s: string) => STUDENT_LEVELS.includes(s as any));
+        if (!valid) {
+            return res.status(400).json({ error: `Each level must be one of: ${STUDENT_LEVELS.join(', ')}` });
+        }
+
+        const profile = await prisma.tutorProfile.findUnique({ where: { user_id: userId } });
+        if (!profile) return res.status(404).json({ error: 'Profile not found' });
+
+        await prisma.tutorProfile.update({
+            where: { id: profile.id },
+            data: { student_levels: [...studentLevels] },
+        });
+
+        return res.json({ message: 'Student levels updated', studentLevels });
+    } catch (error) {
+        console.error('Update Student Levels Error:', error);
         res.status(500).json({ error: 'Server error' });
     }
 };

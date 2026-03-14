@@ -26,7 +26,7 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
             { icon: <BookOpen className="w-5 h-5" />, label: 'My Courses', path: '/student/my-courses' },
             { icon: <Users className="w-5 h-5" />, label: 'My Mentors', path: '/student/my-mentors' },
             { icon: <BookOpen className="w-5 h-5" />, label: 'Notes from Mentor', path: '/student/notes' },
-            { icon: <Users className="w-5 h-5" />, label: 'Find a Mentor', path: '/student/mentors' },
+            { icon: <Users className="w-5 h-5" />, label: 'Find Your Perfect Mentor', path: '/find-mentor' },
         ]
         : [
             { icon: <User className="w-5 h-5" />, label: 'Dashboard', path: '/dashboard' },

@@ -4,6 +4,7 @@ import { DashboardLayout } from '../layouts/DashboardLayout';
 import api from '../api/axios';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
+import { MENTOR_SEARCH_AGE_OPTIONS } from '../constants/mentorSearch';
 
 type Frequency = 'ONCE' | 'WEEKLY' | 'TWICE_WEEKLY' | 'THRICE_WEEKLY';
 type CategoryNode = {
@@ -148,7 +149,7 @@ const StudentMentorResultsPage: React.FC = () => {
                 setLoading(true);
                 setError('');
                 const res = await api.get('/tutor/public', {
-                    params: { q, majorCategoryId, subcategoryId, areaIds: areaIdsParam }
+                    params: { q, majorCategoryId, subcategoryId, areaIds: areaIdsParam, grade: grade || undefined, age: age || undefined }
                 });
                 setMentors(res.data.mentors || []);
             } catch (err: any) {
@@ -159,7 +160,7 @@ const StudentMentorResultsPage: React.FC = () => {
         };
 
         fetchMentors();
-    }, [q, majorCategoryId, subcategoryId, areaIdsParam]);
+    }, [q, majorCategoryId, subcategoryId, areaIdsParam, grade, age]);
 
     const title = useMemo(() => {
         if (q) return `Mentors for "${q}"`;
@@ -225,10 +226,9 @@ const StudentMentorResultsPage: React.FC = () => {
                                     onChange={(e) => setDraftAge(e.target.value)}
                                 >
                                     <option value="">Any</option>
-                                    {Array.from({ length: 18 }).map((_, idx) => {
-                                        const a = String(idx + 1);
-                                        return <option key={a} value={a}>{a}</option>;
-                                    })}
+                                    {MENTOR_SEARCH_AGE_OPTIONS.map(({ value, label }) => (
+                                        <option key={value} value={value}>{label}</option>
+                                    ))}
                                 </select>
                             </div>
 

@@ -218,7 +218,7 @@ const StudentDashboard: React.FC = () => {
                             <h1 className="text-xl font-semibold text-gray-900">Welcome back</h1>
                             <p className="text-sm text-gray-500 mt-0.5">Track your sessions, mentors, and courses.</p>
                         </div>
-                        <Button size="sm" onClick={() => navigate('/student/mentors')}>Find a Mentor</Button>
+                        <Button size="sm" onClick={() => navigate('/find-mentor')}>Find Your Perfect Mentor</Button>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

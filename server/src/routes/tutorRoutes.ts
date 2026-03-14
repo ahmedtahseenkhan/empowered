@@ -7,6 +7,7 @@ import {
     updateBio,
     updateEducation,
     updateServices,
+    updateStudentLevels,
     updatePricing,
     getCategories,
     updateExternalReviews,
@@ -29,6 +30,7 @@ router.get('/me/students', authenticateToken, getMyStudents);
 router.put('/me/bio', authenticateToken, updateBio);
 router.put('/me/education', authenticateToken, updateEducation);
 router.put('/me/services', authenticateToken, updateServices);
+router.put('/me/student-levels', authenticateToken, updateStudentLevels);
 router.put('/me/pricing', authenticateToken, updatePricing);
 router.put('/me/tier', authenticateToken, updateTier);
 router.put('/me/external-reviews', authenticateToken, updateExternalReviews);
