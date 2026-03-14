@@ -43,12 +43,11 @@ export const handleStripeWebhook = async (req: Request, res: Response) => {
             default:
                 console.log(`Unhandled event type ${event.type}`);
         }
-    } catch (error) {
-        console.error('Error processing webhook:', error);
-        // Return 200 to Stripe to avoid retries if it's an application error? 
-        // Or 500 to retry? Usually 200 if we caught it and don't want strict retry logic yet.
-        // For now, allow retry on fail.
-        return res.status(500).send('Processing error');
+    } catch (error: any) {
+        const msg = error?.message ?? 'Processing error';
+        console.error('[Stripe Webhook] Error processing event:', msg);
+        console.error('[Stripe Webhook] stack:', error?.stack);
+        return res.status(500).send(msg);
     }
 
     res.json({ received: true });
@@ -79,31 +78,39 @@ async function handleCheckoutSessionCompleted(session: any) {
     }
 
     if (metadata.type === 'mentor_subscription') {
-        const { tutorId, tier } = metadata as { tutorId?: string; tier?: string };
-        const subscriptionId = session.subscription as string | null;
+        try {
+            const { tutorId, tier } = metadata as { tutorId?: string; tier?: string };
+            const subscriptionId = typeof session.subscription === 'string'
+                ? session.subscription
+                : (session.subscription as any)?.id ?? null;
 
-        console.log(`[Stripe Webhook] Mentor Subscription flow. TutorID: ${tutorId}, Tier: ${tier}, SubID: ${subscriptionId}`);
+            console.log(`[Stripe Webhook] Mentor Subscription flow. TutorID: ${tutorId}, Tier: ${tier}, SubID: ${subscriptionId}`);
 
-        if (!tutorId || !subscriptionId) {
-            console.error('[Stripe Webhook] Missing tutorId or subscriptionId');
-            return;
-        }
-
-        const subscription = await StripeService.getSubscription(subscriptionId);
-        const trialEnd = (subscription as any).trial_end as number | null;
-        const currentPeriodEnd = (subscription as any).current_period_end as number | null;
-        const endEpoch = trialEnd || currentPeriodEnd;
-
-        await prisma.tutorProfile.update({
-            where: { id: tutorId },
-            data: {
-                stripe_subscription_id: subscriptionId,
-                subscription_status: (subscription as any).status || 'active',
-                subscription_end_date: endEpoch ? new Date(endEpoch * 1000) : undefined,
-                tier: (tier === 'STANDARD' || tier === 'PRO' || tier === 'PREMIUM') ? (tier as any) : undefined,
+            if (!tutorId || !subscriptionId) {
+                console.error('[Stripe Webhook] Missing tutorId or subscriptionId. session.subscription:', session.subscription);
+                return;
             }
-        });
-        console.log(`[Stripe Webhook] Successfully updated TutorProfile ${tutorId} for subscription.`);
+
+            const subscription = await StripeService.getSubscription(subscriptionId);
+            const trialEnd = (subscription as any).trial_end as number | null;
+            const currentPeriodEnd = (subscription as any).current_period_end as number | null;
+            const endEpoch = trialEnd || currentPeriodEnd;
+
+            await prisma.tutorProfile.update({
+                where: { id: tutorId },
+                data: {
+                    stripe_subscription_id: subscriptionId,
+                    subscription_status: (subscription as any).status || 'active',
+                    subscription_end_date: endEpoch ? new Date(endEpoch * 1000) : undefined,
+                    tier: (tier === 'STANDARD' || tier === 'PRO' || tier === 'PREMIUM') ? (tier as any) : undefined,
+                }
+            });
+            console.log(`[Stripe Webhook] Successfully updated TutorProfile ${tutorId} for subscription. Status: ${(subscription as any).status}`);
+        } catch (err: any) {
+            console.error('[Stripe Webhook] mentor_subscription handler failed:', err?.message);
+            console.error('[Stripe Webhook] stack:', err?.stack);
+            throw err;
+        }
     } else if (metadata.type === 'student_booking_payment') {
         const paymentScheduleId = metadata.paymentScheduleId as string | undefined;
         if (!paymentScheduleId) {

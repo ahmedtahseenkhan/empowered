@@ -134,12 +134,39 @@ const planRank: Record<string, number> = {
 const SubscriptionSettingsPage: React.FC = () => {
     const [profile, setProfile] = useState<TutorProfile | null>(null);
     const [loading, setLoading] = useState(true);
+    const [confirming, setConfirming] = useState(false);
     const [showCancelModal, setShowCancelModal] = useState(false);
     const [expandedPlan, setExpandedPlan] = useState<string | null>(null);
     const [serverPlans, setServerPlans] = useState<ServerPlan[] | null>(null);
 
     useEffect(() => {
         fetchProfile();
+    }, []);
+
+    // After return from Stripe Checkout: sync subscription using session_id (in case webhook hasn't run yet)
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const sessionId = params.get('session_id');
+        if (!sessionId) return;
+
+        let cancelled = false;
+        setConfirming(true);
+        api.post('/payments/mentor/subscription/confirm', { session_id: sessionId })
+            .then(() => {
+                if (cancelled) return;
+                window.history.replaceState({}, '', window.location.pathname);
+                return fetchProfile();
+            })
+            .catch((err: any) => {
+                if (cancelled) return;
+                const msg = err.response?.data?.error ?? err.message ?? 'Failed to confirm subscription';
+                console.error('Confirm subscription error:', err.response?.data ?? err);
+                alert(msg);
+            })
+            .finally(() => {
+                if (!cancelled) setConfirming(false);
+            });
+        return () => { cancelled = true; };
     }, []);
 
     useEffect(() => {
@@ -213,8 +240,9 @@ const SubscriptionSettingsPage: React.FC = () => {
                 alert('Unable to start checkout.');
             }
         } catch (error: any) {
-            console.error('Failed to update plan:', error);
-            alert(error.response?.data?.error || 'Failed to update subscription.');
+            const msg = error.response?.data?.error ?? error.message ?? 'Failed to update subscription.';
+            console.error('Failed to update plan:', error.response?.data ?? error);
+            alert(msg);
         } finally {
             setLoading(false);
         }
@@ -229,13 +257,15 @@ const SubscriptionSettingsPage: React.FC = () => {
         setShowCancelModal(false);
     };
 
-    if (loading) {
+    if (loading || confirming) {
         return (
             <DashboardLayout>
                 <div className="flex items-center justify-center min-h-[50vh]">
                     <div className="text-center">
                         <div className="w-12 h-12 border-4 border-primary-200 border-t-primary-900 rounded-full animate-spin mx-auto mb-3"></div>
-                        <p className="text-gray-500 text-sm">Loading subscription details...</p>
+                        <p className="text-gray-500 text-sm">
+                            {confirming ? 'Activating your subscription...' : 'Loading subscription details...'}
+                        </p>
                     </div>
                 </div>
             </DashboardLayout>
