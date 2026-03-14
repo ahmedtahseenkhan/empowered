@@ -181,6 +181,7 @@ const TutorRegisterPage: React.FC = () => {
     }, []);
 
     const { login } = useAuth();
+    const navigate = useNavigate();
 
     // STEP 1: Basic Info Submission
     const handleBasicInfoSubmit = async (e: React.FormEvent) => {

@@ -334,28 +334,17 @@ const SubscriptionSettingsPage: React.FC = () => {
                                         ? 'Your trial/subscription period has ended. Choose a plan to continue.'
                                         : 'Your subscription is not active. Please select a plan to continue.'}
                             </p>
-                            <div className="flex flex-wrap gap-2 mt-2">
+                            {hasPendingSessionId && (
                                 <Button
                                     type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => { setLoading(true); fetchProfile().finally(() => setLoading(false)); }}
-                                    disabled={loading}
+                                    variant="secondary"
+                                    className="mt-2"
+                                    onClick={retryConfirmSubscription}
+                                    disabled={syncing}
                                 >
-                                    Refresh status
+                                    {syncing ? 'Syncing...' : 'I completed checkout — sync my subscription'}
                                 </Button>
-                                {hasPendingSessionId && (
-                                    <Button
-                                        type="button"
-                                        variant="secondary"
-                                        size="sm"
-                                        onClick={retryConfirmSubscription}
-                                        disabled={syncing}
-                                    >
-                                        {syncing ? 'Syncing...' : 'I completed checkout — sync my subscription'}
-                                    </Button>
-                                )}
-                            </div>
+                            )}
                         </div>
                     </div>
                 )}
