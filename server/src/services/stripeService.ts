@@ -205,10 +205,6 @@ export class StripeService {
         return stripe.subscriptions.retrieve(subscriptionId);
     }
 
-    static async getCheckoutSession(sessionId: string) {
-        return stripe.checkout.sessions.retrieve(sessionId, { expand: ['subscription'] });
-    }
-
     static async getCheckoutSessionByPaymentIntent(paymentIntentId: string) {
         const sessions = await stripe.checkout.sessions.list({
             payment_intent: paymentIntentId,

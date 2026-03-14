@@ -99,13 +99,11 @@ export const createMentorSubscriptionCheckout = async (req: Request, res: Respon
 
         res.json({ url: session.url });
     } catch (error: any) {
-        const message = error?.message ?? 'Failed to create checkout session';
-        console.error('[Create subscription checkout]', message);
-        console.error('[Create subscription checkout] stack:', error?.stack);
+        console.error('Create subscription checkout error:', error);
         if (error instanceof z.ZodError) {
             return res.status(400).json({ error: error.issues });
         }
-        res.status(500).json({ error: message });
+        res.status(500).json({ error: 'Failed to create checkout session' });
     }
 };
 
@@ -287,77 +285,7 @@ export const updateMentorSubscription = async (req: Request, res: Response) => {
         if (error instanceof z.ZodError) {
             return res.status(400).json({ error: error.issues });
         }
-        const msg = error?.message ?? 'Failed to update subscription';
-        console.error('[Update subscription]', msg, error?.stack);
-        res.status(500).json({ error: msg });
-    }
-};
-
-const ConfirmSubscriptionSchema = z.object({
-    session_id: z.string().min(1, 'session_id is required'),
-});
-
-/** Sync mentor subscription after return from Stripe Checkout (when webhook may not have run yet). */
-export const confirmMentorSubscription = async (req: Request, res: Response) => {
-    try {
-        const userId = (req as any).user.id;
-        const { session_id } = ConfirmSubscriptionSchema.parse(req.body);
-
-        const tutor = await prisma.tutorProfile.findUnique({
-            where: { user_id: userId },
-            include: { user: true },
-        });
-        if (!tutor) {
-            console.error('[Confirm subscription] Tutor not found for user', userId);
-            return res.status(404).json({ error: 'Tutor profile not found' });
-        }
-
-        const session = await StripeService.getCheckoutSession(session_id);
-        const metadata = session.metadata as Record<string, string> | null;
-        if (!metadata || metadata.type !== 'mentor_subscription') {
-            console.error('[Confirm subscription] Invalid or non-subscription session', session.id, metadata);
-            return res.status(400).json({ error: 'Invalid checkout session' });
-        }
-        const metaTutorId = metadata.tutorId;
-        const tier = metadata.tier;
-        if (metaTutorId !== tutor.id) {
-            console.error('[Confirm subscription] Session tutorId does not match', metaTutorId, tutor.id);
-            return res.status(403).json({ error: 'Session does not belong to this account' });
-        }
-
-        const subscriptionId = typeof session.subscription === 'string'
-            ? session.subscription
-            : (session.subscription as any)?.id;
-        if (!subscriptionId) {
-            console.error('[Confirm subscription] No subscription on session', session.id);
-            return res.status(400).json({ error: 'No subscription found for this checkout' });
-        }
-
-        const subscription = await StripeService.getSubscription(subscriptionId);
-        const sub = subscription as any;
-        const trialEnd = sub.trial_end as number | null;
-        const currentPeriodEnd = sub.current_period_end as number | null;
-        const endEpoch = trialEnd ?? currentPeriodEnd;
-
-        await prisma.tutorProfile.update({
-            where: { id: tutor.id },
-            data: {
-                stripe_subscription_id: subscriptionId,
-                subscription_status: sub.status || 'active',
-                subscription_end_date: endEpoch ? new Date(endEpoch * 1000) : undefined,
-                tier: (tier === 'STANDARD' || tier === 'PRO' || tier === 'PREMIUM') ? tier : undefined,
-            },
-        });
-        console.log('[Confirm subscription] Updated tutor', tutor.id, 'subscription', subscriptionId, 'status', sub.status);
-        return res.json({ success: true });
-    } catch (error: any) {
-        const message = error?.message ?? 'Failed to confirm subscription';
-        console.error('[Confirm subscription]', message);
-        console.error('[Confirm subscription] stack:', error?.stack);
-        if (error instanceof z.ZodError) {
-            return res.status(400).json({ error: error.issues });
-        }
-        res.status(500).json({ error: message });
+        res.status(500).json({ error: 'Failed to update subscription' });
     }
 };
 
@@ -375,13 +303,11 @@ export const getSubscriptionStatus = async (req: Request, res: Response) => {
             }
         });
 
-        if (!tutor) return res.status(404).json({ error: 'Tutor profile not found' });
+        if (!tutor) return res.status(404).json({ error: 'Tutor found' });
 
         res.json(tutor);
     } catch (error: any) {
-        const msg = error?.message ?? 'Failed to get status';
-        console.error('[Get subscription status]', msg, error?.stack);
-        res.status(500).json({ error: msg });
+        res.status(500).json({ error: 'Failed to get status' });
     }
 }
 
