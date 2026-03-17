@@ -489,10 +489,11 @@ class EmailService {
         callTime: string;
         meetingLink?: string;
     }): Promise<void> {
-        const baseUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+        // Admin dashboard lives on a separate domain; never use CLIENT_URL here.
+        const adminBaseUrl = (process.env.ADMIN_DASHBOARD_URL || process.env.ADMIN_URL || 'https://admin.emplearnings.com').replace(/\/+$/, '');
         const html = this.renderTemplate('demo-booking-admin', {
             ...data,
-            adminDashboardUrl: `${baseUrl}/admin`,
+            adminDashboardUrl: adminBaseUrl,
             meetingLink: data.meetingLink || '',
         });
         await this.sendEmail({
