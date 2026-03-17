@@ -44,8 +44,8 @@ const BookMentorPage: React.FC = () => {
     const [selectedSlotStarts, setSelectedSlotStarts] = useState<string[]>([]);
     const [frequency, setFrequency] = useState<Frequency>((searchParams.get('frequency') as Frequency) || 'WEEKLY');
     const [confirmOpen, setConfirmOpen] = useState(false);
-    const [confirmDayChangeOpen, setConfirmDayChangeOpen] = useState(false);
-    const [pendingDayKey, setPendingDayKey] = useState('');
+    const [confirmReplaceOpen, setConfirmReplaceOpen] = useState(false);
+    const [pendingSlotStart, setPendingSlotStart] = useState('');
 
     const formatDayKey = (iso: string) => {
         const d = new Date(iso);
@@ -172,10 +172,14 @@ const BookMentorPage: React.FC = () => {
     const isSlotSelected = (startIso: string) => selectedSlotStarts.includes(startIso);
 
     const toggleSlot = (startIso: string) => {
+        const required = requiredWeeklySlotsForFrequency(frequency);
         setSelectedSlotStarts((prev) => {
             if (prev.includes(startIso)) return prev.filter((s) => s !== startIso);
-            const required = requiredWeeklySlotsForFrequency(frequency);
-            if (prev.length >= required) return prev; // must remove one first
+            if (prev.length >= required) {
+                setPendingSlotStart(startIso);
+                setConfirmReplaceOpen(true);
+                return prev;
+            }
             return [...prev, startIso].sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
         });
     };
@@ -220,20 +224,19 @@ const BookMentorPage: React.FC = () => {
 
     const handleDayChange = (dayKey: string) => {
         if (!dayKey || dayKey === selectedDay) return;
-        const slotsOnCurrentDay = selectedSlotStarts.filter((s) => formatDayKey(s) === selectedDay);
-        if (slotsOnCurrentDay.length > 0) {
-            setPendingDayKey(dayKey);
-            setConfirmDayChangeOpen(true);
-        } else {
-            setSelectedDay(dayKey);
-        }
+        setSelectedDay(dayKey);
     };
 
-    const confirmDayChange = () => {
-        setSelectedSlotStarts((prev) => prev.filter((s) => formatDayKey(s) !== selectedDay));
-        setSelectedDay(pendingDayKey);
-        setConfirmDayChangeOpen(false);
-        setPendingDayKey('');
+    const replaceSelectedSlot = (removeStartIso: string) => {
+        if (!pendingSlotStart) return;
+        setSelectedSlotStarts((prev) => {
+            const next = prev.filter((s) => s !== removeStartIso);
+            next.push(pendingSlotStart);
+            next.sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+            return next;
+        });
+        setConfirmReplaceOpen(false);
+        setPendingSlotStart('');
     };
 
     return (
@@ -396,19 +399,34 @@ const BookMentorPage: React.FC = () => {
             </section>
 
             <Modal
-                isOpen={confirmDayChangeOpen}
-                onClose={() => { setConfirmDayChangeOpen(false); setPendingDayKey(''); }}
-                title="Change day?"
+                isOpen={confirmReplaceOpen}
+                onClose={() => { setConfirmReplaceOpen(false); setPendingSlotStart(''); }}
+                title="Replace a selected slot"
             >
                 <div className="space-y-4">
                     <p className="text-gray-600">
-                        Changing the day will clear the slot(s) you selected for{' '}
-                        <strong>{selectedDay ? formatDayLabel(selectedDay) : 'this day'}</strong>.
-                        You can then pick a time on the new day.
+                        You already selected <strong>{requiredWeeklySlots}/{requiredWeeklySlots}</strong> time slots.
+                        To add the new slot, choose one to replace.
                     </p>
-                    <div className="flex gap-2 justify-end">
-                        <Button variant="outline" onClick={() => { setConfirmDayChangeOpen(false); setPendingDayKey(''); }}>Cancel</Button>
-                        <Button onClick={confirmDayChange}>Continue</Button>
+
+                    <div className="space-y-2">
+                        {selectedSlotStarts.map((s) => (
+                            <button
+                                key={s}
+                                type="button"
+                                onClick={() => replaceSelectedSlot(s)}
+                                className="w-full text-left px-3 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+                            >
+                                <div className="text-xs text-gray-600">Every {formatDayLabel(formatDayKey(s)).split(',')[0]}</div>
+                                <div className="text-sm font-semibold text-gray-900">{formatTimeLabel(s)}</div>
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="flex justify-end">
+                        <Button variant="outline" onClick={() => { setConfirmReplaceOpen(false); setPendingSlotStart(''); }}>
+                            Cancel
+                        </Button>
                     </div>
                 </div>
             </Modal>
