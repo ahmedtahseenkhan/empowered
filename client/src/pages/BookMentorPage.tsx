@@ -18,11 +18,10 @@ type PublicTutorLite = {
     timezone: string;
 };
 
-type Frequency = 'ONCE' | 'WEEKLY' | 'TWICE_WEEKLY' | 'THRICE_WEEKLY';
+type Frequency = 'ONCE' | 'WEEKLY' | 'TWICE_WEEKLY';
 
 const requiredWeeklySlotsForFrequency = (frequency: Frequency) => {
     if (frequency === 'TWICE_WEEKLY') return 2;
-    if (frequency === 'THRICE_WEEKLY') return 3;
     return 1;
 };
 
@@ -278,7 +277,6 @@ const BookMentorPage: React.FC = () => {
                                             >
                                                 <option value="WEEKLY">Once a week (4 Sessions)</option>
                                                 <option value="TWICE_WEEKLY">Twice a week (8 Sessions)</option>
-                                                <option value="THRICE_WEEKLY">Three times a week (12 Sessions)</option>
                                                 <option value="ONCE">One-time session (1 Session)</option>
                                             </select>
                                             <div className="text-xs text-gray-500 mt-2">

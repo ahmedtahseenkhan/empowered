@@ -6,7 +6,7 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { MENTOR_SEARCH_AGE_OPTIONS } from '../constants/mentorSearch';
 
-type Frequency = 'ONCE' | 'WEEKLY' | 'TWICE_WEEKLY' | 'THRICE_WEEKLY';
+type Frequency = 'ONCE' | 'WEEKLY' | 'TWICE_WEEKLY';
 type CategoryNode = {
     id: string;
     name: string;
@@ -241,7 +241,6 @@ const StudentMentorResultsPage: React.FC = () => {
                                 >
                                     <option value="WEEKLY">Once a week (4 sessions)</option>
                                     <option value="TWICE_WEEKLY">Twice a week (8 sessions)</option>
-                                    <option value="THRICE_WEEKLY">Three times a week (12 sessions)</option>
                                     <option value="ONCE">One-time session</option>
                                 </select>
                             </div>

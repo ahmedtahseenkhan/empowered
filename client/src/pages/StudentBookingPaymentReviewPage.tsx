@@ -5,7 +5,7 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import api from '../api/axios';
 
-type Frequency = 'ONCE' | 'WEEKLY' | 'TWICE_WEEKLY' | 'THRICE_WEEKLY';
+type Frequency = 'ONCE' | 'WEEKLY' | 'TWICE_WEEKLY';
 
 type PendingBooking = {
   tutorId: string;
