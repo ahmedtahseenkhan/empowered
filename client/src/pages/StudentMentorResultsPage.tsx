@@ -6,7 +6,7 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { MENTOR_SEARCH_AGE_OPTIONS } from '../constants/mentorSearch';
 
-type Frequency = 'ONCE' | 'WEEKLY' | 'TWICE_WEEKLY';
+type Frequency = 'WEEKLY' | 'TWICE_WEEKLY';
 type CategoryNode = {
     id: string;
     name: string;
@@ -31,7 +31,7 @@ const StudentMentorResultsPage: React.FC = () => {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const q = searchParams.get('q') || '';
-    const frequency = (searchParams.get('frequency') || 'WEEKLY') as Frequency;
+    const frequency: Frequency = searchParams.get('frequency') === 'TWICE_WEEKLY' ? 'TWICE_WEEKLY' : 'WEEKLY';
     const grade = searchParams.get('grade') || '';
     const age = searchParams.get('age') || '';
     const majorCategoryId = searchParams.get('majorCategoryId') || '';
@@ -241,7 +241,6 @@ const StudentMentorResultsPage: React.FC = () => {
                                 >
                                     <option value="WEEKLY">Once a week (4 sessions)</option>
                                     <option value="TWICE_WEEKLY">Twice a week (8 sessions)</option>
-                                    <option value="ONCE">One-time session</option>
                                 </select>
                             </div>
 

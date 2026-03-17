@@ -19,7 +19,7 @@ type Goal =
     | 'Standardized tests'
     | 'Understand difficult concepts';
 
-type Frequency = 'ONCE' | 'WEEKLY' | 'TWICE_WEEKLY';
+type Frequency = 'WEEKLY' | 'TWICE_WEEKLY';
 
 const SUBJECT_OPTIONS: Subject[] = [
     'Mathematics',
@@ -56,7 +56,7 @@ const MentorResultsPage: React.FC = () => {
     const [searchParams] = useSearchParams();
     const q = searchParams.get('q') || '';
     const category = searchParams.get('category') || '';
-    const frequency = (searchParams.get('frequency') || 'WEEKLY') as Frequency;
+    const frequency: Frequency = searchParams.get('frequency') === 'TWICE_WEEKLY' ? 'TWICE_WEEKLY' : 'WEEKLY';
     const grade = searchParams.get('grade') || '';
     const age = searchParams.get('age') || '';
 
@@ -261,7 +261,6 @@ const MentorResultsPage: React.FC = () => {
                                     >
                                         <option value="WEEKLY">Once a week (4 sessions)</option>
                                         <option value="TWICE_WEEKLY">Twice a week (8 sessions)</option>
-                                        <option value="ONCE">One-time session</option>
                                     </select>
                                 </div>
                             </div>

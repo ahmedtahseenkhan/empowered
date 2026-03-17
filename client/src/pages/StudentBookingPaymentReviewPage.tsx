@@ -5,7 +5,7 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import api from '../api/axios';
 
-type Frequency = 'ONCE' | 'WEEKLY' | 'TWICE_WEEKLY';
+type Frequency = 'WEEKLY' | 'TWICE_WEEKLY';
 
 type PendingBooking = {
   tutorId: string;
@@ -45,12 +45,13 @@ const StudentBookingPaymentReviewPage: React.FC = () => {
         setPending(null);
         return;
       }
-      const parsed = JSON.parse(raw) as PendingBooking;
+      const parsed = JSON.parse(raw) as { tutorId?: string; frequency?: string; slotStarts?: string[]; durationMinutes?: number; createdAt?: string };
       if (!parsed?.tutorId || !parsed?.frequency || !Array.isArray(parsed.slotStarts) || !parsed.slotStarts.length) {
         setPending(null);
         return;
       }
-      setPending(parsed);
+      const frequency: Frequency = parsed.frequency === 'TWICE_WEEKLY' ? 'TWICE_WEEKLY' : 'WEEKLY';
+      setPending({ ...parsed, frequency } as PendingBooking);
     } catch {
       setPending(null);
     }

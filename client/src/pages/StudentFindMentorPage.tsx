@@ -7,7 +7,7 @@ import { Button } from '../components/ui/Button';
 import api from '../api/axios';
 import { MENTOR_SEARCH_AGE_OPTIONS } from '../constants/mentorSearch';
 
-type Frequency = 'ONCE' | 'WEEKLY' | 'TWICE_WEEKLY';
+type Frequency = 'WEEKLY' | 'TWICE_WEEKLY';
 
 type Goal =
     | 'Improve grades'
