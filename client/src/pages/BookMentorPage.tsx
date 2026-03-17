@@ -44,6 +44,8 @@ const BookMentorPage: React.FC = () => {
     const [selectedSlotStarts, setSelectedSlotStarts] = useState<string[]>([]);
     const [frequency, setFrequency] = useState<Frequency>((searchParams.get('frequency') as Frequency) || 'WEEKLY');
     const [confirmOpen, setConfirmOpen] = useState(false);
+    const [confirmDayChangeOpen, setConfirmDayChangeOpen] = useState(false);
+    const [pendingDayKey, setPendingDayKey] = useState('');
 
     const formatDayKey = (iso: string) => {
         const d = new Date(iso);
@@ -216,6 +218,24 @@ const BookMentorPage: React.FC = () => {
         setConfirmOpen(true);
     };
 
+    const handleDayChange = (dayKey: string) => {
+        if (!dayKey || dayKey === selectedDay) return;
+        const slotsOnCurrentDay = selectedSlotStarts.filter((s) => formatDayKey(s) === selectedDay);
+        if (slotsOnCurrentDay.length > 0) {
+            setPendingDayKey(dayKey);
+            setConfirmDayChangeOpen(true);
+        } else {
+            setSelectedDay(dayKey);
+        }
+    };
+
+    const confirmDayChange = () => {
+        setSelectedSlotStarts((prev) => prev.filter((s) => formatDayKey(s) !== selectedDay));
+        setSelectedDay(pendingDayKey);
+        setConfirmDayChangeOpen(false);
+        setPendingDayKey('');
+    };
+
     return (
         <PageLayout>
             <section className="section-container">
@@ -272,10 +292,7 @@ const BookMentorPage: React.FC = () => {
                                             <select
                                                 className="w-full border border-gray-300 rounded-lg p-3 bg-white"
                                                 value={selectedDay}
-                                                onChange={(e) => {
-                                                    const day = e.target.value;
-                                                    setSelectedDay(day);
-                                                }}
+                                                onChange={(e) => handleDayChange(e.target.value)}
                                             >
                                                 <option value="">Select day</option>
                                                 {availableDays.map((d) => (
@@ -362,6 +379,11 @@ const BookMentorPage: React.FC = () => {
                                                 Please select {requiredWeeklySlots - selectedSlotStarts.length} more slot{requiredWeeklySlots - selectedSlotStarts.length === 1 ? '' : 's'} to proceed
                                             </div>
                                         )}
+                                        {selectedSlotStarts.length === requiredWeeklySlots && requiredWeeklySlots > 0 && (
+                                            <div className="mt-4 bg-green-50 border border-green-200 text-green-800 text-sm rounded-lg p-3">
+                                                All slots selected ({requiredWeeklySlots}/{requiredWeeklySlots}). Click Continue to proceed.
+                                            </div>
+                                        )}
                                     </Card>
                                 </div>
                             </div>
@@ -372,6 +394,24 @@ const BookMentorPage: React.FC = () => {
                     )}
                 </div>
             </section>
+
+            <Modal
+                isOpen={confirmDayChangeOpen}
+                onClose={() => { setConfirmDayChangeOpen(false); setPendingDayKey(''); }}
+                title="Change day?"
+            >
+                <div className="space-y-4">
+                    <p className="text-gray-600">
+                        Changing the day will clear the slot(s) you selected for{' '}
+                        <strong>{selectedDay ? formatDayLabel(selectedDay) : 'this day'}</strong>.
+                        You can then pick a time on the new day.
+                    </p>
+                    <div className="flex gap-2 justify-end">
+                        <Button variant="outline" onClick={() => { setConfirmDayChangeOpen(false); setPendingDayKey(''); }}>Cancel</Button>
+                        <Button onClick={confirmDayChange}>Continue</Button>
+                    </div>
+                </div>
+            </Modal>
 
             <Modal
                 isOpen={confirmOpen}

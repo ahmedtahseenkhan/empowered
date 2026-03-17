@@ -489,7 +489,7 @@ const FindMentorPage: React.FC = () => {
     const renderAreas = () => (
         <div className="space-y-6">
             <h2 className="text-2xl md:text-3xl font-bold text-gray-900">
-                Select area(s) of expertise (choose all that apply)
+                Choose the mentor expertise that fits your needs. (Select all that apply)
             </h2>
             <p className="text-gray-600 text-sm">Pull all area(s) of expertise related to the major category and subcategory on the website.</p>
             {areas.length === 0 ? (

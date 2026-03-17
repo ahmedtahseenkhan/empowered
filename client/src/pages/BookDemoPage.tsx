@@ -42,6 +42,23 @@ function formatSlotInDallas(iso: string): string {
     return d.toLocaleString('en-US', { timeZone: DALLAS_TZ, weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
 }
 
+function formatDallasDayKey(iso: string): string {
+    const d = new Date(iso);
+    // YYYY-MM-DD in Dallas timezone
+    return d.toLocaleDateString('en-CA', { timeZone: DALLAS_TZ });
+}
+
+function formatDallasDayLabel(dayKey: string): string {
+    const [y, m, d] = dayKey.split('-').map(Number);
+    const dt = new Date(Date.UTC(y, (m || 1) - 1, d || 1, 12, 0, 0));
+    return new Intl.DateTimeFormat(undefined, { timeZone: DALLAS_TZ, weekday: 'short', month: 'short', day: 'numeric' }).format(dt);
+}
+
+function formatDallasTimeLabel(iso: string): string {
+    const d = new Date(iso);
+    return new Intl.DateTimeFormat(undefined, { timeZone: DALLAS_TZ, hour: 'numeric', minute: '2-digit', hour12: true }).format(d);
+}
+
 const BookDemoPage: React.FC = () => {
     const [submitted, setSubmitted] = useState(false);
     const [error, setError] = useState('');
@@ -60,6 +77,7 @@ const BookDemoPage: React.FC = () => {
 
     const [slotsLoading, setSlotsLoading] = useState(false);
     const [slots, setSlots] = useState<Array<{ start: string; end: string }>>([]);
+    const [selectedDayKey, setSelectedDayKey] = useState('');
     // Start from "tomorrow" in Dallas (admin timezone) so the first day shown is tomorrow, not today
     const [weekStart, setWeekStart] = useState(() => {
         const now = new Date();
@@ -87,6 +105,33 @@ const BookDemoPage: React.FC = () => {
             .catch(() => setSlots([]))
             .finally(() => setSlotsLoading(false));
     }, [weekStart, weekEnd]);
+
+    const slotsByDay = useMemo(() => {
+        const map = new Map<string, Array<{ start: string; end: string }>>();
+        for (const s of slots) {
+            const key = formatDallasDayKey(s.start);
+            map.set(key, [...(map.get(key) || []), s]);
+        }
+        for (const [k, arr] of map.entries()) {
+            arr.sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+            map.set(k, arr);
+        }
+        return map;
+    }, [slots]);
+
+    const availableDays = useMemo(() => Array.from(slotsByDay.keys()).sort(), [slotsByDay]);
+
+    useEffect(() => {
+        // Keep selectedDayKey in sync with loaded slots / selected slot.
+        if (formData.slot_start_time) {
+            const key = formatDallasDayKey(formData.slot_start_time);
+            setSelectedDayKey(key);
+            return;
+        }
+        if (selectedDayKey && slotsByDay.has(selectedDayKey)) return;
+        setSelectedDayKey(availableDays[0] || '');
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [availableDays.join('|'), formData.slot_start_time, slotsByDay]);
 
     const toggleLookingFor = (value: string) => {
         setFormData((prev) => ({
@@ -255,20 +300,56 @@ const BookDemoPage: React.FC = () => {
                                 ) : slots.length === 0 ? (
                                     <div className="text-sm text-gray-600 py-4">No slots available in this range. Try another week.</div>
                                 ) : (
-                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-60 overflow-y-auto">
-                                        {slots.map((slot) => {
-                                            const selected = formData.slot_start_time === slot.start;
-                                            return (
-                                                <button
-                                                    key={slot.start}
-                                                    type="button"
-                                                    onClick={() => setFormData({ ...formData, slot_start_time: slot.start })}
-                                                    className={`p-3 rounded-lg border text-left text-sm transition-colors ${selected ? 'border-purple-600 bg-purple-50' : 'border-gray-200 hover:bg-gray-50'}`}
-                                                >
-                                                    {formatSlotInDallas(slot.start)}
-                                                </button>
-                                            );
-                                        })}
+                                    <div className="space-y-3">
+                                        <div>
+                                            <div className="text-sm font-medium text-gray-700 mb-2">Select a day</div>
+                                            <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
+                                                {availableDays.map((dayKey) => {
+                                                    const active = selectedDayKey === dayKey;
+                                                    const count = (slotsByDay.get(dayKey) || []).length;
+                                                    return (
+                                                        <button
+                                                            key={dayKey}
+                                                            type="button"
+                                                            onClick={() => setSelectedDayKey(dayKey)}
+                                                            className={`shrink-0 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${active
+                                                                ? 'bg-purple-600 text-white border-purple-600'
+                                                                : 'bg-white text-gray-900 border-gray-200 hover:bg-gray-50'
+                                                                }`}
+                                                        >
+                                                            <div className="leading-tight">{formatDallasDayLabel(dayKey)}</div>
+                                                            <div className={`text-[11px] ${active ? 'text-purple-100' : 'text-gray-500'}`}>{count} slot{count === 1 ? '' : 's'}</div>
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <div className="text-sm font-medium text-gray-700 mb-2">Select a time</div>
+                                            {(slotsByDay.get(selectedDayKey) || []).length === 0 ? (
+                                                <div className="text-sm text-gray-600">No slots available for this day.</div>
+                                            ) : (
+                                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                                    {(slotsByDay.get(selectedDayKey) || []).map((slot) => {
+                                                        const selected = formData.slot_start_time === slot.start;
+                                                        return (
+                                                            <button
+                                                                key={slot.start}
+                                                                type="button"
+                                                                onClick={() => setFormData({ ...formData, slot_start_time: slot.start })}
+                                                                className={`p-3 rounded-lg border text-left text-sm transition-colors ${selected
+                                                                    ? 'border-purple-600 bg-purple-50'
+                                                                    : 'border-gray-200 hover:bg-gray-50'}`}
+                                                            >
+                                                                <div className="font-semibold text-gray-900">{formatDallasTimeLabel(slot.start)}</div>
+                                                                <div className="text-xs text-gray-500 mt-0.5">{formatDallasDayLabel(selectedDayKey)}</div>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 )}
                                 <div className="flex gap-2 mt-2">

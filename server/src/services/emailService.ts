@@ -24,6 +24,12 @@ class EmailService {
         this.fromName = process.env.SMTP_FROM_NAME || 'Empowered Learnings';
     }
 
+    private getClientBaseUrl(): string {
+        // Use production site by default so emails never point to localhost.
+        const raw = (process.env.CLIENT_URL || process.env.CLIENT_BASE_URL || 'https://emplearnings.com').trim();
+        return raw.replace(/\/+$/, '');
+    }
+
     /**
      * Send a raw email
      */
@@ -71,7 +77,7 @@ class EmailService {
         meetingLink: string;
         dashboardUrl?: string;
     }): Promise<void> {
-        const baseUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+        const baseUrl = this.getClientBaseUrl();
         const html = this.renderTemplate('student/booking-confirmation-trial', {
             ...data,
             dashboardUrl: data.dashboardUrl || `${baseUrl}/dashboard`,
@@ -94,7 +100,7 @@ class EmailService {
         meetingLink: string;
         dashboardUrl?: string;
     }): Promise<void> {
-        const baseUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+        const baseUrl = this.getClientBaseUrl();
         const html = this.renderTemplate('student/booking-confirmation-regular', {
             ...data,
             dashboardUrl: data.dashboardUrl || `${baseUrl}/dashboard`,
@@ -115,7 +121,7 @@ class EmailService {
         meetingLink: string;
         dashboardUrl?: string;
     }): Promise<void> {
-        const baseUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+        const baseUrl = this.getClientBaseUrl();
         const html = this.renderTemplate('student/session-reminder', {
             ...data,
             dashboardUrl: data.dashboardUrl || `${baseUrl}/dashboard`,
@@ -172,7 +178,7 @@ class EmailService {
         meetingLink: string;
         dashboardUrl?: string;
     }): Promise<void> {
-        const baseUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+        const baseUrl = this.getClientBaseUrl();
         const html = this.renderTemplate('mentor/new-trial-booking', {
             ...data,
             dashboardUrl: data.dashboardUrl || `${baseUrl}/tutor/dashboard`,
@@ -194,7 +200,7 @@ class EmailService {
         meetingLink: string;
         dashboardUrl?: string;
     }): Promise<void> {
-        const baseUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+        const baseUrl = this.getClientBaseUrl();
         const html = this.renderTemplate('mentor/new-regular-booking', {
             ...data,
             dashboardUrl: data.dashboardUrl || `${baseUrl}/tutor/dashboard`,
@@ -215,7 +221,7 @@ class EmailService {
         meetingLink: string;
         dashboardUrl?: string;
     }): Promise<void> {
-        const baseUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+        const baseUrl = this.getClientBaseUrl();
         const html = this.renderTemplate('mentor/session-reminder', {
             ...data,
             dashboardUrl: data.dashboardUrl || `${baseUrl}/tutor/dashboard`,
@@ -236,7 +242,7 @@ class EmailService {
         review: string;
         reviewLink?: string;
     }): Promise<void> {
-        const baseUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+        const baseUrl = this.getClientBaseUrl();
         const html = this.renderTemplate('mentor/review-received', {
             ...data,
             reviewLink: data.reviewLink || `${baseUrl}/tutor/dashboard`,

@@ -78,7 +78,7 @@ export const googleCalendarOAuthCallback = async (req: Request, res: Response) =
 
         await prisma.oAuthState.delete({ where: { state } });
 
-        const appBase = process.env.CLIENT_BASE_URL || 'http://localhost:5173';
+        const appBase = (process.env.CLIENT_URL || process.env.CLIENT_BASE_URL || 'https://emplearnings.com').trim().replace(/\/+$/, '');
         return res.redirect(`${appBase}/dashboard?googleCalendar=connected`);
     } catch (e) {
         console.error('googleCalendarOAuthCallback error:', e);

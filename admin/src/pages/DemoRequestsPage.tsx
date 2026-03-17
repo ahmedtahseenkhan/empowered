@@ -15,6 +15,7 @@ type DemoBooking = {
     slot_end_time: string;
     timezone: string;
     created_at: string;
+    meeting_link?: string | null;
 };
 
 const DALLAS_TZ = 'America/Chicago';
@@ -291,6 +292,21 @@ const DemoRequestsPage: React.FC = () => {
                                 <dt className="font-medium text-gray-500">Demo time (Dallas, TX)</dt>
                                 <dd className="text-gray-900">{formatInDallas(selectedBooking.slot_start_time)} – 20 min</dd>
                             </div>
+                            {!!selectedBooking.meeting_link && (
+                                <div>
+                                    <dt className="font-medium text-gray-500">Demo call link</dt>
+                                    <dd className="text-gray-900">
+                                        <a
+                                            href={selectedBooking.meeting_link}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="inline-flex items-center justify-center px-3 py-2 rounded-lg bg-purple-600 text-white hover:bg-purple-700 transition-colors"
+                                        >
+                                            Join Demo Call
+                                        </a>
+                                    </dd>
+                                </div>
+                            )}
                             <div>
                                 <dt className="font-medium text-gray-500">Booked on</dt>
                                 <dd className="text-gray-900">{new Date(selectedBooking.created_at).toLocaleString()}</dd>

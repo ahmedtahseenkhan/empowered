@@ -346,7 +346,7 @@ const StudentFindMentorPage: React.FC = () => {
                     {step === 6 && (
                         <div className="space-y-6">
                             <div className="text-2xl md:text-3xl font-bold text-gray-900">
-                                Select area(s) of expertise (choose all that apply)
+                            Choose the mentor expertise that fits your needs. (Select all that apply)"
                             </div>
 
                             {!selectedSubcategory ? (

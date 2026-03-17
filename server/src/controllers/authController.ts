@@ -6,6 +6,11 @@ import { RegisterSchema, LoginSchema } from '../utils/validation';
 import { AuthRequest } from '../middleware/authMiddleware';
 import emailService from '../services/emailService';
 
+const getClientBaseUrl = (): string => {
+    const raw = (process.env.CLIENT_URL || process.env.CLIENT_BASE_URL || 'https://emplearnings.com').trim();
+    return raw.replace(/\/+$/, '');
+};
+
 export const register = async (req: Request, res: Response) => {
     try {
         const { email, password, role, username, tier } = RegisterSchema.parse(req.body);
@@ -56,7 +61,8 @@ export const register = async (req: Request, res: Response) => {
         // Send Verification Email
         try {
             const verificationToken = generateVerificationToken(result.id);
-            const verificationLink = `${process.env.CLIENT_URL || 'http://localhost:5173'}/verify-email?token=${verificationToken}`;
+            const baseUrl = getClientBaseUrl();
+            const verificationLink = `${baseUrl}/verify-email?token=${verificationToken}`;
 
             await emailService.sendVerificationEmail({
                 username,
@@ -68,7 +74,7 @@ export const register = async (req: Request, res: Response) => {
             await emailService.sendWelcomeEmail({
                 username,
                 email,
-                loginLink: `${process.env.CLIENT_URL || 'http://localhost:5173'}/login`,
+                loginLink: `${baseUrl}/login`,
             });
 
         } catch (emailError) {
@@ -324,7 +330,8 @@ export const resendVerification = async (req: Request, res: Response) => {
         if (user.is_verified) return res.status(400).json({ error: 'Email already verified' });
 
         const verificationToken = generateVerificationToken(user.id);
-        const verificationLink = `${process.env.CLIENT_URL || 'http://localhost:5173'}/verify-email?token=${verificationToken}`;
+        const baseUrl = getClientBaseUrl();
+        const verificationLink = `${baseUrl}/verify-email?token=${verificationToken}`;
 
         const username = user.role === 'STUDENT' ? user.student_profile?.username : user.tutor_profile?.username;
 

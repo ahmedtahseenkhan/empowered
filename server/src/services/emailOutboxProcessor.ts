@@ -212,7 +212,7 @@ async function sendOutboxRow(row: OutboxRow) {
             tutorName: payment.booking.tutor?.username || 'Mentor',
             amount: `$${amountDollars}`,
             dueDate: formatDatePart(payment.due_date),
-            paymentLink: `${process.env.CLIENT_URL || 'http://localhost:5173'}/payments`,
+            paymentLink: `${(process.env.CLIENT_URL || process.env.CLIENT_BASE_URL || 'https://emplearnings.com').trim().replace(/\/+$/, '')}/payments`,
         });
 
         return;
