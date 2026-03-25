@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, ExternalLink, CreditCard, ChevronRight } from 'lucide-react';
+import { Calendar, ExternalLink, CreditCard } from 'lucide-react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
+import SessionListCard from '../components/sessions/SessionListCard';
 import api from '../api/axios';
 
 type Lesson = {
@@ -95,15 +96,34 @@ const StudentSessionsPage: React.FC = () => {
         });
     };
 
-    const formatRange = (startIso: string, endIso: string) => {
+    const tzOpts = { timeZone: studentTimezone } as const;
+
+    const formatDateLong = (iso: string) => {
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return '—';
+        return d.toLocaleDateString(undefined, {
+            ...tzOpts,
+            weekday: 'long',
+            month: 'long',
+            day: 'numeric',
+            year: 'numeric',
+        });
+    };
+
+    const formatTimeOnlyRange = (startIso: string, endIso: string) => {
         const s = new Date(startIso);
         const e = new Date(endIso);
         if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime())) return '—';
-        const opts = { timeZone: studentTimezone } as const;
-        const datePart = s.toLocaleDateString(undefined, { ...opts, day: '2-digit', month: '2-digit', year: 'numeric' });
-        const startTime = s.toLocaleTimeString(undefined, { ...opts, hour: 'numeric', minute: '2-digit', hour12: true });
-        const endTime = e.toLocaleTimeString(undefined, { ...opts, hour: 'numeric', minute: '2-digit', hour12: true });
-        return `${datePart}, ${startTime} – ${endTime}`;
+        const startTime = s.toLocaleTimeString(undefined, { ...tzOpts, hour: 'numeric', minute: '2-digit', hour12: true });
+        const endTime = e.toLocaleTimeString(undefined, { ...tzOpts, hour: 'numeric', minute: '2-digit', hour12: true });
+        return `${startTime} – ${endTime}`;
+    };
+
+    const durationMinutes = (startIso: string, endIso: string) => {
+        const s = new Date(startIso).getTime();
+        const e = new Date(endIso).getTime();
+        if (Number.isNaN(s) || Number.isNaN(e) || e <= s) return 60;
+        return Math.max(1, Math.round((e - s) / 60000));
     };
 
     const filtered = useMemo(() => {
@@ -127,60 +147,29 @@ const StudentSessionsPage: React.FC = () => {
         const ps = lesson.payment_status;
         const lessonStatus = (lesson.status || '').toUpperCase();
 
+        const pill = 'inline-flex items-center px-3 py-1 rounded-full text-xs sm:text-sm font-medium border';
         if (lessonStatus === 'CANCELLED') {
-            return (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-50 text-gray-600 border border-gray-200">
-                    Cancelled
-                </span>
-            );
+            return <span className={`${pill} bg-gray-50 text-gray-600 border-gray-200`}>Cancelled</span>;
         }
         if (lessonStatus === 'COMPLETED') {
-            return (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-green-50 text-green-700 border border-green-200">
-                    Completed
-                </span>
-            );
+            return <span className={`${pill} bg-green-50 text-green-700 border-green-200`}>Completed</span>;
         }
         if (lessonStatus === 'MISSED') {
-            return (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-50 text-red-700 border border-red-200">
-                    Missed
-                </span>
-            );
+            return <span className={`${pill} bg-red-50 text-red-700 border-red-200`}>Missed</span>;
         }
         if (billing === 'FREE_INTRO') {
-            return (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-green-50 text-green-700 border border-green-200">
-                    Free Intro
-                </span>
-            );
+            return <span className={`${pill} bg-green-50 text-green-700 border-green-200`}>Free Intro</span>;
         }
         if (billing === 'FREE_TRIAL') {
-            return (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
-                    Free Trial
-                </span>
-            );
+            return <span className={`${pill} bg-blue-50 text-blue-700 border-blue-200`}>Free Trial</span>;
         }
         if (ps === 'paid') {
-            return (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-                    Paid
-                </span>
-            );
+            return <span className={`${pill} bg-emerald-50 text-emerald-700 border-emerald-200`}>Paid</span>;
         }
         if (ps === 'failed') {
-            return (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-50 text-red-700 border border-red-200">
-                    Payment Failed
-                </span>
-            );
+            return <span className={`${pill} bg-red-50 text-red-700 border-red-200`}>Payment Failed</span>;
         }
-        return (
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
-                Payment Pending
-            </span>
-        );
+        return <span className={`${pill} bg-amber-50 text-amber-700 border-amber-200`}>Payment Pending</span>;
     };
 
     const needsPayment = (lesson: Lesson) => {
@@ -224,106 +213,93 @@ const StudentSessionsPage: React.FC = () => {
                         </div>
                     </Card>
                 ) : (
-                    <div className="space-y-4">
+                    <div className="space-y-5">
                         {(joinError || payError) && (
                             <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
                                 {joinError || payError}
                             </div>
                         )}
-                        {sorted.map((l) => (
-                            <Card
-                                key={l.id}
-                                className="p-6 cursor-pointer hover:shadow-md transition-shadow"
-                                onClick={() => navigate(`/student/sessions/${l.id}`)}
-                            >
-                                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-                                    <div>
-                                        <div className="flex items-center gap-2 flex-wrap">
-                                            {mapPaymentBadge(l)}
-                                            <span className="text-xs text-gray-500">
-                                                with {l.tutor?.username || 'Mentor'}
-                                            </span>
-                                        </div>
-                                        <div className="text-lg font-bold text-gray-900 mt-2">
-                                            {l.start.toLocaleDateString(undefined, {
-                                                timeZone: studentTimezone,
-                                                weekday: 'short',
-                                                month: 'short',
-                                                day: 'numeric',
-                                            })}
-                                        </div>
-                                        <div className="text-sm text-gray-700 mt-1">
-                                            {formatRange(l.start_time, l.end_time)}
-                                        </div>
-                                        {l.bookedAt ? (
-                                            <div className="text-xs text-gray-500 mt-1">
-                                                Booked on {formatBookedOn(l.bookedAt)}
-                                            </div>
-                                        ) : null}
-                                    </div>
-                                    <div className="flex gap-2 sm:flex-col items-center">
-                                        {needsPayment(l) && tab === 'upcoming' ? (
-                                            <Button
-                                                className="w-full flex items-center gap-2 bg-amber-600 hover:bg-amber-700 text-white"
-                                                disabled={payBusyId === l.id}
-                                                onClick={async (e) => {
-                                                    e.stopPropagation();
-                                                    try {
-                                                        setPayBusyId(l.id);
-                                                        setPayError('');
-                                                        const baseUrl = window.location.origin;
-                                                        const res = await api.post('/payments/student/booking/pay-next', {
-                                                            bookingId: l.booking_id || l.booking?.id,
-                                                            successUrl: `${baseUrl}/student/sessions/${l.id}`,
-                                                            cancelUrl: `${baseUrl}/student/sessions/${l.id}`,
-                                                        });
-                                                        if (res.data?.url) {
-                                                            window.location.href = res.data.url;
-                                                        } else {
-                                                            setPayError('Failed to start payment – please try again.');
+                        {sorted.map((l) => {
+                            const mentorName = l.tutor?.username || 'Mentor';
+                            return (
+                                <SessionListCard
+                                    key={l.id}
+                                    otherPersonName={mentorName}
+                                    personRoleLabel="Mentor"
+                                    headerDateLine={formatDateLong(l.start_time)}
+                                    dateRowValue={formatDateLong(l.start_time)}
+                                    timeRowValue={formatTimeOnlyRange(l.start_time, l.end_time)}
+                                    durationMinutes={durationMinutes(l.start_time, l.end_time)}
+                                    badge={mapPaymentBadge(l)}
+                                    bookedOnLine={l.bookedAt ? formatBookedOn(l.bookedAt) : null}
+                                    onCardClick={() => navigate(`/student/sessions/${l.id}`)}
+                                    actions={
+                                        <>
+                                            {needsPayment(l) && tab === 'upcoming' ? (
+                                                <Button
+                                                    className="flex items-center gap-2 bg-amber-600 hover:bg-amber-700 text-white"
+                                                    disabled={payBusyId === l.id}
+                                                    onClick={async () => {
+                                                        try {
+                                                            setPayBusyId(l.id);
+                                                            setPayError('');
+                                                            const baseUrl = window.location.origin;
+                                                            const res = await api.post('/payments/student/booking/pay-next', {
+                                                                bookingId: l.booking_id || l.booking?.id,
+                                                                successUrl: `${baseUrl}/student/sessions/${l.id}`,
+                                                                cancelUrl: `${baseUrl}/student/sessions/${l.id}`,
+                                                            });
+                                                            if (res.data?.url) {
+                                                                window.location.href = res.data.url;
+                                                            } else {
+                                                                setPayError('Failed to start payment – please try again.');
+                                                            }
+                                                        } catch (e: any) {
+                                                            setPayError(e?.response?.data?.error || 'Unable to process payment.');
+                                                        } finally {
+                                                            setPayBusyId(null);
                                                         }
-                                                    } catch (e: any) {
-                                                        setPayError(e?.response?.data?.error || 'Unable to process payment.');
-                                                    } finally {
-                                                        setPayBusyId(null);
-                                                    }
-                                                }}
-                                            >
-                                                <CreditCard className="w-4 h-4" />
-                                                {payBusyId === l.id ? 'Processing…' : 'Pay Now'}
-                                            </Button>
-                                        ) : (
-                                            <Button
-                                                className="w-full flex items-center gap-2"
-                                                disabled={joinBusyId === l.id}
-                                                onClick={async (e) => {
-                                                    e.stopPropagation();
-                                                    try {
-                                                        setJoinBusyId(l.id);
-                                                        setJoinError('');
-                                                        const res = await api.get(`/lessons/${l.id}/join`);
-                                                        const url = res.data?.meeting_link as string | undefined;
-                                                        if (url) {
-                                                            window.open(url, '_blank');
-                                                        } else {
-                                                            setJoinError('Meeting link is not available yet.');
+                                                    }}
+                                                >
+                                                    <CreditCard className="w-4 h-4" />
+                                                    {payBusyId === l.id ? 'Processing…' : 'Pay Now'}
+                                                </Button>
+                                            ) : (
+                                                <Button
+                                                    className="flex items-center gap-2"
+                                                    disabled={joinBusyId === l.id}
+                                                    onClick={async () => {
+                                                        try {
+                                                            setJoinBusyId(l.id);
+                                                            setJoinError('');
+                                                            const res = await api.get(`/lessons/${l.id}/join`);
+                                                            const url = res.data?.meeting_link as string | undefined;
+                                                            if (url) {
+                                                                window.open(url, '_blank');
+                                                            } else {
+                                                                setJoinError('Meeting link is not available yet.');
+                                                            }
+                                                        } catch (e: any) {
+                                                            setJoinError(e?.response?.data?.error || 'Unable to join session.');
+                                                        } finally {
+                                                            setJoinBusyId(null);
                                                         }
-                                                    } catch (e: any) {
-                                                        setJoinError(e?.response?.data?.error || 'Unable to join session.');
-                                                    } finally {
-                                                        setJoinBusyId(null);
-                                                    }
-                                                }}
-                                            >
-                                                <ExternalLink className="w-4 h-4" />
-                                                {joinBusyId === l.id ? 'Joining…' : 'Join Session'}
-                                            </Button>
-                                        )}
-                                        <ChevronRight className="w-5 h-5 text-gray-400 hidden sm:block" />
-                                    </div>
-                                </div>
-                            </Card>
-                        ))}
+                                                    }}
+                                                >
+                                                    <ExternalLink className="w-4 h-4" />
+                                                    {joinBusyId === l.id ? 'Joining…' : 'Join Session'}
+                                                </Button>
+                                            )}
+                                            {l.google_calendar_html_link ? (
+                                                <a href={l.google_calendar_html_link} target="_blank" rel="noreferrer">
+                                                    <Button variant="outline">Open in Calendar</Button>
+                                                </a>
+                                            ) : null}
+                                        </>
+                                    }
+                                />
+                            );
+                        })}
                     </div>
                 )}
             </div>
