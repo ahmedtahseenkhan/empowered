@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { StripeService } from '../services/stripeService';
 import prisma from '../config/db';
+import { Prisma } from '@prisma/client';
 import { isTutorSlotAvailable } from '../services/availability';
 import { createMeetEventForLesson } from '../services/googleCalendar';
 
@@ -66,11 +67,19 @@ async function handlePaymentIntentSucceeded(paymentIntent: any) {
         return;
     }
 
+    // `checkout.session.completed` always fires for Checkout; running both causes duplicate bookings/emails.
+    // Only use payment_intent as a fallback when the session is NOT a student_booking Checkout flow.
+    const metaType = (session.metadata as Record<string, string> | undefined)?.type;
+    if (metaType === 'student_booking') {
+        console.log(`[Stripe Webhook] Skipping payment_intent.succeeded reconcile for student_booking (session ${session.id}); checkout.session.completed handles it.`);
+        return;
+    }
+
     await handleCheckoutSessionCompleted(session);
 }
 
 export async function handleCheckoutSessionCompleted(session: any) {
-    console.log(`[Stripe Webhook] Processing checkout.session.completed: ${session.id}`);
+    console.log(`[Stripe Webhook] Processing checkout session: ${session.id}`);
     const metadata = session.metadata;
     console.log('[Stripe Webhook] Metadata:', metadata);
     if (!metadata) {
@@ -124,6 +133,18 @@ export async function handleCheckoutSessionCompleted(session: any) {
         console.log(`[Stripe Webhook] Marked PaymentSchedule ${paymentScheduleId} as paid.`);
     } else if (metadata.type === 'student_booking') {
         // Handle Student Booking payment success -> create Booking + Lessons atomically
+        const checkoutSessionId = session.id as string | undefined;
+        if (checkoutSessionId) {
+            const existingBySession = await prisma.booking.findFirst({
+                where: { stripe_checkout_session_id: checkoutSessionId },
+                select: { id: true },
+            });
+            if (existingBySession) {
+                console.log(`[Stripe Webhook] student_booking already processed for checkout session ${checkoutSessionId}. Skipping.`);
+                return;
+            }
+        }
+
         const paymentIntentId = session.payment_intent as string | null;
         if (paymentIntentId) {
             const existing = await prisma.paymentSchedule.findFirst({
@@ -212,7 +233,9 @@ export async function handleCheckoutSessionCompleted(session: any) {
         }
 
         // Create Booking, Lessons and PaymentSchedule inside a transaction
-        const result = await prisma.$transaction(async (tx) => {
+        let result: { createdBooking: { id: string }; createdLessons: { id: string; start_time: Date; end_time: Date }[] };
+        try {
+            result = await prisma.$transaction(async (tx) => {
             const createdBooking = await tx.booking.create({
                 data: {
                     student_id: student.id,
@@ -221,6 +244,7 @@ export async function handleCheckoutSessionCompleted(session: any) {
                     end_date: bookingEnd,
                     frequency,
                     status: 'active',
+                    ...(checkoutSessionId ? { stripe_checkout_session_id: checkoutSessionId } : {}),
                 },
             });
 
@@ -272,6 +296,13 @@ export async function handleCheckoutSessionCompleted(session: any) {
 
             return { createdBooking, createdLessons };
         });
+        } catch (e: unknown) {
+            if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+                console.log(`[Stripe Webhook] student_booking duplicate checkout session ${checkoutSessionId} (unique constraint). Skipping.`);
+                return;
+            }
+            throw e;
+        }
 
         // Create Google Meet for each lesson (same as createBooking), then send confirmation emails to both sides
         const studentUser = await prisma.user.findUnique({ where: { id: student.user_id } });
