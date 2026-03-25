@@ -49,6 +49,7 @@ export const getMyLessons = async (req: AuthRequest, res: Response) => {
                 id: true,
                 tutor_id: true,
                 student_id: true,
+                booking_id: true,
                 start_time: true,
                 end_time: true,
                 status: true,
@@ -58,6 +59,7 @@ export const getMyLessons = async (req: AuthRequest, res: Response) => {
                 created_at: true,
                 booking: {
                     select: {
+                        id: true,
                         frequency: true,
                         created_at: true,
                     },
@@ -67,10 +69,124 @@ export const getMyLessons = async (req: AuthRequest, res: Response) => {
             }
         });
 
-        return res.json({ lessons });
+        // Enrich each lesson with its payment schedule status
+        const enriched = await Promise.all(
+            lessons.map(async (lesson) => {
+                if (lesson.billing_type === 'FREE_INTRO' || lesson.billing_type === 'FREE_TRIAL') {
+                    return { ...lesson, payment_status: 'not_required' as const };
+                }
+
+                if (!lesson.booking_id) {
+                    return { ...lesson, payment_status: 'unknown' as const };
+                }
+
+                const dueDate = new Date(lesson.start_time.getTime() - 48 * 60 * 60 * 1000);
+                const dueStart = new Date(dueDate.getTime() - 60 * 1000);
+                const dueEnd = new Date(dueDate.getTime() + 60 * 1000);
+
+                const schedule = await prisma.paymentSchedule.findFirst({
+                    where: {
+                        booking_id: lesson.booking_id,
+                        due_date: { gte: dueStart, lte: dueEnd },
+                    },
+                    select: { status: true },
+                });
+
+                if (!schedule) {
+                    // First session in a booking is paid at checkout — no schedule row means it was paid upfront
+                    return { ...lesson, payment_status: 'paid' as const };
+                }
+
+                return { ...lesson, payment_status: schedule.status as 'paid' | 'pending' | 'failed' };
+            })
+        );
+
+        return res.json({ lessons: enriched });
     } catch (e) {
         console.error('getMyLessons error:', e);
         return res.status(500).json({ error: 'Failed to fetch lessons' });
+    }
+};
+
+export const getLessonDetail = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user?.id;
+        const role = req.user?.role;
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+        const lessonId = (req.params.lessonId || '').trim();
+        if (!lessonId) return res.status(400).json({ error: 'lessonId is required' });
+
+        const lesson = await prisma.lesson.findUnique({
+            where: { id: lessonId },
+            select: {
+                id: true,
+                tutor_id: true,
+                student_id: true,
+                booking_id: true,
+                start_time: true,
+                end_time: true,
+                duration: true,
+                status: true,
+                billing_type: true,
+                meeting_link: true,
+                google_calendar_html_link: true,
+                category: true,
+                created_at: true,
+                booking: {
+                    select: {
+                        id: true,
+                        frequency: true,
+                        created_at: true,
+                    },
+                },
+                student: { select: { username: true } },
+                tutor: { select: { username: true, timezone: true } },
+            },
+        });
+
+        if (!lesson) return res.status(404).json({ error: 'Session not found' });
+
+        // Authorize: user must own this lesson
+        if (role === 'STUDENT') {
+            const student = await prisma.studentProfile.findUnique({ where: { user_id: userId } });
+            if (!student || lesson.student_id !== student.id) return res.status(403).json({ error: 'Forbidden' });
+        } else if (role === 'TUTOR') {
+            const tutor = await prisma.tutorProfile.findUnique({ where: { user_id: userId } });
+            if (!tutor || lesson.tutor_id !== tutor.id) return res.status(403).json({ error: 'Forbidden' });
+        } else {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+
+        // Enrich with payment status
+        let payment_status: 'paid' | 'pending' | 'failed' | 'not_required' | 'unknown' = 'unknown';
+
+        if (lesson.billing_type === 'FREE_INTRO' || lesson.billing_type === 'FREE_TRIAL') {
+            payment_status = 'not_required';
+        } else if (lesson.booking_id) {
+            const dueDate = new Date(lesson.start_time.getTime() - 48 * 60 * 60 * 1000);
+            const dueStart = new Date(dueDate.getTime() - 60 * 1000);
+            const dueEnd = new Date(dueDate.getTime() + 60 * 1000);
+
+            const schedule = await prisma.paymentSchedule.findFirst({
+                where: {
+                    booking_id: lesson.booking_id,
+                    due_date: { gte: dueStart, lte: dueEnd },
+                },
+                select: { status: true },
+            });
+
+            if (!schedule) {
+                payment_status = 'paid';
+            } else {
+                payment_status = schedule.status as 'paid' | 'pending' | 'failed';
+            }
+        }
+
+        return res.json({ lesson: { ...lesson, payment_status } });
+    } catch (e) {
+        console.error('getLessonDetail error:', e);
+        return res.status(500).json({ error: 'Failed to fetch session details' });
     }
 };
 

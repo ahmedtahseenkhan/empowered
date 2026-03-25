@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Calendar, ExternalLink } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Calendar, ExternalLink, CreditCard, ChevronRight } from 'lucide-react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -12,7 +13,10 @@ type Lesson = {
     created_at?: string;
     status: string;
     billing_type?: 'FREE_TRIAL' | 'FREE_INTRO' | 'PAID';
+    payment_status?: 'paid' | 'pending' | 'failed' | 'not_required' | 'unknown';
+    booking_id?: string | null;
     booking?: {
+        id?: string;
         frequency?: 'ONCE' | 'WEEKLY' | 'TWICE_WEEKLY' | 'THRICE_WEEKLY' | string | null;
         created_at?: string;
     } | null;
@@ -22,6 +26,7 @@ type Lesson = {
 };
 
 const StudentSessionsPage: React.FC = () => {
+    const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [lessons, setLessons] = useState<Lesson[]>([]);
     const [tab, setTab] = useState<'upcoming' | 'past'>('upcoming');
@@ -114,76 +119,73 @@ const StudentSessionsPage: React.FC = () => {
         return copy;
     }, [filtered, tab]);
 
-    const mapStatusToBadge = (status: string) => {
-        const normalized = status.toUpperCase();
-        if (normalized === 'COMPLETED') {
-            return (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-green-50 text-green-700 border border-green-200">
-                    Completed
-                </span>
-            );
-        }
-        if (normalized === 'PENDING') {
-            return (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
-                    Pending
-                </span>
-            );
-        }
-        if (normalized === 'CANCELLED') {
+    const [payBusyId, setPayBusyId] = useState<string | null>(null);
+    const [payError, setPayError] = useState<string>('');
+
+    const mapPaymentBadge = (lesson: Lesson) => {
+        const billing = (lesson.billing_type || '').toUpperCase();
+        const ps = lesson.payment_status;
+        const lessonStatus = (lesson.status || '').toUpperCase();
+
+        if (lessonStatus === 'CANCELLED') {
             return (
                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-50 text-gray-600 border border-gray-200">
                     Cancelled
                 </span>
             );
         }
-        if (normalized === 'MISSED') {
+        if (lessonStatus === 'COMPLETED') {
+            return (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-green-50 text-green-700 border border-green-200">
+                    Completed
+                </span>
+            );
+        }
+        if (lessonStatus === 'MISSED') {
             return (
                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-50 text-red-700 border border-red-200">
                     Missed
                 </span>
             );
         }
-        return (
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-purple-50 text-purple-700 border border-purple-200">
-                {status}
-            </span>
-        );
-    };
-
-    const mapBillingToBadge = (lesson: Lesson & { start?: Date; booking?: Lesson['booking'] }) => {
-        const billing = (lesson.billing_type || '').toUpperCase();
-        const freq = lesson.booking?.frequency;
-
         if (billing === 'FREE_INTRO') {
             return (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-50 text-green-700 border border-green-200">
-                    Free intro
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-green-50 text-green-700 border border-green-200">
+                    Free Intro
                 </span>
             );
         }
-
         if (billing === 'FREE_TRIAL') {
             return (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
                     Free Trial
                 </span>
             );
         }
-
-        if (freq && freq !== 'ONCE') {
+        if (ps === 'paid') {
             return (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
-                    Subscription
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    Paid
                 </span>
             );
         }
-
+        if (ps === 'failed') {
+            return (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-50 text-red-700 border border-red-200">
+                    Payment Failed
+                </span>
+            );
+        }
         return (
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                Paid Session
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                Payment Pending
             </span>
         );
+    };
+
+    const needsPayment = (lesson: Lesson) => {
+        const ps = lesson.payment_status;
+        return ps === 'pending' || ps === 'failed';
     };
 
     return (
@@ -223,18 +225,21 @@ const StudentSessionsPage: React.FC = () => {
                     </Card>
                 ) : (
                     <div className="space-y-4">
-                        {joinError && (
+                        {(joinError || payError) && (
                             <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
-                                {joinError}
+                                {joinError || payError}
                             </div>
                         )}
                         {sorted.map((l) => (
-                            <Card key={l.id} className="p-6">
+                            <Card
+                                key={l.id}
+                                className="p-6 cursor-pointer hover:shadow-md transition-shadow"
+                                onClick={() => navigate(`/student/sessions/${l.id}`)}
+                            >
                                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                                     <div>
                                         <div className="flex items-center gap-2 flex-wrap">
-                                            {mapStatusToBadge(l.status)}
-                                            {mapBillingToBadge(l as any)}
+                                            {mapPaymentBadge(l)}
                                             <span className="text-xs text-gray-500">
                                                 with {l.tutor?.username || 'Mentor'}
                                             </span>
@@ -256,38 +261,65 @@ const StudentSessionsPage: React.FC = () => {
                                             </div>
                                         ) : null}
                                     </div>
-                                    <div className="flex gap-2 sm:flex-col">
-                                        <Button
-                                            className="w-full flex items-center gap-2"
-                                            disabled={joinBusyId === l.id}
-                                            onClick={async () => {
-                                                try {
-                                                    setJoinBusyId(l.id);
-                                                    setJoinError('');
-                                                    const res = await api.get(`/lessons/${l.id}/join`);
-                                                    const url = res.data?.meeting_link as string | undefined;
-                                                    if (url) {
-                                                        window.open(url, '_blank');
-                                                    } else {
-                                                        setJoinError('Meeting link is not available yet.');
+                                    <div className="flex gap-2 sm:flex-col items-center">
+                                        {needsPayment(l) && tab === 'upcoming' ? (
+                                            <Button
+                                                className="w-full flex items-center gap-2 bg-amber-600 hover:bg-amber-700 text-white"
+                                                disabled={payBusyId === l.id}
+                                                onClick={async (e) => {
+                                                    e.stopPropagation();
+                                                    try {
+                                                        setPayBusyId(l.id);
+                                                        setPayError('');
+                                                        const baseUrl = window.location.origin;
+                                                        const res = await api.post('/payments/student/booking/pay-next', {
+                                                            bookingId: l.booking_id || l.booking?.id,
+                                                            successUrl: `${baseUrl}/student/sessions/${l.id}`,
+                                                            cancelUrl: `${baseUrl}/student/sessions/${l.id}`,
+                                                        });
+                                                        if (res.data?.url) {
+                                                            window.location.href = res.data.url;
+                                                        } else {
+                                                            setPayError('Failed to start payment – please try again.');
+                                                        }
+                                                    } catch (e: any) {
+                                                        setPayError(e?.response?.data?.error || 'Unable to process payment.');
+                                                    } finally {
+                                                        setPayBusyId(null);
                                                     }
-                                                } catch (e: any) {
-                                                    setJoinError(e?.response?.data?.error || 'Unable to join session.');
-                                                } finally {
-                                                    setJoinBusyId(null);
-                                                }
-                                            }}
-                                        >
-                                            <ExternalLink className="w-4 h-4" />
-                                            {joinBusyId === l.id ? 'Joining…' : 'Join Session'}
-                                        </Button>
-                                        {l.google_calendar_html_link ? (
-                                            <a href={l.google_calendar_html_link} target="_blank" rel="noreferrer">
-                                                <Button variant="outline" className="w-full">
-                                                    Open in Calendar
-                                                </Button>
-                                            </a>
-                                        ) : null}
+                                                }}
+                                            >
+                                                <CreditCard className="w-4 h-4" />
+                                                {payBusyId === l.id ? 'Processing…' : 'Pay Now'}
+                                            </Button>
+                                        ) : (
+                                            <Button
+                                                className="w-full flex items-center gap-2"
+                                                disabled={joinBusyId === l.id}
+                                                onClick={async (e) => {
+                                                    e.stopPropagation();
+                                                    try {
+                                                        setJoinBusyId(l.id);
+                                                        setJoinError('');
+                                                        const res = await api.get(`/lessons/${l.id}/join`);
+                                                        const url = res.data?.meeting_link as string | undefined;
+                                                        if (url) {
+                                                            window.open(url, '_blank');
+                                                        } else {
+                                                            setJoinError('Meeting link is not available yet.');
+                                                        }
+                                                    } catch (e: any) {
+                                                        setJoinError(e?.response?.data?.error || 'Unable to join session.');
+                                                    } finally {
+                                                        setJoinBusyId(null);
+                                                    }
+                                                }}
+                                            >
+                                                <ExternalLink className="w-4 h-4" />
+                                                {joinBusyId === l.id ? 'Joining…' : 'Join Session'}
+                                            </Button>
+                                        )}
+                                        <ChevronRight className="w-5 h-5 text-gray-400 hidden sm:block" />
                                     </div>
                                 </div>
                             </Card>

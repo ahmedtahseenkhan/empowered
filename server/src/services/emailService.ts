@@ -181,7 +181,7 @@ class EmailService {
         const baseUrl = this.getClientBaseUrl();
         const html = this.renderTemplate('mentor/new-trial-booking', {
             ...data,
-            dashboardUrl: data.dashboardUrl || `${baseUrl}/tutor/dashboard`,
+            dashboardUrl: data.dashboardUrl || `${baseUrl}/dashboard`,
         });
         await this.sendEmail({
             to: data.mentorEmail,
@@ -203,7 +203,7 @@ class EmailService {
         const baseUrl = this.getClientBaseUrl();
         const html = this.renderTemplate('mentor/new-regular-booking', {
             ...data,
-            dashboardUrl: data.dashboardUrl || `${baseUrl}/tutor/dashboard`,
+            dashboardUrl: data.dashboardUrl || `${baseUrl}/dashboard`,
         });
         await this.sendEmail({
             to: data.mentorEmail,
@@ -224,7 +224,7 @@ class EmailService {
         const baseUrl = this.getClientBaseUrl();
         const html = this.renderTemplate('mentor/session-reminder', {
             ...data,
-            dashboardUrl: data.dashboardUrl || `${baseUrl}/tutor/dashboard`,
+            dashboardUrl: data.dashboardUrl || `${baseUrl}/dashboard`,
             year: new Date().getFullYear(),
         });
         await this.sendEmail({
@@ -245,7 +245,7 @@ class EmailService {
         const baseUrl = this.getClientBaseUrl();
         const html = this.renderTemplate('mentor/review-received', {
             ...data,
-            reviewLink: data.reviewLink || `${baseUrl}/tutor/dashboard`,
+            reviewLink: data.reviewLink || `${baseUrl}/dashboard`,
         });
         await this.sendEmail({
             to: data.mentorEmail,

@@ -471,8 +471,8 @@ const StudentDashboard: React.FC = () => {
                                         setPayBusy(true);
                                         setPayError('');
                                         const baseUrl = window.location.origin;
-                                        const successUrl = `${baseUrl}/student/dashboard`;
-                                        const cancelUrl = `${baseUrl}/student/dashboard`;
+                                        const successUrl = `${baseUrl}/student/sessions`;
+                                        const cancelUrl = `${baseUrl}/student/sessions`;
 
                                         const res = await api.post('/payments/student/booking/pay-next', {
                                             successUrl,
@@ -508,7 +508,11 @@ const StudentDashboard: React.FC = () => {
                         ) : (
                             <div className="space-y-3">
                                 {upcomingSessions.slice(0, 3).map((l) => (
-                                    <div key={l.id} className="border border-gray-200 rounded-lg px-3 py-2">
+                                    <div
+                                        key={l.id}
+                                        className="border border-gray-200 rounded-lg px-3 py-2 cursor-pointer hover:border-primary-300 transition-colors"
+                                        onClick={() => navigate(`/student/sessions/${l.id}`)}
+                                    >
                                         <div className="flex justify-between items-start">
                                             <div>
                                                 <div className="text-sm font-semibold text-gray-900">{l.tutor?.username || 'Mentor'}</div>
@@ -516,32 +520,16 @@ const StudentDashboard: React.FC = () => {
                                                     {new Date(l.start_time).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} • {new Date(l.start_time).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12: true })}
                                                 </div>
                                             </div>
-                                            {l.meeting_link && (
-                                                <Button
-                                                    variant="outline"
-                                                    size="xs"
-                                                    disabled={joinBusyId === l.id}
-                                                    onClick={async () => {
-                                                        try {
-                                                            setJoinBusyId(l.id);
-                                                            setPayError('');
-                                                            const res = await api.get(`/lessons/${l.id}/join`);
-                                                            const url = res.data?.meeting_link as string | undefined;
-                                                            if (url) {
-                                                                window.open(url, '_blank');
-                                                            } else {
-                                                                setPayError('Meeting link is not available yet.');
-                                                            }
-                                                        } catch (e: any) {
-                                                            setPayError(e?.response?.data?.error || 'Unable to join session.');
-                                                        } finally {
-                                                            setJoinBusyId(null);
-                                                        }
-                                                    }}
-                                                >
-                                                    {joinBusyId === l.id ? 'Joining…' : 'Join'}
-                                                </Button>
-                                            )}
+                                            <Button
+                                                variant="outline"
+                                                size="xs"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    navigate(`/student/sessions/${l.id}`);
+                                                }}
+                                            >
+                                                View
+                                            </Button>
                                         </div>
                                     </div>
                                 ))}

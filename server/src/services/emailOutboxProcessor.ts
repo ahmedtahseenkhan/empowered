@@ -19,8 +19,9 @@ const humanizeBookingFrequency = (frequency: unknown) => {
     return String(frequency || '');
 };
 
-const formatDatePart = (d: Date) => {
+const formatDatePart = (d: Date, timeZone?: string) => {
     return d.toLocaleDateString(undefined, {
+        ...(timeZone ? { timeZone } : {}),
         weekday: 'short',
         month: 'short',
         day: 'numeric',
@@ -28,8 +29,9 @@ const formatDatePart = (d: Date) => {
     });
 };
 
-const formatTimePart = (d: Date) => {
+const formatTimePart = (d: Date, timeZone?: string) => {
     return d.toLocaleTimeString(undefined, {
+        ...(timeZone ? { timeZone } : {}),
         hour: 'numeric',
         minute: '2-digit',
         hour12: true,
@@ -51,11 +53,11 @@ async function sendOutboxRow(row: OutboxRow) {
         const booking = await prisma.booking.findUnique({
             where: { id: bookingId },
             include: {
-                tutor: { select: { username: true } },
+                tutor: { select: { username: true, timezone: true } },
                 student: { select: { username: true } },
                 lessons: {
                     orderBy: { start_time: 'asc' },
-                    select: { start_time: true, meeting_link: true },
+                    select: { id: true, start_time: true, meeting_link: true },
                 },
             },
         });
@@ -63,26 +65,31 @@ async function sendOutboxRow(row: OutboxRow) {
         if (!booking) throw new Error(`Booking not found: ${bookingId}`);
         const firstLesson = booking.lessons?.[0];
         const start = firstLesson?.start_time;
+        const timeZone = booking.tutor?.timezone || 'UTC';
+        const clientBase = (process.env.CLIENT_URL || process.env.CLIENT_BASE_URL || 'https://emplearnings.com').trim().replace(/\/+$/, '');
+        const dashboardUrl = firstLesson ? `${clientBase}/student/sessions/${firstLesson.id}` : `${clientBase}/student/sessions`;
 
         if (freeSession) {
             await emailService.sendBookingConfirmationTrial({
                 studentName: booking.student?.username || 'Student',
                 studentEmail: row.to_email,
                 mentorName: booking.tutor?.username || row.payload?.tutorName || 'Mentor',
-                sessionDate: start ? formatDatePart(start) : '',
-                sessionTime: start ? formatTimePart(start) : '',
+                sessionDate: start ? formatDatePart(start, timeZone) : '',
+                sessionTime: start ? formatTimePart(start, timeZone) : '',
                 meetingLink: firstLesson?.meeting_link || '',
+                dashboardUrl,
             });
         } else {
             await emailService.sendBookingConfirmationRegular({
                 studentName: booking.student?.username || 'Student',
                 studentEmail: row.to_email,
                 mentorName: booking.tutor?.username || row.payload?.tutorName || 'Mentor',
-                firstSessionDate: start ? formatDatePart(start) : '',
-                firstSessionTime: start ? formatTimePart(start) : '',
+                firstSessionDate: start ? formatDatePart(start, timeZone) : '',
+                firstSessionTime: start ? formatTimePart(start, timeZone) : '',
                 frequency: humanizeBookingFrequency(booking.frequency),
                 totalSessions: Array.isArray(booking.lessons) ? booking.lessons.length : 0,
                 meetingLink: firstLesson?.meeting_link || '',
+                dashboardUrl,
             });
         }
 
@@ -97,11 +104,11 @@ async function sendOutboxRow(row: OutboxRow) {
         const booking = await prisma.booking.findUnique({
             where: { id: bookingId },
             include: {
-                tutor: { select: { username: true, user: { select: { email: true } } } },
+                tutor: { select: { username: true, timezone: true, user: { select: { email: true } } } },
                 student: { select: { username: true } },
                 lessons: {
                     orderBy: { start_time: 'asc' },
-                    select: { start_time: true, meeting_link: true },
+                    select: { id: true, start_time: true, meeting_link: true },
                 },
             },
         });
@@ -109,25 +116,30 @@ async function sendOutboxRow(row: OutboxRow) {
         if (!booking) throw new Error(`Booking not found: ${bookingId}`);
         const firstLesson = booking.lessons?.[0];
         const start = firstLesson?.start_time;
+        const timeZone = booking.tutor?.timezone || 'UTC';
+        const clientBase = (process.env.CLIENT_URL || process.env.CLIENT_BASE_URL || 'https://emplearnings.com').trim().replace(/\/+$/, '');
+        const dashboardUrl = firstLesson ? `${clientBase}/sessions/${firstLesson.id}` : `${clientBase}/sessions`;
 
         if (freeSession) {
             await emailService.sendNewTrialBookingMentor({
                 mentorName: booking.tutor?.username || 'Mentor',
                 mentorEmail: row.to_email,
                 studentName: booking.student?.username || 'Student',
-                sessionDate: start ? formatDatePart(start) : '',
-                sessionTime: start ? formatTimePart(start) : '',
+                sessionDate: start ? formatDatePart(start, timeZone) : '',
+                sessionTime: start ? formatTimePart(start, timeZone) : '',
                 meetingLink: firstLesson?.meeting_link || '',
+                dashboardUrl,
             });
         } else {
             await emailService.sendNewRegularBookingMentor({
                 mentorName: booking.tutor?.username || 'Mentor',
                 mentorEmail: row.to_email,
                 studentName: booking.student?.username || 'Student',
-                firstSessionDate: start ? formatDatePart(start) : '',
-                firstSessionTime: start ? formatTimePart(start) : '',
+                firstSessionDate: start ? formatDatePart(start, timeZone) : '',
+                firstSessionTime: start ? formatTimePart(start, timeZone) : '',
                 frequency: humanizeBookingFrequency(booking.frequency),
                 meetingLink: firstLesson?.meeting_link || '',
+                dashboardUrl,
             });
         }
 
@@ -142,19 +154,22 @@ async function sendOutboxRow(row: OutboxRow) {
             where: { id: lessonId },
             include: {
                 student: { select: { username: true } },
-                tutor: { select: { username: true } },
+                tutor: { select: { username: true, timezone: true } },
             },
         });
 
         if (!lesson) throw new Error(`Lesson not found: ${lessonId}`);
 
+        const clientBase = (process.env.CLIENT_URL || process.env.CLIENT_BASE_URL || 'https://emplearnings.com').trim().replace(/\/+$/, '');
+        const timeZone = lesson.tutor?.timezone || 'UTC';
         await emailService.sendSessionReminderStudent({
             studentName: lesson.student?.username || 'Student',
             studentEmail: row.to_email,
             mentorName: lesson.tutor?.username || 'Mentor',
-            sessionDate: formatDatePart(lesson.start_time),
-            sessionTime: formatTimePart(lesson.start_time),
+            sessionDate: formatDatePart(lesson.start_time, timeZone),
+            sessionTime: formatTimePart(lesson.start_time, timeZone),
             meetingLink: lesson.meeting_link || '',
+            dashboardUrl: `${clientBase}/student/sessions/${lesson.id}`,
         });
 
         return;
@@ -168,19 +183,22 @@ async function sendOutboxRow(row: OutboxRow) {
             where: { id: lessonId },
             include: {
                 student: { select: { username: true } },
-                tutor: { select: { username: true } },
+                tutor: { select: { username: true, timezone: true } },
             },
         });
 
         if (!lesson) throw new Error(`Lesson not found: ${lessonId}`);
 
+        const clientBase = (process.env.CLIENT_URL || process.env.CLIENT_BASE_URL || 'https://emplearnings.com').trim().replace(/\/+$/, '');
+        const timeZone = lesson.tutor?.timezone || 'UTC';
         await emailService.sendSessionReminderMentor({
             mentorName: lesson.tutor?.username || 'Mentor',
             mentorEmail: row.to_email,
             studentName: lesson.student?.username || 'Student',
-            sessionDate: formatDatePart(lesson.start_time),
-            sessionTime: formatTimePart(lesson.start_time),
+            sessionDate: formatDatePart(lesson.start_time, timeZone),
+            sessionTime: formatTimePart(lesson.start_time, timeZone),
             meetingLink: lesson.meeting_link || '',
+            dashboardUrl: `${clientBase}/sessions/${lesson.id}`,
         });
 
         return;
@@ -196,7 +214,11 @@ async function sendOutboxRow(row: OutboxRow) {
                 booking: {
                     include: {
                         student: { select: { username: true } },
-                        tutor: { select: { username: true } },
+                        tutor: { select: { username: true, timezone: true } },
+                        lessons: {
+                            orderBy: { start_time: 'asc' },
+                            select: { id: true, start_time: true },
+                        },
                     },
                 },
             },
@@ -204,15 +226,29 @@ async function sendOutboxRow(row: OutboxRow) {
 
         if (!payment) throw new Error(`Payment not found: ${paymentId}`);
 
+        const timeZone = payment.booking.tutor?.timezone || 'UTC';
         const amountDollars = (payment.amount / 100).toFixed(2);
+
+        // Find the lesson that matches this payment schedule's due_date (due_date = lesson.start_time - 48h)
+        const expectedStart = new Date(payment.due_date.getTime() + 48 * 60 * 60 * 1000);
+        const matchedLesson = payment.booking.lessons.find((l) => {
+            return Math.abs(l.start_time.getTime() - expectedStart.getTime()) < 2 * 60 * 1000;
+        });
+
+        const clientBase = (process.env.CLIENT_URL || process.env.CLIENT_BASE_URL || 'https://emplearnings.com').trim().replace(/\/+$/, '');
+        const paymentLink = matchedLesson
+            ? `${clientBase}/student/sessions/${matchedLesson.id}`
+            : `${clientBase}/student/sessions`;
 
         await emailService.sendPaymentDueReminder({
             studentName: payment.booking.student?.username || 'Student',
             studentEmail: row.to_email,
             tutorName: payment.booking.tutor?.username || 'Mentor',
             amount: `$${amountDollars}`,
-            dueDate: formatDatePart(payment.due_date),
-            paymentLink: `${(process.env.CLIENT_URL || process.env.CLIENT_BASE_URL || 'https://emplearnings.com').trim().replace(/\/+$/, '')}/payments`,
+            dueDate: formatDatePart(payment.due_date, timeZone),
+            paymentLink,
+            sessionDate: matchedLesson ? formatDatePart(matchedLesson.start_time, timeZone) : undefined,
+            sessionTime: matchedLesson ? formatTimePart(matchedLesson.start_time, timeZone) : undefined,
         });
 
         return;

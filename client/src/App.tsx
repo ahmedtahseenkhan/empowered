@@ -57,6 +57,7 @@ import StudentBookingConfirmationPage from './pages/StudentBookingConfirmationPa
 import StudentBookingPaymentReviewPage from './pages/StudentBookingPaymentReviewPage';
 import TutorAIAssistPage from './pages/TutorAIAssistPage';
 import StudentSessionsPage from './pages/StudentSessionsPage';
+import SessionDetailPage from './pages/SessionDetailPage';
 import ConnectAccountPage from './pages/ConnectAccountPage';
 import BookDemoPage from './pages/BookDemoPage';
 import FAQPage from './pages/FAQPage';
@@ -295,6 +296,14 @@ function App() {
             }
           />
           <Route
+            path="/student/sessions/:id"
+            element={
+              <ProtectedRoute>
+                <SessionDetailPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/tutor-onboarding"
             element={
               <ProtectedRoute>
@@ -331,6 +340,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <TutorSessionsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/sessions/:id"
+            element={
+              <ProtectedRoute>
+                <SessionDetailPage />
               </ProtectedRoute>
             }
           />
@@ -406,6 +423,8 @@ function App() {
               </ProtectedRoute>
             }
           />
+
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </Router>
     </AuthProvider>
