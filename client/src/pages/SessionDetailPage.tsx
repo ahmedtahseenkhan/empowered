@@ -166,7 +166,7 @@ const SessionDetailPage: React.FC = () => {
     if (error || !lesson) {
         return (
             <DashboardLayout>
-                <div className="max-w-2xl mx-auto">
+                <div className="w-full">
                     <Button variant="ghost" className="mb-4 text-gray-500" onClick={() => navigate(backPath)}>
                         <ArrowLeft className="w-4 h-4 mr-2" /> Back to Sessions
                     </Button>
@@ -187,7 +187,7 @@ const SessionDetailPage: React.FC = () => {
 
     return (
         <DashboardLayout>
-            <div className="max-w-2xl mx-auto">
+            <div className="w-full">
                 <Button variant="ghost" className="mb-4 text-gray-500" onClick={() => navigate(backPath)}>
                     <ArrowLeft className="w-4 h-4 mr-2" /> Back to Sessions
                 </Button>

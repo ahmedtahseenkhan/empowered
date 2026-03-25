@@ -7,6 +7,7 @@ import {
     getConnectAccountStatus,
     getSubscriptionStatus,
     createStudentBookingCheckout,
+    finalizeStudentBookingCheckout,
     payNextStudentBookingSession,
     updateMentorSubscription,
     disconnectStripeAccount,
@@ -46,6 +47,7 @@ router.get('/tutor/earnings/export', exportPaymentHistoryCSV);
 
 // Student Booking
 router.post('/student/booking', createStudentBookingCheckout);
+router.post('/student/booking/finalize', finalizeStudentBookingCheckout);
 router.post('/student/booking/pay-next', payNextStudentBookingSession);
 
 export default router;

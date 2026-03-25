@@ -208,6 +208,10 @@ export class StripeService {
         return sessions.data[0] || null;
     }
 
+    static async getCheckoutSessionById(sessionId: string) {
+        return stripe.checkout.sessions.retrieve(sessionId);
+    }
+
     static constructEvent(payload: string | Buffer, sig: string, endpointSecret: string) {
         return stripe.webhooks.constructEvent(payload, sig, endpointSecret);
     }

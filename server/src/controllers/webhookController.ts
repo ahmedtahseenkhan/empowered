@@ -69,7 +69,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: any) {
     await handleCheckoutSessionCompleted(session);
 }
 
-async function handleCheckoutSessionCompleted(session: any) {
+export async function handleCheckoutSessionCompleted(session: any) {
     console.log(`[Stripe Webhook] Processing checkout.session.completed: ${session.id}`);
     const metadata = session.metadata;
     console.log('[Stripe Webhook] Metadata:', metadata);

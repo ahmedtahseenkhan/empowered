@@ -3,6 +3,7 @@ import { StripeService } from '../services/stripeService';
 import { PaymentAnalyticsService } from '../services/paymentAnalyticsService';
 import prisma from '../config/db';
 import { z } from 'zod';
+import { handleCheckoutSessionCompleted } from './webhookController';
 
 /** Mentor subscription plans: annual billing. Price IDs from env or fallback for backward compatibility. */
 export const MENTOR_PLANS = [
@@ -358,6 +359,10 @@ const CreateBookingSchema = z.object({
     cancelUrl: z.string().url(),
 });
 
+const FinalizeStudentBookingSchema = z.object({
+    sessionId: z.string().min(1),
+});
+
 const PayNextBookingSessionSchema = z.object({
     bookingId: z.string().uuid().optional(),
     successUrl: z.string().url(),
@@ -426,13 +431,17 @@ export const createStudentBookingCheckout = async (req: Request, res: Response) 
         }
 
         // 6. Create Checkout Session (one-off payment for the FIRST session)
+        const successUrlWithSession = successUrl.includes('?')
+            ? `${successUrl}&session_id={CHECKOUT_SESSION_ID}`
+            : `${successUrl}?session_id={CHECKOUT_SESSION_ID}`;
+
         const session = await StripeService.createBookingCheckoutSession(
             amountInCents,
             'usd',
             stripeCustomerId,
             tutor.stripe_account_id,
             platformFeeInCents,
-            successUrl,
+            successUrlWithSession,
             cancelUrl,
             {
                 type: 'student_booking',
@@ -451,6 +460,31 @@ export const createStudentBookingCheckout = async (req: Request, res: Response) 
             return res.status(400).json({ error: error.issues });
         }
         res.status(500).json({ error: 'Failed to create booking session' });
+    }
+};
+
+export const finalizeStudentBookingCheckout = async (req: Request, res: Response) => {
+    try {
+        const { sessionId } = FinalizeStudentBookingSchema.parse(req.body);
+
+        const session = await StripeService.getCheckoutSessionById(sessionId);
+        if (!session) return res.status(404).json({ error: 'Checkout session not found' });
+        if (session.payment_status !== 'paid') {
+            return res.status(400).json({ error: 'Checkout session is not paid yet' });
+        }
+        if ((session.metadata as any)?.type !== 'student_booking') {
+            return res.status(400).json({ error: 'Invalid checkout session type' });
+        }
+
+        // Idempotent: handler already guards against duplicate processing via payment_intent
+        await handleCheckoutSessionCompleted(session as any);
+        return res.json({ ok: true });
+    } catch (error: any) {
+        console.error('Finalize student booking checkout error:', error);
+        if (error instanceof z.ZodError) {
+            return res.status(400).json({ error: error.issues });
+        }
+        return res.status(500).json({ error: 'Failed to finalize booking checkout' });
     }
 };
 
