@@ -6,8 +6,6 @@ type SessionListCardProps = {
     otherPersonName: string;
     /** Shown in the grid (Mentor / Student) */
     personRoleLabel: 'Mentor' | 'Student';
-    /** Long date under the title, e.g. Tuesday, 31 March 2026 */
-    headerDateLine: string;
     /** Same as DATE row */
     dateRowValue: string;
     /** Time only, e.g. 12:00 am – 1:00 am */
@@ -26,7 +24,6 @@ type SessionListCardProps = {
 const SessionListCard: React.FC<SessionListCardProps> = ({
     otherPersonName,
     personRoleLabel,
-    headerDateLine,
     dateRowValue,
     timeRowValue,
     durationMinutes,
@@ -43,8 +40,7 @@ const SessionListCard: React.FC<SessionListCardProps> = ({
             <div className="bg-gradient-to-r from-[#667eea] to-[#764ba2] px-5 py-4 sm:px-6 sm:py-5 text-white">
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                     <div className="min-w-0">
-                        <h2 className="text-lg sm:text-xl font-bold leading-tight">Session with {otherPersonName}</h2>
-                        <p className="text-purple-100 text-sm mt-1">{headerDateLine}</p>
+                        <h2 className="text-base sm:text-lg font-bold leading-tight">Session with {otherPersonName}</h2>
                     </div>
                     <div className="flex-shrink-0">{badge}</div>
                 </div>

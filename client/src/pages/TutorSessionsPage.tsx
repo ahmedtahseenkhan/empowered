@@ -195,7 +195,6 @@ const TutorSessionsPage: React.FC = () => {
                                     key={l.id}
                                     otherPersonName={studentName}
                                     personRoleLabel="Student"
-                                    headerDateLine={formatDateLong(l.start_time)}
                                     dateRowValue={formatDateLong(l.start_time)}
                                     timeRowValue={formatTimeOnlyRange(l.start_time, l.end_time)}
                                     durationMinutes={durationMinutes(l.start_time, l.end_time)}
