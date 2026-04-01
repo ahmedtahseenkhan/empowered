@@ -61,8 +61,20 @@ export const createMentorSubscriptionCheckout = async (req: Request, res: Respon
 
         if (!tutor) return res.status(404).json({ error: 'Tutor profile not found' });
 
-        // Determine trial eligibility: only if user has never used a trial before
-        const trialEligible = !tutor.has_used_trial;
+        // Determine trial eligibility robustly, including older accounts created before has_used_trial existed.
+        const hasTrialHistory = !!tutor.subscription_end_date
+            || !!tutor.stripe_subscription_id
+            || !!tutor.subscription_status;
+        const trialAlreadyUsed = tutor.has_used_trial || hasTrialHistory;
+        const trialEligible = !trialAlreadyUsed;
+
+        // Persist inferred trial usage so future checks remain consistent.
+        if (trialAlreadyUsed && !tutor.has_used_trial) {
+            await prisma.tutorProfile.update({
+                where: { id: tutor.id },
+                data: { has_used_trial: true },
+            });
+        }
 
         let customerId = '';
         const existingCustomers = await StripeService.createCustomer(tutor.user.email, tutor.username);
@@ -108,8 +120,18 @@ export const activateMentorTrial = async (req: Request, res: Response) => {
         });
         if (!tutor) return res.status(404).json({ error: 'Tutor profile not found' });
 
+        const hasTrialHistory = !!tutor.subscription_end_date
+            || !!tutor.stripe_subscription_id
+            || !!tutor.subscription_status;
+
         // Check if user has already used their trial
-        if (tutor.has_used_trial) {
+        if (tutor.has_used_trial || hasTrialHistory) {
+            if (!tutor.has_used_trial && hasTrialHistory) {
+                await prisma.tutorProfile.update({
+                    where: { id: tutor.id },
+                    data: { has_used_trial: true },
+                });
+            }
             return res.status(400).json({ error: 'You have already used your free trial. Please subscribe to continue.' });
         }
 
