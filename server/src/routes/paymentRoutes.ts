@@ -4,6 +4,7 @@ import {
     createMentorSubscriptionCheckout,
     activateMentorTrial,
     cancelMentorSubscription,
+    finalizeMentorSubscription,
     createConnectOnboardingLink,
     getConnectAccountStatus,
     getSubscriptionStatus,
@@ -32,6 +33,7 @@ router.use(authenticateToken);
 router.post('/mentor/subscription', createMentorSubscriptionCheckout);
 router.post('/mentor/subscription/activate-trial', activateMentorTrial);
 router.post('/mentor/subscription/cancel', cancelMentorSubscription);
+router.post('/mentor/subscription/finalize', finalizeMentorSubscription);
 router.put('/mentor/subscription', updateMentorSubscription);
 router.get('/mentor/status', getSubscriptionStatus);
 

@@ -140,7 +140,17 @@ const SubscriptionSettingsPage: React.FC = () => {
     const [serverPlans, setServerPlans] = useState<ServerPlan[] | null>(null);
 
     useEffect(() => {
-        fetchProfile();
+        const params = new URLSearchParams(window.location.search);
+        const sessionId = params.get('session_id');
+        if (sessionId) {
+            // Remove query params from URL without reloading
+            window.history.replaceState({}, '', window.location.pathname);
+            api.post('/payments/mentor/subscription/finalize', { sessionId })
+                .catch((err) => console.warn('Finalize subscription error:', err))
+                .finally(() => fetchProfile());
+        } else {
+            fetchProfile();
+        }
     }, []);
 
     useEffect(() => {
@@ -207,7 +217,7 @@ const SubscriptionSettingsPage: React.FC = () => {
                 const response = await api.post('/payments/mentor/subscription', {
                     priceId,
                     tier: planId,
-                    successUrl: `${window.location.origin}/dashboard/subscription?success=true`,
+                    successUrl: `${window.location.origin}/dashboard/subscription?success=true&session_id={CHECKOUT_SESSION_ID}`,
                     cancelUrl: `${window.location.origin}/dashboard/subscription?canceled=true`,
                 });
                 if (response.data?.url) {

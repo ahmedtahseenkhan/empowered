@@ -76,9 +76,16 @@ export const createMentorSubscriptionCheckout = async (req: Request, res: Respon
             });
         }
 
-        let customerId = '';
-        const existingCustomers = await StripeService.createCustomer(tutor.user.email, tutor.username);
-        customerId = existingCustomers.id;
+        // Reuse existing Stripe customer to prevent duplicate customers per tutor.
+        let customerId = tutor.stripe_customer_id ?? '';
+        if (!customerId) {
+            const customer = await StripeService.createCustomer(tutor.user.email, tutor.username);
+            customerId = customer.id;
+            await prisma.tutorProfile.update({
+                where: { id: tutor.id },
+                data: { stripe_customer_id: customerId },
+            });
+        }
 
         // 2. Create Checkout Session (with or without trial based on eligibility)
         const session = await StripeService.createSubscriptionCheckoutSession(
@@ -406,6 +413,50 @@ export const cancelMentorSubscription = async (req: Request, res: Response) => {
         return res.status(500).json({ error: error?.message || 'Failed to cancel subscription' });
     }
 }
+
+const FinalizeMentorSubscriptionSchema = z.object({
+    sessionId: z.string().min(1),
+});
+
+/**
+ * Fallback for when the Stripe webhook doesn't update the DB after a successful checkout.
+ * Called from the client when the user is redirected back with ?session_id=...
+ */
+export const finalizeMentorSubscription = async (req: Request, res: Response) => {
+    try {
+        const userId = (req as any).user.id;
+        const { sessionId } = FinalizeMentorSubscriptionSchema.parse(req.body);
+
+        const session = await StripeService.getCheckoutSessionById(sessionId);
+
+        if (!session) {
+            return res.status(404).json({ error: 'Checkout session not found' });
+        }
+        if (session.payment_status !== 'paid') {
+            return res.status(400).json({ error: 'Payment not completed' });
+        }
+
+        const metadata = session.metadata as Record<string, string> | null;
+        if (!metadata || metadata.type !== 'mentor_subscription') {
+            return res.status(400).json({ error: 'Invalid session type' });
+        }
+
+        // Verify the session belongs to the authenticated user
+        if (metadata.userId !== userId) {
+            return res.status(403).json({ error: 'Session does not belong to this user' });
+        }
+
+        await handleCheckoutSessionCompleted(session);
+
+        return res.json({ success: true });
+    } catch (error: any) {
+        console.error('Finalize subscription error:', error);
+        if (error instanceof z.ZodError) {
+            return res.status(400).json({ error: error.issues });
+        }
+        return res.status(500).json({ error: error?.message || 'Failed to finalize subscription' });
+    }
+};
 
 const CreateBookingSchema = z.object({
     tutorId: z.string().uuid(),
