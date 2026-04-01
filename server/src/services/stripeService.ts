@@ -114,7 +114,8 @@ export class StripeService {
         customerId: string,
         successUrl: string,
         cancelUrl: string,
-        metadata: any = {}
+        metadata: any = {},
+        trialEligible: boolean = false
     ) {
         try {
             const normalizedMetadata: Record<string, string> = Object.fromEntries(
@@ -122,6 +123,15 @@ export class StripeService {
                     .filter(([, v]) => v !== undefined && v !== null)
                     .map(([k, v]) => [k, String(v)])
             );
+
+            const subscriptionData: any = {
+                metadata: normalizedMetadata,
+            };
+
+            // Only grant trial if the user has never used one before
+            if (trialEligible) {
+                subscriptionData.trial_period_days = 1; // TODO: Change back to 60 for production (2-month trial)
+            }
 
             const session = await stripe.checkout.sessions.create({
                 customer: customerId,
@@ -133,10 +143,7 @@ export class StripeService {
                         quantity: 1,
                     },
                 ],
-                subscription_data: {
-                    trial_period_days: 60, // 2 months free trial
-                    metadata: normalizedMetadata,
-                },
+                subscription_data: subscriptionData,
                 success_url: successUrl,
                 cancel_url: cancelUrl,
                 metadata: normalizedMetadata,
@@ -198,6 +205,34 @@ export class StripeService {
 
     static async getSubscription(subscriptionId: string) {
         return stripe.subscriptions.retrieve(subscriptionId);
+    }
+
+    /**
+     * Cancel a Subscription at period end (so user keeps access until the current paid period expires)
+     */
+    static async cancelSubscription(subscriptionId: string) {
+        try {
+            const subscription = await stripe.subscriptions.update(subscriptionId, {
+                cancel_at_period_end: true,
+            });
+            return subscription;
+        } catch (error) {
+            console.error('Error cancelling subscription:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Cancel a Subscription immediately
+     */
+    static async cancelSubscriptionImmediately(subscriptionId: string) {
+        try {
+            const subscription = await stripe.subscriptions.cancel(subscriptionId);
+            return subscription;
+        } catch (error) {
+            console.error('Error cancelling subscription immediately:', error);
+            throw error;
+        }
     }
 
     static async getCheckoutSessionByPaymentIntent(paymentIntentId: string) {

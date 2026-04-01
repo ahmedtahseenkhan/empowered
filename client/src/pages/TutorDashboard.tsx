@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { Users, Clock, Calendar, AlertCircle, CreditCard, CheckCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Users, UserCheck, Clock, Calendar, CreditCard, CheckCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import { Modal } from '../components/ui/Modal';
@@ -27,12 +27,15 @@ const TutorDashboard: React.FC = () => {
     const [calendarBusy, setCalendarBusy] = useState(false);
     const [availabilitySlots, setAvailabilitySlots] = useState<Array<{ start: string; end: string }>>([]);
     const [lessonsBusy, setLessonsBusy] = useState(false);
-    const [lessons, setLessons] = useState<Array<{ id: string; start_time: string; end_time: string; status: string; billing_type?: 'FREE_TRIAL' | 'FREE_INTRO' | 'PAID'; meeting_link?: string | null; google_calendar_html_link?: string | null; student?: { username?: string | null } }>>([]);
+    const [lessons, setLessons] = useState<Array<{ id: string; start_time: string; end_time: string; status: string; billing_type?: 'FREE_TRIAL' | 'FREE_INTRO' | 'PAID'; payment_status?: 'paid' | 'pending' | 'failed' | 'not_required' | 'unknown'; meeting_link?: string | null; google_calendar_html_link?: string | null; student?: { username?: string | null } }>>([]);
+    /** Wide window for top stat cards (not tied to week/month calendar). */
+    const [statsLessons, setStatsLessons] = useState<Array<{ id: string; start_time: string; end_time: string; status: string; payment_status?: 'paid' | 'pending' | 'failed' | 'not_required' | 'unknown' }>>([]);
+    const [statsLessonsBusy, setStatsLessonsBusy] = useState(true);
     const [blocksBusy, setBlocksBusy] = useState(false);
     const [timeBlocks, setTimeBlocks] = useState<Array<{ id: string; start_time: string; end_time: string; reason?: string | null }>>([]);
 
     const [studentsBusy, setStudentsBusy] = useState(false);
-    const [studentsCount, setStudentsCount] = useState(0);
+    const [students, setStudents] = useState<Array<{ nextSessionStart: string | null }>>([]);
 
     const [activityBusy, setActivityBusy] = useState(false);
     const [activityItems, setActivityItems] = useState<Array<{ type: 'NOTE' | 'TASK' | 'SUBMISSION'; created_at: string; data: any }>>([]);
@@ -108,22 +111,54 @@ const TutorDashboard: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        const fetchStudentsCount = async () => {
+        const fetchStudents = async () => {
             try {
                 setStudentsBusy(true);
                 const res = await api.get('/tutor/me/students');
-                const students = res.data?.students || [];
-                setStudentsCount(Array.isArray(students) ? students.length : 0);
+                const list = res.data?.students || [];
+                setStudents(Array.isArray(list) ? list : []);
             } catch (e) {
-                console.error('Failed to fetch tutor students count', e);
-                setStudentsCount(0);
+                console.error('Failed to fetch tutor students', e);
+                setStudents([]);
             } finally {
                 setStudentsBusy(false);
             }
         };
 
-        fetchStudentsCount();
+        fetchStudents();
     }, []);
+
+    useEffect(() => {
+        const tutorId = profile?.id;
+        if (!tutorId) return;
+
+        let cancelled = false;
+        const fetchStatsLessons = async () => {
+            try {
+                setStatsLessonsBusy(true);
+                const from = new Date();
+                from.setFullYear(from.getFullYear() - 3);
+                from.setHours(0, 0, 0, 0);
+                const to = new Date();
+                to.setFullYear(to.getFullYear() + 2);
+                to.setHours(23, 59, 59, 999);
+                const res = await api.get('/lessons/me', {
+                    params: { from: from.toISOString(), to: to.toISOString() },
+                });
+                if (!cancelled) setStatsLessons(res.data?.lessons || []);
+            } catch (e) {
+                console.error('Failed to load lessons for dashboard stats', e);
+                if (!cancelled) setStatsLessons([]);
+            } finally {
+                if (!cancelled) setStatsLessonsBusy(false);
+            }
+        };
+
+        fetchStatsLessons();
+        return () => {
+            cancelled = true;
+        };
+    }, [profile?.id]);
 
     useEffect(() => {
         const fetchActivity = async () => {
@@ -445,19 +480,32 @@ const TutorDashboard: React.FC = () => {
 
     if (isDashboardLoading) return <DashboardLayout><div>Loading Dashboard...</div></DashboardLayout>;
 
-    const now = new Date();
-    const totalSessions = lessons.length;
-    const pendingSessions = lessons.filter(l => new Date(l.start_time) > now && (l.status === 'PENDING' || l.status === 'BOOKED')).length;
+    const totalStudents = students.length;
+    const activeStudents = students.filter((s) => s.nextSessionStart != null && String(s.nextSessionStart).trim() !== '').length;
+
+    const totalSessions = statsLessons.filter((l) => String(l.status || '').toUpperCase() !== 'CANCELLED').length;
+
+    const pendingSessions = (() => {
+        const nowMs = Date.now();
+        return statsLessons.filter((l) => {
+            const st = String(l.status || '').toUpperCase();
+            if (st === 'CANCELLED' || st === 'COMPLETED' || st === 'MISSED') return false;
+            if (new Date(l.start_time).getTime() <= nowMs) return false;
+            if (st === 'PENDING') return true;
+            const ps = l.payment_status;
+            return ps === 'pending' || ps === 'failed';
+        }).length;
+    })();
 
     return (
         <DashboardLayout>
             <div className="flex flex-col lg:flex-row gap-6">
                 <div className="flex-1 space-y-6">
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                        <StatsCard icon={<Users className="w-5 h-5" />} label="Total Students" value={studentsBusy ? '…' : studentsCount} />
-                        <StatsCard icon={<Users className="w-5 h-5" />} label="Active Students" value={studentsBusy ? '…' : studentsCount} />
-                        <StatsCard icon={<Calendar className="w-5 h-5" />} label="Total Sessions" value={lessonsBusy ? '…' : totalSessions} />
-                        <StatsCard icon={<Clock className="w-5 h-5" />} label="Pending Sessions" value={lessonsBusy ? '…' : pendingSessions} />
+                        <StatsCard icon={<Users className="w-5 h-5" />} label="Total Students" value={studentsBusy ? '…' : totalStudents} />
+                        <StatsCard icon={<UserCheck className="w-5 h-5" />} label="Active Students" value={studentsBusy ? '…' : activeStudents} />
+                        <StatsCard icon={<Calendar className="w-5 h-5" />} label="Total Sessions" value={statsLessonsBusy ? '…' : totalSessions} />
+                        <StatsCard icon={<Clock className="w-5 h-5" />} label="Pending Sessions" value={statsLessonsBusy ? '…' : pendingSessions} />
                     </div>
 
                     <Card className="border border-gray-200">

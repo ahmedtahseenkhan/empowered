@@ -10,6 +10,7 @@ interface TutorProfile {
     stripe_subscription_id?: string | null;
     subscription_status?: string | null;
     subscription_end_date?: string | null;
+    has_used_trial?: boolean;
 }
 
 type ServerPlan = { id: string; name: string; priceMonthly: number; annualAmount: number; priceId: string };
@@ -184,7 +185,7 @@ const SubscriptionSettingsPage: React.FC = () => {
     const handleChangePlan = async (planId: string, priceId: string | undefined) => {
         try {
             setLoading(true);
-            // If they have a Stripe subscription, update via Stripe; otherwise activate/update trial without payment
+            // If they have a Stripe subscription, update via Stripe
             if (!paymentRequired && profile?.stripe_subscription_id && priceId) {
                 await api.put('/payments/mentor/subscription', {
                     newPriceId: priceId,
@@ -192,10 +193,26 @@ const SubscriptionSettingsPage: React.FC = () => {
                 });
                 await fetchProfile();
                 alert('Subscription updated successfully!');
-            } else {
+            } else if (!profile?.has_used_trial) {
+                // First-time user: activate free trial without payment
                 await api.post('/payments/mentor/subscription/activate-trial', { tier: planId });
                 await fetchProfile();
-                alert(profile?.subscription_status ? 'Plan updated.' : 'Trial activated.');
+                alert('Your free trial has been activated!');
+            } else {
+                // Trial already used: redirect to Stripe checkout for paid subscription
+                if (!priceId) {
+                    alert('Unable to determine plan price. Please try again.');
+                    return;
+                }
+                const response = await api.post('/payments/mentor/subscription', {
+                    priceId,
+                    tier: planId,
+                    successUrl: `${window.location.origin}/dashboard/subscription?success=true`,
+                    cancelUrl: `${window.location.origin}/dashboard/subscription?canceled=true`,
+                });
+                if (response.data?.url) {
+                    window.location.href = response.data.url;
+                }
             }
         } catch (error: any) {
             console.error('Failed to update plan:', error);
@@ -210,8 +227,18 @@ const SubscriptionSettingsPage: React.FC = () => {
     };
 
     const confirmCancellation = async () => {
-        alert('Subscription cancellation will be implemented with Stripe integration');
-        setShowCancelModal(false);
+        try {
+            setLoading(true);
+            await api.post('/payments/mentor/subscription/cancel');
+            await fetchProfile();
+            alert('Your subscription has been canceled.');
+        } catch (error: any) {
+            console.error('Failed to cancel subscription:', error);
+            alert(error.response?.data?.error || 'Failed to cancel subscription.');
+        } finally {
+            setShowCancelModal(false);
+            setLoading(false);
+        }
     };
 
     if (loading) {
@@ -245,10 +272,10 @@ const SubscriptionSettingsPage: React.FC = () => {
                         <div>
                             <h2 className="text-sm font-semibold text-red-800">Subscription Required</h2>
                             <p className="text-xs text-red-700 mt-0.5">
-                                {!hasStripeSubscription
-                                    ? 'Start your subscription to activate your 2-month free trial and access mentor features.'
+                                {!profile?.has_used_trial
+                                    ? 'Start your subscription to activate your free trial and access mentor features.'
                                     : expired
-                                        ? 'Your trial/subscription period has ended. Choose a plan to continue.'
+                                        ? 'Your trial/subscription period has ended. Subscribe to a plan to continue.'
                                         : 'Your subscription is not active. Please select a plan to continue.'}
                             </p>
                         </div>
@@ -413,7 +440,7 @@ const SubscriptionSettingsPage: React.FC = () => {
                                                 onClick={() => handleChangePlan(plan.id, plan.priceId)}
                                             >
                                                 {paymentRequired
-                                                    ? (!hasStripeSubscription ? `Start Free Trial` : `Activate ${plan.name}`)
+                                                    ? (!profile?.has_used_trial ? `Start Free Trial` : `Subscribe to ${plan.name}`)
                                                     : (isUpgrade ? `Upgrade to ${plan.name}` : `Switch to ${plan.name}`)}
                                             </Button>
                                         )}

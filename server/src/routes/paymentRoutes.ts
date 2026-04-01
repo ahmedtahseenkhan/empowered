@@ -3,6 +3,7 @@ import { authenticateToken } from '../middleware/authMiddleware';
 import {
     createMentorSubscriptionCheckout,
     activateMentorTrial,
+    cancelMentorSubscription,
     createConnectOnboardingLink,
     getConnectAccountStatus,
     getSubscriptionStatus,
@@ -30,6 +31,7 @@ router.use(authenticateToken);
 // Mentor Subscription
 router.post('/mentor/subscription', createMentorSubscriptionCheckout);
 router.post('/mentor/subscription/activate-trial', activateMentorTrial);
+router.post('/mentor/subscription/cancel', cancelMentorSubscription);
 router.put('/mentor/subscription', updateMentorSubscription);
 router.get('/mentor/status', getSubscriptionStatus);
 

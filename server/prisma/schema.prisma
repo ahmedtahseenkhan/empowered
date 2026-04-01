@@ -166,6 +166,7 @@ model TutorProfile {
   stripe_subscription_id String? // ID of their subscription to the platform (Standard/Pro/Premium)
   subscription_status    String? // active, past_due, canceled
   subscription_end_date  DateTime? // When their current paid period ends
+  has_used_trial         Boolean @default(false) // Whether the tutor has already used their free trial
 
   progress_notes ProgressNote[]
   homework_tasks HomeworkTask[]

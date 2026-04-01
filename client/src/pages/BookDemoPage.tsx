@@ -181,18 +181,29 @@ const BookDemoPage: React.FC = () => {
         return (
             <PageLayout>
                 <section className="section-container">
-                    <div className="max-w-xl mx-auto text-center py-12">
-                        <div className="text-5xl mb-6">🎉</div>
-                        <h1 className="heading-lg mb-4">You're All Set!</h1>
-                        <p className="text-lg text-gray-600 mb-8">
+                    <div className="max-w-2xl mx-auto py-12 sm:py-16">
+                        <div className="text-center">
+                            <div className="text-5xl mb-6">🎉</div>
+                            <h1 className="heading-lg mb-5">You're All Set!</h1>
+                        </div>
+                        <p className="text-center text-lg leading-relaxed text-gray-600 max-w-xl mx-auto mb-10">
                             We're excited to meet you and explore how EmpowerEd Learnings can support your growth.
                         </p>
-                        <ul className="space-y-3 text-left max-w-sm mx-auto text-gray-700">
-                            <li className="flex items-center gap-2">✔️ Check your email for confirmation</li>
-                            <li className="flex items-center gap-2">✔️ Add the call to your calendar</li>
-                            <li className="flex items-center gap-2">✔️ Come ready with your questions</li>
+                        <ul className="max-w-md mx-auto space-y-4 text-gray-700">
+                            <li className="flex items-center justify-center gap-3 text-xl">
+                                <span className="text-purple-600">✔</span>
+                                <span className="text-left w-72">Check your email for confirmation</span>
+                            </li>
+                            <li className="flex items-center justify-center gap-3 text-xl">
+                                <span className="text-purple-600">✔</span>
+                                <span className="text-left w-72">Add the call to your calendar</span>
+                            </li>
+                            <li className="flex items-center justify-center gap-3 text-xl">
+                                <span className="text-purple-600">✔</span>
+                                <span className="text-left w-72">Come ready with your questions</span>
+                            </li>
                         </ul>
-                        <p className="mt-8 font-semibold text-gray-900">See you soon!</p>
+                        <p className="mt-10 text-center text-4xl font-semibold text-gray-900">See you soon!</p>
                     </div>
                 </section>
             </PageLayout>

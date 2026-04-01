@@ -110,6 +110,8 @@ export async function handleCheckoutSessionCompleted(session: any) {
                 subscription_status: (subscription as any).status || 'active',
                 subscription_end_date: endEpoch ? new Date(endEpoch * 1000) : undefined,
                 tier: (tier === 'STANDARD' || tier === 'PRO' || tier === 'PREMIUM') ? (tier as any) : undefined,
+                // Mark trial as used if this subscription has a trial period
+                ...(trialEnd ? { has_used_trial: true } : {}),
             }
         });
         console.log(`[Stripe Webhook] Successfully updated TutorProfile ${tutorId} for subscription.`);

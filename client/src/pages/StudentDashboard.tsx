@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, CheckCircle, BookOpen, Users, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Calendar, CheckCircle, BookOpen, ChevronLeft, ChevronRight } from 'lucide-react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -15,6 +15,17 @@ type Lesson = {
     google_calendar_html_link?: string | null;
     tutor?: { username?: string | null };
 };
+
+function lessonStatusUpper(l: Lesson) {
+    return String(l.status || '').toUpperCase();
+}
+
+/** Future sessions that are still on the schedule (not finished or cancelled). */
+function isScheduledUpcoming(l: Lesson, nowMs: number) {
+    const st = lessonStatusUpper(l);
+    if (st === 'CANCELLED' || st === 'COMPLETED' || st === 'MISSED') return false;
+    return new Date(l.start_time).getTime() > nowMs;
+}
 
 type CoursePurchase = {
     id: string;
@@ -44,6 +55,9 @@ const StudentDashboard: React.FC = () => {
 
     const [loading, setLoading] = useState(true);
     const [lessons, setLessons] = useState<Lesson[]>([]);
+    /** Wide-range fetch for dashboard stats (not tied to calendar month). */
+    const [statsLessons, setStatsLessons] = useState<Lesson[]>([]);
+    const [statsLoading, setStatsLoading] = useState(true);
     const [courses, setCourses] = useState<CoursePurchase[]>([]);
 
     const [calendarView, setCalendarView] = useState<'week' | 'month'>('month');
@@ -81,6 +95,34 @@ const StudentDashboard: React.FC = () => {
             return d;
         });
     }, [weekStart]);
+
+    useEffect(() => {
+        let cancelled = false;
+        const fetchStatsLessons = async () => {
+            try {
+                setStatsLoading(true);
+                const from = new Date();
+                from.setFullYear(from.getFullYear() - 3);
+                from.setHours(0, 0, 0, 0);
+                const to = new Date();
+                to.setFullYear(to.getFullYear() + 2);
+                to.setHours(23, 59, 59, 999);
+                const res = await api.get('/lessons/me', {
+                    params: { from: from.toISOString(), to: to.toISOString() },
+                });
+                if (!cancelled) setStatsLessons(res.data?.lessons || []);
+            } catch (e) {
+                console.error('Failed to load lessons for dashboard stats', e);
+                if (!cancelled) setStatsLessons([]);
+            } finally {
+                if (!cancelled) setStatsLoading(false);
+            }
+        };
+        fetchStatsLessons();
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     useEffect(() => {
         const fetchCourses = async () => {
@@ -132,17 +174,16 @@ const StudentDashboard: React.FC = () => {
         fetchLessonsForMonth();
     }, [monthCursor]);
 
-    const now = new Date();
-
     const completedSessions = useMemo(() => {
-        return lessons.filter(l => l.status === 'COMPLETED').length;
-    }, [lessons]);
+        return statsLessons.filter((l) => lessonStatusUpper(l) === 'COMPLETED').length;
+    }, [statsLessons]);
 
     const upcomingSessions = useMemo(() => {
-        return lessons
-            .filter(l => new Date(l.start_time) > now && (l.status === 'BOOKED' || l.status === 'PENDING'))
+        const nowMs = Date.now();
+        return statsLessons
+            .filter((l) => isScheduledUpcoming(l, nowMs))
             .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
-    }, [lessons, now]);
+    }, [statsLessons]);
 
     const totalCourses = useMemo(() => courses.length, [courses.length]);
 
@@ -222,8 +263,8 @@ const StudentDashboard: React.FC = () => {
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <StatsCard icon={<CheckCircle className="w-5 h-5" />} label="Completed Sessions" value={completedSessions} />
-                        <StatsCard icon={<Calendar className="w-5 h-5" />} label="Upcoming Sessions" value={upcomingSessions.length} />
+                        <StatsCard icon={<CheckCircle className="w-5 h-5" />} label="Completed Sessions" value={statsLoading ? '…' : completedSessions} />
+                        <StatsCard icon={<Calendar className="w-5 h-5" />} label="Upcoming Sessions" value={statsLoading ? '…' : upcomingSessions.length} />
                         <StatsCard icon={<BookOpen className="w-5 h-5" />} label="Total Courses" value={totalCourses} />
                     </div>
 

@@ -61,30 +61,14 @@ export const createMentorSubscriptionCheckout = async (req: Request, res: Respon
 
         if (!tutor) return res.status(404).json({ error: 'Tutor profile not found' });
 
-        // 1. Ensure Tutor has a Stripe Customer ID (create if missing)
-        // Note: Tutors act as Customers when *paying* for the platform subscription.
-        // They act as Accounts when *receiving* money from students.
-        // We'll reuse stripe_customer_id if we have one (usually on StudentProfile, 
-        // but a Tutor might need one too. For now let's check or create a customer object).
-
-        // Actually, Tutors don't store stripe_customer_id in our current schema (only StudentProfile does).
-        // We should probably store it on TutorProfile too if they are paying us, 
-        // OR just create a customer on the fly if we don't want to change schema again right now.
-        // Ideally, add stripe_customer_id to TutorProfile.
-
-        // WORKAROUND: For now, we'll check if we can find a customer by email, or create one.
-        // Better: Add stripe_customer_id to TutorProfile in next migration.
-        // For this step, I'll assume we can create/retrieve by email.
+        // Determine trial eligibility: only if user has never used a trial before
+        const trialEligible = !tutor.has_used_trial;
 
         let customerId = '';
-        // Look up via email on Stripe side to avoid duplicates
         const existingCustomers = await StripeService.createCustomer(tutor.user.email, tutor.username);
-        // Wait, createCustomer actually creates. 
-        // Let's just create one for now. Stripe allows duplicate emails. 
-        // Ideally we save this ID.
         customerId = existingCustomers.id;
 
-        // 2. Create Checkout Session
+        // 2. Create Checkout Session (with or without trial based on eligibility)
         const session = await StripeService.createSubscriptionCheckoutSession(
             priceId,
             customerId,
@@ -95,7 +79,8 @@ export const createMentorSubscriptionCheckout = async (req: Request, res: Respon
                 userId: userId,
                 tier,
                 type: 'mentor_subscription'
-            }
+            },
+            trialEligible
         );
 
         res.json({ url: session.url });
@@ -123,8 +108,13 @@ export const activateMentorTrial = async (req: Request, res: Response) => {
         });
         if (!tutor) return res.status(404).json({ error: 'Tutor profile not found' });
 
+        // Check if user has already used their trial
+        if (tutor.has_used_trial) {
+            return res.status(400).json({ error: 'You have already used your free trial. Please subscribe to continue.' });
+        }
+
         const trialEnd = new Date();
-        trialEnd.setDate(trialEnd.getDate() + 60); // 2 months
+        trialEnd.setDate(trialEnd.getDate() + 1); // TODO: Change back to 60 for production (2-month trial)
 
         await prisma.tutorProfile.update({
             where: { id: tutor.id },
@@ -132,7 +122,7 @@ export const activateMentorTrial = async (req: Request, res: Response) => {
                 tier: tier as any,
                 subscription_status: 'trialing',
                 subscription_end_date: trialEnd,
-                // stripe_subscription_id stays null
+                has_used_trial: true, // Mark trial as used
             },
         });
 
@@ -338,7 +328,8 @@ export const getSubscriptionStatus = async (req: Request, res: Response) => {
                 stripe_subscription_id: true,
                 subscription_status: true,
                 subscription_end_date: true,
-                stripe_account_id: true
+                stripe_account_id: true,
+                has_used_trial: true
             }
         });
 
@@ -347,6 +338,50 @@ export const getSubscriptionStatus = async (req: Request, res: Response) => {
         res.json(tutor);
     } catch (error: any) {
         res.status(500).json({ error: 'Failed to get status' });
+    }
+}
+
+export const cancelMentorSubscription = async (req: Request, res: Response) => {
+    try {
+        const userId = (req as any).user.id;
+
+        const tutor = await prisma.tutorProfile.findUnique({
+            where: { user_id: userId },
+        });
+
+        if (!tutor) return res.status(404).json({ error: 'Tutor profile not found' });
+
+        // If there's a Stripe subscription, cancel it on Stripe
+        if (tutor.stripe_subscription_id) {
+            await StripeService.cancelSubscription(tutor.stripe_subscription_id);
+
+            // Update local status to reflect cancellation pending at period end
+            await prisma.tutorProfile.update({
+                where: { id: tutor.id },
+                data: {
+                    subscription_status: 'canceled',
+                },
+            });
+
+            return res.json({ success: true, message: 'Subscription will be canceled at the end of the current billing period.' });
+        }
+
+        // If it's a local trial (no Stripe subscription), just cancel it
+        if (tutor.subscription_status === 'trialing' || tutor.subscription_status === 'active') {
+            await prisma.tutorProfile.update({
+                where: { id: tutor.id },
+                data: {
+                    subscription_status: 'canceled',
+                },
+            });
+
+            return res.json({ success: true, message: 'Subscription canceled.' });
+        }
+
+        return res.status(400).json({ error: 'No active subscription to cancel.' });
+    } catch (error: any) {
+        console.error('Cancel subscription error:', error);
+        return res.status(500).json({ error: error?.message || 'Failed to cancel subscription' });
     }
 }
 
