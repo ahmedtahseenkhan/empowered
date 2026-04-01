@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Crown, Check, X, AlertTriangle, Sparkles, Zap, Shield } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Crown, Check, X, AlertTriangle, Sparkles, Zap, Shield, RefreshCw } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import api from '../api/axios';
@@ -138,16 +138,34 @@ const SubscriptionSettingsPage: React.FC = () => {
     const [showCancelModal, setShowCancelModal] = useState(false);
     const [expandedPlan, setExpandedPlan] = useState<string | null>(null);
     const [serverPlans, setServerPlans] = useState<ServerPlan[] | null>(null);
+    const [finalizeStatus, setFinalizeStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
 
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
         const sessionId = params.get('session_id');
+        const success = params.get('success');
+
         if (sessionId) {
             // Remove query params from URL without reloading
             window.history.replaceState({}, '', window.location.pathname);
+            setFinalizeStatus('loading');
+            console.log('[SubscriptionPage] Calling finalize with sessionId:', sessionId);
             api.post('/payments/mentor/subscription/finalize', { sessionId })
-                .catch((err) => console.warn('Finalize subscription error:', err))
+                .then(() => {
+                    console.log('[SubscriptionPage] Finalize succeeded');
+                    setFinalizeStatus('success');
+                })
+                .catch((err) => {
+                    console.error('[SubscriptionPage] Finalize error:', err?.response?.data || err?.message || err);
+                    setFinalizeStatus('error');
+                })
                 .finally(() => fetchProfile());
+        } else if (success === 'true') {
+            // Redirected from Stripe but session_id is missing — old URL format or Stripe didn't replace template
+            console.warn('[SubscriptionPage] success=true but no session_id in URL');
+            window.history.replaceState({}, '', window.location.pathname);
+            setFinalizeStatus('error');
+            fetchProfile();
         } else {
             fetchProfile();
         }
@@ -234,6 +252,21 @@ const SubscriptionSettingsPage: React.FC = () => {
 
     const handleCancelSubscription = () => {
         setShowCancelModal(true);
+    };
+
+    const handleVerifySubscription = async () => {
+        try {
+            setLoading(true);
+            console.log('[SubscriptionPage] Manual verify subscription triggered');
+            await api.post('/payments/mentor/subscription/verify');
+            await fetchProfile();
+            setFinalizeStatus('success');
+        } catch (error: any) {
+            console.error('[SubscriptionPage] Verify subscription error:', error?.response?.data || error);
+            alert(error?.response?.data?.error || 'Could not verify subscription. Please contact support.');
+        } finally {
+            setLoading(false);
+        }
     };
 
     const confirmCancellation = async () => {
@@ -461,11 +494,48 @@ const SubscriptionSettingsPage: React.FC = () => {
                     </div>
                 </div>
 
+                {/* Finalize status banners */}
+                {finalizeStatus === 'loading' && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 flex items-center gap-3">
+                        <div className="w-5 h-5 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin flex-shrink-0" />
+                        <p className="text-sm text-blue-700 font-medium">Activating your subscription...</p>
+                    </div>
+                )}
+                {finalizeStatus === 'success' && !paymentRequired && (
+                    <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-6 flex items-center gap-3">
+                        <Check className="w-5 h-5 text-green-600 flex-shrink-0" />
+                        <p className="text-sm text-green-700 font-medium">Subscription activated successfully!</p>
+                    </div>
+                )}
+                {finalizeStatus === 'error' && paymentRequired && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6">
+                        <div className="flex items-start gap-3">
+                            <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                            <div>
+                                <p className="text-sm text-amber-800 font-medium">
+                                    Payment was processed but subscription activation failed.
+                                </p>
+                                <p className="text-xs text-amber-700 mt-1">
+                                    If you just paid on Stripe, click the button below to sync your subscription.
+                                </p>
+                                <button
+                                    onClick={handleVerifySubscription}
+                                    disabled={loading}
+                                    className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50"
+                                >
+                                    <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                                    Verify Subscription
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* Info banner */}
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-center gap-3">
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-center gap-3 mb-6">
                     <AlertTriangle className="w-4 h-4 text-blue-500 flex-shrink-0" />
                     <p className="text-xs text-blue-700">
-                        Subscription status is synced from Stripe. If you just paid, refresh in a few seconds.
+                        Subscription status is synced from Stripe. If you just paid, click "Verify Subscription" or refresh in a few seconds.
                     </p>
                 </div>
             </div>

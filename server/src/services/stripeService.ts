@@ -206,6 +206,18 @@ export class StripeService {
     }
 
     /**
+     * List active/trialing subscriptions for a customer.
+     */
+    static async listCustomerSubscriptions(customerId: string) {
+        const subs = await stripe.subscriptions.list({
+            customer: customerId,
+            status: 'all',
+            limit: 5,
+        });
+        return subs.data;
+    }
+
+    /**
      * Cancel a Subscription at period end (so user keeps access until the current paid period expires)
      */
     static async cancelSubscription(subscriptionId: string) {

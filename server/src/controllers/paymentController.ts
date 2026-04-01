@@ -471,6 +471,71 @@ export const finalizeMentorSubscription = async (req: Request, res: Response) =>
     }
 };
 
+/**
+ * Manual verification: look up the Stripe customer's latest subscription and sync DB.
+ * Fallback for when both webhook and session-based finalize fail.
+ */
+export const verifyMentorSubscription = async (req: Request, res: Response) => {
+    try {
+        const userId = (req as any).user.id;
+        console.log(`[Verify Subscription] userId=${userId}`);
+
+        const tutor = await prisma.tutorProfile.findUnique({
+            where: { user_id: userId },
+        });
+        if (!tutor) return res.status(404).json({ error: 'Tutor profile not found' });
+
+        const customerId = tutor.stripe_customer_id;
+        if (!customerId) {
+            console.log(`[Verify Subscription] No stripe_customer_id for tutor ${tutor.id}`);
+            return res.status(400).json({ error: 'No Stripe customer found. Please subscribe first.' });
+        }
+
+        console.log(`[Verify Subscription] Fetching subscriptions for customer ${customerId}`);
+        const subscriptions = await StripeService.listCustomerSubscriptions(customerId);
+        console.log(`[Verify Subscription] Found ${subscriptions.length} subscriptions`);
+
+        // Find the most recent active or trialing subscription
+        const activeSub = subscriptions.find(
+            (s) => s.status === 'active' || s.status === 'trialing'
+        );
+
+        if (!activeSub) {
+            console.log(`[Verify Subscription] No active/trialing subscription found. Statuses: ${subscriptions.map(s => s.status).join(', ')}`);
+            return res.status(404).json({ error: 'No active subscription found on Stripe. Please subscribe first.' });
+        }
+
+        console.log(`[Verify Subscription] Found subscription ${activeSub.id}, status=${activeSub.status}, current_period_end=${(activeSub as any).current_period_end}`);
+
+        const trialEnd = (activeSub as any).trial_end as number | null;
+        const currentPeriodEnd = (activeSub as any).current_period_end as number | null;
+        const endEpoch = trialEnd || currentPeriodEnd;
+
+        // Determine tier from subscription metadata or existing profile
+        const subMeta = activeSub.metadata as Record<string, string> | null;
+        const tier = subMeta?.tier;
+
+        await prisma.tutorProfile.update({
+            where: { id: tutor.id },
+            data: {
+                stripe_subscription_id: activeSub.id,
+                subscription_status: activeSub.status,
+                subscription_end_date: endEpoch ? new Date(endEpoch * 1000) : undefined,
+                ...(tier === 'STANDARD' || tier === 'PRO' || tier === 'PREMIUM'
+                    ? { tier: tier as any }
+                    : {}),
+                ...(trialEnd ? { has_used_trial: true } : {}),
+            },
+        });
+
+        console.log(`[Verify Subscription] Successfully synced tutor ${tutor.id}: sub=${activeSub.id}, status=${activeSub.status}`);
+        return res.json({ success: true, subscription_status: activeSub.status });
+    } catch (error: any) {
+        console.error('[Verify Subscription] Error:', error);
+        return res.status(500).json({ error: error?.message || 'Failed to verify subscription' });
+    }
+};
+
 const CreateBookingSchema = z.object({
     tutorId: z.string().uuid(),
     frequency: z.enum(['ONCE', 'WEEKLY', 'TWICE_WEEKLY', 'THRICE_WEEKLY'] as const),
