@@ -438,6 +438,30 @@ class EmailService {
      * WELCOME EMAILS
      */
 
+    async sendVerificationCodeEmail(data: {
+        username: string;
+        email: string;
+        code: string;
+    }): Promise<void> {
+        const html = `
+            <div style="font-family:Arial,sans-serif;line-height:1.6;max-width:480px;margin:0 auto">
+              <h2 style="color:#1a1a1a">Verify your email</h2>
+              <p>Hi ${data.username},</p>
+              <p>Use the code below to verify your email address. It expires in <strong>30 minutes</strong>.</p>
+              <div style="margin:24px 0;text-align:center">
+                <span style="display:inline-block;font-size:36px;font-weight:bold;letter-spacing:10px;color:#4f46e5;background:#f0f0ff;padding:16px 24px;border-radius:8px">${data.code}</span>
+              </div>
+              <p style="color:#555">If you did not create an account, you can safely ignore this email.</p>
+              <p style="color:#999;font-size:12px">— EmpowerEd Learnings</p>
+            </div>
+        `;
+        await this.sendEmail({
+            to: data.email,
+            subject: 'Your EmpowerEd Learnings verification code',
+            html,
+        });
+    }
+
     async sendVerificationEmail(data: {
         username: string;
         email: string;

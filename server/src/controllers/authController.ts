@@ -58,27 +58,27 @@ export const register = async (req: Request, res: Response) => {
         // Generate Token
         const token = generateToken(result.id, result.role);
 
-        // Send Verification Email
+        // Send Verification Code Email (6-digit code for inline wizard flow)
         try {
-            const verificationToken = generateVerificationToken(result.id);
-            const baseUrl = getClientBaseUrl();
-            const verificationLink = `${baseUrl}/verify-email?token=${verificationToken}`;
+            const code = crypto.randomInt(0, 1000000).toString().padStart(6, '0');
+            const codeHash = await hashPassword(code);
+            const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
 
-            await emailService.sendVerificationEmail({
-                username,
-                email,
-                verificationLink
+            await prisma.emailVerificationCode.create({
+                data: {
+                    user_id: result.id,
+                    code_hash: codeHash,
+                    expires_at: expiresAt,
+                },
             });
 
-            // Also send welcome email (optional, or send after verification)
-            await emailService.sendWelcomeEmail({
+            await emailService.sendVerificationCodeEmail({
                 username,
                 email,
-                loginLink: `${baseUrl}/login`,
+                code,
             });
-
         } catch (emailError) {
-            console.error('Failed to send emails:', emailError);
+            console.error('Failed to send verification code email:', emailError);
         }
 
         res.status(201).json({
@@ -329,21 +329,80 @@ export const resendVerification = async (req: Request, res: Response) => {
         if (!user) return res.status(404).json({ error: 'User not found' });
         if (user.is_verified) return res.status(400).json({ error: 'Email already verified' });
 
-        const verificationToken = generateVerificationToken(user.id);
-        const baseUrl = getClientBaseUrl();
-        const verificationLink = `${baseUrl}/verify-email?token=${verificationToken}`;
+        const code = crypto.randomInt(0, 1000000).toString().padStart(6, '0');
+        const codeHash = await hashPassword(code);
+        const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+
+        await prisma.emailVerificationCode.create({
+            data: {
+                user_id: user.id,
+                code_hash: codeHash,
+                expires_at: expiresAt,
+            },
+        });
 
         const username = user.role === 'STUDENT' ? user.student_profile?.username : user.tutor_profile?.username;
 
-        await emailService.sendVerificationEmail({
+        await emailService.sendVerificationCodeEmail({
             username: username || 'User',
             email: user.email,
-            verificationLink
+            code,
         });
 
-        return res.json({ message: 'Verification email sent' });
+        return res.json({ message: 'Verification code sent' });
     } catch (error) {
         console.error('resendVerification error:', error);
+        return res.status(500).json({ error: 'Server error' });
+    }
+};
+
+export const verifyEmailCode = async (req: Request, res: Response) => {
+    try {
+        const { email, code } = req.body as { email?: string; code?: string };
+        if (!email || !code) return res.status(400).json({ error: 'email and code are required' });
+
+        const user = await prisma.user.findUnique({ where: { email } });
+        if (!user) return res.status(400).json({ error: 'Invalid email or code' });
+
+        if (user.is_verified) {
+            return res.json({ message: 'Email already verified' });
+        }
+
+        const latest = await prisma.emailVerificationCode.findFirst({
+            where: {
+                user_id: user.id,
+                used_at: null,
+                expires_at: { gt: new Date() },
+            },
+            orderBy: { created_at: 'desc' },
+        });
+
+        if (!latest) return res.status(400).json({ error: 'Invalid or expired code. Request a new one.' });
+
+        const ok = await comparePassword(code, latest.code_hash);
+        if (!ok) return res.status(400).json({ error: 'Invalid or expired code.' });
+
+        await prisma.$transaction([
+            prisma.user.update({ where: { id: user.id }, data: { is_verified: true } }),
+            prisma.emailVerificationCode.update({ where: { id: latest.id }, data: { used_at: new Date() } }),
+        ]);
+
+        // Send welcome email now that email is confirmed
+        try {
+            const username = user.role === 'STUDENT'
+                ? (await prisma.studentProfile.findUnique({ where: { user_id: user.id } }))?.username
+                : (await prisma.tutorProfile.findUnique({ where: { user_id: user.id } }))?.username;
+            const baseUrl = getClientBaseUrl();
+            await emailService.sendWelcomeEmail({
+                username: username || 'User',
+                email: user.email,
+                loginLink: `${baseUrl}/login`,
+            });
+        } catch (_e) { /* non-fatal */ }
+
+        return res.json({ message: 'Email verified successfully' });
+    } catch (error) {
+        console.error('verifyEmailCode error:', error);
         return res.status(500).json({ error: 'Server error' });
     }
 };

@@ -19,6 +19,14 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
     const navigate = useNavigate();
     const location = useLocation();
 
+    const isNavActive = (path: string) => {
+        const p = location.pathname;
+        if (path === '/student/mentors') {
+            return p === '/student/mentors' || p.startsWith('/student/mentors/');
+        }
+        return p === path;
+    };
+
     const menuItems = user?.role === 'STUDENT'
         ? [
             { icon: <User className="w-5 h-5" />, label: 'Dashboard', path: '/dashboard' },
@@ -26,7 +34,7 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
             { icon: <BookOpen className="w-5 h-5" />, label: 'My Courses', path: '/student/my-courses' },
             { icon: <Users className="w-5 h-5" />, label: 'My Mentors', path: '/student/my-mentors' },
             { icon: <BookOpen className="w-5 h-5" />, label: 'Notes from Mentor', path: '/student/notes' },
-            { icon: <Users className="w-5 h-5" />, label: 'Find Your Perfect Mentor', path: '/find-mentor' },
+            { icon: <Users className="w-5 h-5" />, label: 'Find Your Perfect Mentor', path: '/student/mentors' },
         ]
         : [
             { icon: <User className="w-5 h-5" />, label: 'Dashboard', path: '/dashboard' },
@@ -79,7 +87,7 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
                         <Link
                             key={item.label}
                             to={item.path}
-                            className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${location.pathname === item.path
+                            className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${isNavActive(item.path)
                                 ? 'bg-primary-50 text-primary-700'
                                 : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                                 }`}

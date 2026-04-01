@@ -29,6 +29,10 @@ const TutorRegisterPage: React.FC = () => {
         role: 'TUTOR',
         plan: planIdFromUrl || 'STANDARD',
     });
+    const [verificationCode, setVerificationCode] = useState('');
+    const [verifyLoading, setVerifyLoading] = useState(false);
+    const [resendLoading, setResendLoading] = useState(false);
+    const [resendMessage, setResendMessage] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [serverPlans, setServerPlans] = useState<Array<{ id: string; priceId: string; annualAmount: number }>>([]);
@@ -173,6 +177,40 @@ const TutorRegisterPage: React.FC = () => {
         }
     };
 
+    // STEP 2: Verify the 6-digit code
+    const handleVerifyCode = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setVerifyLoading(true);
+        setError('');
+        try {
+            await api.post('/auth/verify-email-code', {
+                email: formData.email,
+                code: verificationCode.trim(),
+            });
+            setCurrentStep(3);
+        } catch (err: any) {
+            setError(err.response?.data?.error || 'Invalid or expired code. Please try again.');
+        } finally {
+            setVerifyLoading(false);
+        }
+    };
+
+    // STEP 2: Resend the verification code
+    const handleResendCode = async () => {
+        setResendLoading(true);
+        setResendMessage('');
+        setError('');
+        try {
+            await api.post('/auth/resend-verification', { email: formData.email });
+            setVerificationCode('');
+            setResendMessage('A new code has been sent to your email.');
+        } catch (err: any) {
+            setError(err.response?.data?.error || 'Failed to resend code.');
+        } finally {
+            setResendLoading(false);
+        }
+    };
+
 
 
 
@@ -244,23 +282,58 @@ const TutorRegisterPage: React.FC = () => {
                 );
             case 2:
                 return (
-                    <div className="text-center space-y-6">
-                        <div className="mx-auto w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center">
-                            <Mail className="w-8 h-8 text-primary-600" />
+                    <div className="space-y-6">
+                        <div className="text-center">
+                            <div className="mx-auto w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center mb-4">
+                                <Mail className="w-8 h-8 text-primary-600" />
+                            </div>
+                            <h2 className="text-2xl font-bold text-gray-900">Verify your Email</h2>
+                            <p className="text-gray-500 mt-2 text-sm">
+                                We sent a 6-digit code to <strong>{formData.email}</strong>.<br />
+                                Enter it below to confirm your account.
+                            </p>
                         </div>
-                        <h2 className="text-2xl font-bold text-gray-900">Verify your Email</h2>
-                        <p className="text-gray-600">
-                            We've sent a verification link to <strong>{formData.email}</strong>.
-                            Please check your inbox.
-                        </p>
-                        <Button
-                            variant="primary"
-                            className="w-full"
-                            onClick={() => setCurrentStep(3)} // Simulated verification
-                        >
-                            I've Verified My Email
-                        </Button>
-                        <button className="text-sm text-gray-500 hover:text-primary-600 underline">Resend Link</button>
+
+                        {resendMessage && (
+                            <div className="bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-lg">
+                                {resendMessage}
+                            </div>
+                        )}
+
+                        <form onSubmit={handleVerifyCode} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Verification Code</label>
+                                <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    maxLength={6}
+                                    value={verificationCode}
+                                    onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                                    placeholder="000000"
+                                    className="w-full text-center text-3xl font-bold tracking-widest border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
+                                    required
+                                />
+                            </div>
+                            <Button
+                                type="submit"
+                                className="w-full"
+                                disabled={verifyLoading || verificationCode.length !== 6}
+                            >
+                                {verifyLoading ? 'Verifying...' : 'Verify & Continue'}
+                            </Button>
+                        </form>
+
+                        <div className="text-center text-sm text-gray-500">
+                            Didn't receive a code?{' '}
+                            <button
+                                type="button"
+                                onClick={handleResendCode}
+                                disabled={resendLoading}
+                                className="text-primary-600 font-semibold hover:underline disabled:opacity-50"
+                            >
+                                {resendLoading ? 'Sending...' : 'Resend Code'}
+                            </button>
+                        </div>
                     </div>
                 );
             case 3:
