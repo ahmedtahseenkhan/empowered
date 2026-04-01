@@ -312,7 +312,7 @@ const SubscriptionSettingsPage: React.FC = () => {
                         <div className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center flex-shrink-0 mt-0.5">
                             <AlertTriangle className="w-4 h-4 text-red-600" />
                         </div>
-                        <div>
+                        <div className="flex-1">
                             <h2 className="text-sm font-semibold text-red-800">Subscription Required</h2>
                             <p className="text-xs text-red-700 mt-0.5">
                                 {!profile?.has_used_trial
@@ -321,6 +321,17 @@ const SubscriptionSettingsPage: React.FC = () => {
                                         ? 'Your trial/subscription period has ended. Subscribe to a plan to continue.'
                                         : 'Your subscription is not active. Please select a plan to continue.'}
                             </p>
+                            {/* Show verify button if user has already paid on Stripe but DB wasn't updated */}
+                            {profile?.has_used_trial && (
+                                <button
+                                    onClick={handleVerifySubscription}
+                                    disabled={loading}
+                                    className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-red-700 text-white rounded-lg hover:bg-red-800 disabled:opacity-50"
+                                >
+                                    <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                                    Already paid? Click to sync subscription
+                                </button>
+                            )}
                         </div>
                     </div>
                 )}
