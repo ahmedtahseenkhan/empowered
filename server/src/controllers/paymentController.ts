@@ -49,6 +49,56 @@ const CreateConnectLinkSchema = z.object({
 
 type CreateConnectLinkInput = z.infer<typeof CreateConnectLinkSchema>;
 
+/**
+ * Returns a valid sub_... subscription ID for a tutor, auto-recovering from DB corruption
+ * where a cus_... customer ID was accidentally stored in stripe_subscription_id.
+ * Also heals the DB row so it won't happen again.
+ */
+async function resolveTutorSubId(tutor: {
+    id: string;
+    stripe_subscription_id?: string | null;
+    stripe_customer_id?: string | null;
+}): Promise<string | null> {
+    // Already correct
+    if (tutor.stripe_subscription_id?.startsWith('sub_')) {
+        return tutor.stripe_subscription_id;
+    }
+
+    // Determine the customer ID — could be in stripe_customer_id or mistakenly in stripe_subscription_id
+    const customerId = tutor.stripe_customer_id?.startsWith('cus_')
+        ? tutor.stripe_customer_id
+        : tutor.stripe_subscription_id?.startsWith('cus_')
+            ? tutor.stripe_subscription_id
+            : null;
+
+    if (!customerId) return null;
+
+    const subscriptions = await StripeService.listCustomerSubscriptions(customerId);
+    const activeSub = subscriptions.find(
+        (s) => s.status === 'active' || s.status === 'trialing'
+    );
+    if (!activeSub) return null;
+
+    const trialEnd = (activeSub as any).trial_end as number | null;
+    const currentPeriodEnd = (activeSub as any).current_period_end as number | null;
+    const endEpoch = trialEnd || currentPeriodEnd;
+
+    // Heal the DB row
+    await prisma.tutorProfile.update({
+        where: { id: tutor.id },
+        data: {
+            stripe_customer_id: customerId,
+            stripe_subscription_id: activeSub.id,
+            subscription_status: activeSub.status,
+            subscription_end_date: endEpoch ? new Date(endEpoch * 1000) : undefined,
+            ...(trialEnd ? { has_used_trial: true } : {}),
+        },
+    });
+    console.log(`[ResolveSub] Healed tutor ${tutor.id}: set stripe_subscription_id=${activeSub.id}`);
+
+    return activeSub.id;
+}
+
 export const createMentorSubscriptionCheckout = async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user.id;
@@ -327,11 +377,13 @@ export const updateMentorSubscription = async (req: Request, res: Response) => {
         });
 
         if (!tutor) return res.status(404).json({ error: 'Tutor profile not found' });
-        if (!tutor.stripe_subscription_id) {
+
+        const subscriptionId = await resolveTutorSubId(tutor);
+        if (!subscriptionId) {
             return res.status(400).json({ error: 'No active subscription found to update. Please subscribe first.' });
         }
 
-        await StripeService.updateSubscription(tutor.stripe_subscription_id, newPriceId);
+        await StripeService.updateSubscription(subscriptionId, newPriceId);
 
         // Optimistically update local DB
         await prisma.tutorProfile.update({
@@ -355,8 +407,10 @@ export const getSubscriptionStatus = async (req: Request, res: Response) => {
         const tutor = await prisma.tutorProfile.findUnique({
             where: { user_id: userId },
             select: {
+                id: true,
                 tier: true,
                 stripe_subscription_id: true,
+                stripe_customer_id: true,
                 subscription_status: true,
                 subscription_end_date: true,
                 stripe_account_id: true,
@@ -366,7 +420,25 @@ export const getSubscriptionStatus = async (req: Request, res: Response) => {
 
         if (!tutor) return res.status(404).json({ error: 'Tutor found' });
 
-        res.json(tutor);
+        // Auto-heal if stripe_subscription_id is missing or holds a cus_ value by mistake
+        if (!tutor.stripe_subscription_id?.startsWith('sub_') && (tutor.stripe_customer_id || tutor.stripe_subscription_id)) {
+            await resolveTutorSubId(tutor).catch(() => null);
+        }
+
+        // Re-read fresh data so client always gets the corrected values
+        const fresh = await prisma.tutorProfile.findUnique({
+            where: { user_id: userId },
+            select: {
+                tier: true,
+                stripe_subscription_id: true,
+                subscription_status: true,
+                subscription_end_date: true,
+                stripe_account_id: true,
+                has_used_trial: true
+            }
+        });
+
+        res.json(fresh);
     } catch (error: any) {
         res.status(500).json({ error: 'Failed to get status' });
     }
@@ -382,9 +454,10 @@ export const cancelMentorSubscription = async (req: Request, res: Response) => {
 
         if (!tutor) return res.status(404).json({ error: 'Tutor profile not found' });
 
-        // If there's a Stripe subscription, cancel it on Stripe
-        if (tutor.stripe_subscription_id) {
-            await StripeService.cancelSubscription(tutor.stripe_subscription_id);
+        // Resolve real subscription ID, healing corrupted records if needed
+        const subscriptionId = await resolveTutorSubId(tutor);
+        if (subscriptionId) {
+            await StripeService.cancelSubscription(subscriptionId);
 
             // Update local status to reflect cancellation pending at period end
             await prisma.tutorProfile.update({

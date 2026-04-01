@@ -271,9 +271,14 @@ export class PaymentAnalyticsService {
 
             let subscriptionDetails = null;
 
-            if (tutor.stripe_subscription_id) {
+            // Guard against cus_ accidentally stored in stripe_subscription_id
+            const validSubId = tutor.stripe_subscription_id?.startsWith('sub_')
+                ? tutor.stripe_subscription_id
+                : null;
+
+            if (validSubId) {
                 try {
-                    const subscription = await stripe.subscriptions.retrieve(tutor.stripe_subscription_id);
+                    const subscription = await stripe.subscriptions.retrieve(validSubId);
 
                     // Type assertion to work around Stripe SDK type wrapper
                     const sub: any = subscription;
