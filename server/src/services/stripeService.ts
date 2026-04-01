@@ -129,6 +129,7 @@ export class StripeService {
             };
 
             // Trial is intentionally disabled for paid annual checkout copy.
+            console.log(`[StripeService] createSubscriptionCheckoutSession: priceId=${priceId} customerId=${customerId} trialEligible=${trialEligible} subscriptionData=`, JSON.stringify(subscriptionData));
 
             const session = await stripe.checkout.sessions.create({
                 customer: customerId,

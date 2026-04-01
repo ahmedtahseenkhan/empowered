@@ -87,7 +87,8 @@ export const createMentorSubscriptionCheckout = async (req: Request, res: Respon
             });
         }
 
-        // 2. Create Checkout Session (with or without trial based on eligibility)
+        // 2. Create Checkout Session — trial is always disabled for paid checkout
+        console.log(`[Subscription Checkout] userId=${userId} tutorId=${tutor.id} tier=${tier} trialEligible=${trialEligible} customerId=${customerId} priceId=${priceId}`);
         const session = await StripeService.createSubscriptionCheckoutSession(
             priceId,
             customerId,
@@ -101,6 +102,7 @@ export const createMentorSubscriptionCheckout = async (req: Request, res: Respon
             },
             trialEligible
         );
+        console.log(`[Subscription Checkout] Created session ${session.id}, url=${session.url}`);
 
         res.json({ url: session.url });
     } catch (error: any) {
@@ -426,31 +428,42 @@ export const finalizeMentorSubscription = async (req: Request, res: Response) =>
     try {
         const userId = (req as any).user.id;
         const { sessionId } = FinalizeMentorSubscriptionSchema.parse(req.body);
+        console.log(`[Finalize Subscription] userId=${userId} sessionId=${sessionId}`);
 
         const session = await StripeService.getCheckoutSessionById(sessionId);
 
         if (!session) {
+            console.error(`[Finalize Subscription] Session not found: ${sessionId}`);
             return res.status(404).json({ error: 'Checkout session not found' });
         }
-        if (session.payment_status !== 'paid') {
+
+        console.log(`[Finalize Subscription] session.payment_status=${session.payment_status} session.status=${session.status} session.subscription=${session.subscription} session.mode=${session.mode}`);
+        console.log(`[Finalize Subscription] session.metadata=`, session.metadata);
+
+        // Accept 'paid' or 'no_payment_required' (trial subscriptions have no_payment_required)
+        if (session.payment_status !== 'paid' && session.payment_status !== 'no_payment_required') {
+            console.error(`[Finalize Subscription] Unexpected payment_status: ${session.payment_status}`);
             return res.status(400).json({ error: 'Payment not completed' });
         }
 
         const metadata = session.metadata as Record<string, string> | null;
         if (!metadata || metadata.type !== 'mentor_subscription') {
+            console.error(`[Finalize Subscription] Invalid metadata type: ${metadata?.type}`);
             return res.status(400).json({ error: 'Invalid session type' });
         }
 
         // Verify the session belongs to the authenticated user
         if (metadata.userId !== userId) {
+            console.error(`[Finalize Subscription] User mismatch: metadata.userId=${metadata.userId} vs userId=${userId}`);
             return res.status(403).json({ error: 'Session does not belong to this user' });
         }
 
         await handleCheckoutSessionCompleted(session);
+        console.log(`[Finalize Subscription] Successfully finalized for userId=${userId}`);
 
         return res.json({ success: true });
     } catch (error: any) {
-        console.error('Finalize subscription error:', error);
+        console.error('[Finalize Subscription] Error:', error);
         if (error instanceof z.ZodError) {
             return res.status(400).json({ error: error.issues });
         }

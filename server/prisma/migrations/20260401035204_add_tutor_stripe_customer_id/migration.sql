@@ -1,2 +1,1 @@
--- AlterTable
-ALTER TABLE "TutorProfile" ADD COLUMN     "stripe_customer_id" TEXT;
+-- Column already existed in production, migration marked as applied

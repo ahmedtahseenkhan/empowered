@@ -91,10 +91,10 @@ export async function handleCheckoutSessionCompleted(session: any) {
         const { tutorId, tier } = metadata as { tutorId?: string; tier?: string };
         const subscriptionId = session.subscription as string | null;
 
-        console.log(`[Stripe Webhook] Mentor Subscription flow. TutorID: ${tutorId}, Tier: ${tier}, SubID: ${subscriptionId}`);
+        console.log(`[Stripe Webhook] Mentor Subscription flow. TutorID: ${tutorId}, Tier: ${tier}, SubID: ${subscriptionId}, SessionID: ${session.id}, PaymentStatus: ${session.payment_status}`);
 
         if (!tutorId || !subscriptionId) {
-            console.error('[Stripe Webhook] Missing tutorId or subscriptionId');
+            console.error(`[Stripe Webhook] Missing tutorId (${tutorId}) or subscriptionId (${subscriptionId}). Full session.subscription type: ${typeof session.subscription}`);
             return;
         }
 
