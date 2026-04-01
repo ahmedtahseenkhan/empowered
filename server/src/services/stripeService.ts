@@ -128,10 +128,7 @@ export class StripeService {
                 metadata: normalizedMetadata,
             };
 
-            // Only grant trial if the user has never used one before
-            if (trialEligible) {
-                subscriptionData.trial_period_days = 1; // TODO: Change back to 60 for production (2-month trial)
-            }
+            // Trial is intentionally disabled for paid annual checkout copy.
 
             const session = await stripe.checkout.sessions.create({
                 customer: customerId,
