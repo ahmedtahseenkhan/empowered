@@ -110,6 +110,7 @@ const StudentBookingPaymentReviewPage: React.FC = () => {
         durationMinutes: pending.durationMinutes,
         successUrl,
         cancelUrl,
+        clientTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       });
 
       const url = res.data?.url as string | undefined;

@@ -165,6 +165,7 @@ export async function handleCheckoutSessionCompleted(session: any) {
         const studentId = metadata.studentId as string;
         const frequency = metadata.frequency as 'ONCE' | 'WEEKLY' | 'TWICE_WEEKLY' | 'THRICE_WEEKLY';
         const durationMinutes = Number(metadata.durationMinutes || 60);
+        const clientTimezone = (metadata.clientTimezone as string | undefined) || 'UTC';
 
         let slotStarts: string[] = [];
         try {
@@ -347,6 +348,7 @@ export async function handleCheckoutSessionCompleted(session: any) {
                     payload: {
                         bookingId: result.createdBooking.id,
                         tutorName: tutor.username,
+                        clientTimezone,
                         start: firstLesson?.start_time ? firstLesson.start_time.toISOString() : null,
                         end: firstLesson?.end_time ? firstLesson.end_time.toISOString() : null,
                     },

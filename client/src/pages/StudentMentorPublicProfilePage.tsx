@@ -701,7 +701,7 @@ const StudentMentorPublicProfilePage: React.FC = () => {
                                                             if (!freeConfirmSlot) return;
                                                             setFreeBookingBusy(true);
                                                             try {
-                                                                const res = await api.post('/bookings/free-session', { tutorId: mentor.id, slotStart: freeConfirmSlot.start });
+                                                                const res = await api.post('/bookings/free-session', { tutorId: mentor.id, slotStart: freeConfirmSlot.start, clientTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone });
                                                                 const bookingId = res.data?.booking?.id;
                                                                 setFreeConfirmSlot(null);
                                                                 if (bookingId) navigate(`/student/booking/confirmation?bookingId=${encodeURIComponent(bookingId)}`);

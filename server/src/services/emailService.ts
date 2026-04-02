@@ -273,6 +273,24 @@ class EmailService {
         });
     }
 
+    async sendDemoCallReminder(data: {
+        mentorName: string;
+        mentorEmail: string;
+        callDate: string;
+        callTime: string;
+        meetingLink: string;
+    }): Promise<void> {
+        const html = this.renderTemplate('mentor/demo-call-reminder', {
+            ...data,
+            year: new Date().getFullYear(),
+        });
+        await this.sendEmail({
+            to: data.mentorEmail,
+            subject: 'Your Demo Is Tomorrow – Don\u2019t Miss It',
+            html,
+        });
+    }
+
     async sendDemoCallMissed(data: {
         mentorName: string;
         mentorEmail: string;

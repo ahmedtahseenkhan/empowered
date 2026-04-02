@@ -20,8 +20,8 @@ const humanizeBookingFrequency = (frequency: unknown) => {
 };
 
 const formatDatePart = (d: Date, timeZone?: string) => {
-    return d.toLocaleDateString(undefined, {
-        ...(timeZone ? { timeZone } : {}),
+    return d.toLocaleDateString('en-US', {
+        ...(timeZone ? { timeZone } : { timeZone: 'UTC' }),
         weekday: 'short',
         month: 'short',
         day: 'numeric',
@@ -30,11 +30,12 @@ const formatDatePart = (d: Date, timeZone?: string) => {
 };
 
 const formatTimePart = (d: Date, timeZone?: string) => {
-    return d.toLocaleTimeString(undefined, {
-        ...(timeZone ? { timeZone } : {}),
+    return d.toLocaleTimeString('en-US', {
+        ...(timeZone ? { timeZone } : { timeZone: 'UTC' }),
         hour: 'numeric',
         minute: '2-digit',
         hour12: true,
+        timeZoneName: 'short',
     });
 };
 
@@ -65,7 +66,7 @@ async function sendOutboxRow(row: OutboxRow) {
         if (!booking) throw new Error(`Booking not found: ${bookingId}`);
         const firstLesson = booking.lessons?.[0];
         const start = firstLesson?.start_time;
-        const timeZone = booking.tutor?.timezone || 'UTC';
+        const studentTimeZone = (row.payload?.clientTimezone as string | undefined) || booking.tutor?.timezone || 'UTC';
         const clientBase = (process.env.CLIENT_URL || process.env.CLIENT_BASE_URL || 'https://emplearnings.com').trim().replace(/\/+$/, '');
         const dashboardUrl = firstLesson ? `${clientBase}/student/sessions/${firstLesson.id}` : `${clientBase}/student/sessions`;
 
@@ -74,8 +75,8 @@ async function sendOutboxRow(row: OutboxRow) {
                 studentName: booking.student?.username || 'Student',
                 studentEmail: row.to_email,
                 mentorName: booking.tutor?.username || row.payload?.tutorName || 'Mentor',
-                sessionDate: start ? formatDatePart(start, timeZone) : '',
-                sessionTime: start ? formatTimePart(start, timeZone) : '',
+                sessionDate: start ? formatDatePart(start, studentTimeZone) : '',
+                sessionTime: start ? formatTimePart(start, studentTimeZone) : '',
                 meetingLink: firstLesson?.meeting_link || '',
                 dashboardUrl,
             });
@@ -84,8 +85,8 @@ async function sendOutboxRow(row: OutboxRow) {
                 studentName: booking.student?.username || 'Student',
                 studentEmail: row.to_email,
                 mentorName: booking.tutor?.username || row.payload?.tutorName || 'Mentor',
-                firstSessionDate: start ? formatDatePart(start, timeZone) : '',
-                firstSessionTime: start ? formatTimePart(start, timeZone) : '',
+                firstSessionDate: start ? formatDatePart(start, studentTimeZone) : '',
+                firstSessionTime: start ? formatTimePart(start, studentTimeZone) : '',
                 frequency: humanizeBookingFrequency(booking.frequency),
                 totalSessions: Array.isArray(booking.lessons) ? booking.lessons.length : 0,
                 meetingLink: firstLesson?.meeting_link || '',
@@ -264,6 +265,27 @@ async function sendOutboxRow(row: OutboxRow) {
             callTime: p.callTime || '',
             meetingLink: p.meetingLink || '',
             addToCalendarUrl: p.addToCalendarUrl,
+        });
+        return;
+    }
+
+    if (row.type === 'DEMO_CALL_REMINDER_MENTOR') {
+        const demoBookingId = row.payload?.demoBookingId as string | undefined;
+        if (!demoBookingId) throw new Error('Missing demoBookingId in payload');
+
+        const demoBooking = await prisma.demoBooking.findUnique({
+            where: { id: demoBookingId },
+        });
+
+        if (!demoBooking) throw new Error(`DemoBooking not found: ${demoBookingId}`);
+
+        const timeZone = demoBooking.timezone || 'America/Chicago';
+        await emailService.sendDemoCallReminder({
+            mentorName: demoBooking.full_name,
+            mentorEmail: row.to_email,
+            callDate: formatDatePart(demoBooking.slot_start_time, timeZone),
+            callTime: formatTimePart(demoBooking.slot_start_time, timeZone),
+            meetingLink: demoBooking.meeting_link || '',
         });
         return;
     }

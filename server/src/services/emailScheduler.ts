@@ -3,6 +3,7 @@ import prisma from '../config/db';
 const SCHEDULER_ENABLED = (process.env.EMAIL_SCHEDULER_ENABLED || 'true').toLowerCase() !== 'false';
 const SCHEDULER_INTERVAL_MS = Number(process.env.EMAIL_SCHEDULER_INTERVAL_MS || 3600000); // 1 hour
 const SESSION_REMINDER_HOURS = Number(process.env.SESSION_REMINDER_HOURS || 24);
+const DEMO_REMINDER_HOURS = Number(process.env.DEMO_REMINDER_HOURS || 6);
 const PAYMENT_REMINDER_HOURS = Number(process.env.PAYMENT_REMINDER_HOURS || 24); // final nudge (default 24h before due_date)
 const PAYMENT_EARLY_REMINDER_HOURS = Number(process.env.PAYMENT_EARLY_REMINDER_HOURS || 168); // early reminder (default 7 days before session)
 
@@ -143,6 +144,47 @@ async function queuePaymentRemindersForWindow(hoursAhead: number, idempotencyPre
     return upcomingPayments.length;
 }
 
+async function checkDemoCallReminders() {
+    try {
+        const now = new Date();
+        const reminderTime = new Date(now.getTime() + DEMO_REMINDER_HOURS * 60 * 60 * 1000);
+        const windowEnd = new Date(reminderTime.getTime() + 60 * 60 * 1000); // 1-hour window
+
+        const upcomingDemos = await prisma.demoBooking.findMany({
+            where: {
+                slot_start_time: {
+                    gte: reminderTime,
+                    lte: windowEnd,
+                },
+            },
+        });
+
+        for (const demo of upcomingDemos) {
+            try {
+                await prisma.emailOutbox.create({
+                    data: {
+                        type: 'DEMO_CALL_REMINDER_MENTOR',
+                        to_email: demo.email,
+                        payload: { demoBookingId: demo.id },
+                        idempotency_key: `demo-call-reminder-mentor:${demo.id}`,
+                    },
+                });
+                console.log(`[EmailScheduler] Queued demo call reminder for: ${demo.email}`);
+            } catch (e: any) {
+                if (e.code !== 'P2002') {
+                    console.error(`[EmailScheduler] Failed to queue demo call reminder:`, e);
+                }
+            }
+        }
+
+        if (upcomingDemos.length > 0) {
+            console.log(`[EmailScheduler] Processed ${upcomingDemos.length} demo call reminders`);
+        }
+    } catch (error) {
+        console.error('[EmailScheduler] Error checking demo call reminders:', error);
+    }
+}
+
 async function checkPaymentReminders() {
     try {
         // Final nudge: fires ~PAYMENT_REMINDER_HOURS (24h) before due_date (72h before session)
@@ -167,7 +209,7 @@ async function checkPaymentReminders() {
 
 async function runScheduler() {
     console.log('[EmailScheduler] Running scheduled check...');
-    await Promise.all([checkSessionReminders(), checkPaymentReminders()]);
+    await Promise.all([checkSessionReminders(), checkDemoCallReminders(), checkPaymentReminders()]);
 }
 
 export function startEmailScheduler() {
@@ -181,7 +223,7 @@ export function startEmailScheduler() {
         return;
     }
 
-    console.log(`[EmailScheduler] Starting scheduler (interval=${SCHEDULER_INTERVAL_MS}ms, sessionReminder=${SESSION_REMINDER_HOURS}h, paymentReminder=${PAYMENT_REMINDER_HOURS}h, earlyPaymentReminder=${PAYMENT_EARLY_REMINDER_HOURS}h)`);
+    console.log(`[EmailScheduler] Starting scheduler (interval=${SCHEDULER_INTERVAL_MS}ms, sessionReminder=${SESSION_REMINDER_HOURS}h, demoReminder=${DEMO_REMINDER_HOURS}h, paymentReminder=${PAYMENT_REMINDER_HOURS}h, earlyPaymentReminder=${PAYMENT_EARLY_REMINDER_HOURS}h)`);
 
     // Run immediately on startup
     runScheduler();

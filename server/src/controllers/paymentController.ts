@@ -616,6 +616,7 @@ const CreateBookingSchema = z.object({
     durationMinutes: z.number().int().positive().default(60),
     successUrl: z.string().url(),
     cancelUrl: z.string().url(),
+    clientTimezone: z.string().optional(),
 });
 
 const FinalizeStudentBookingSchema = z.object({
@@ -638,7 +639,7 @@ const requiredWeeklySlotsForFrequency = (frequency: 'ONCE' | 'WEEKLY' | 'TWICE_W
 export const createStudentBookingCheckout = async (req: Request, res: Response) => {
     try {
         const studentUserId = (req as any).user.id;
-        const { tutorId, frequency, slotStarts, durationMinutes, successUrl, cancelUrl } = CreateBookingSchema.parse(req.body);
+        const { tutorId, frequency, slotStarts, durationMinutes, successUrl, cancelUrl, clientTimezone } = CreateBookingSchema.parse(req.body);
 
         // 1. Get Student & Tutor Details
         const student = await prisma.studentProfile.findUnique({
@@ -710,6 +711,7 @@ export const createStudentBookingCheckout = async (req: Request, res: Response) 
                 frequency,
                 durationMinutes,
                 slotStarts: JSON.stringify(slotStarts),
+                clientTimezone: clientTimezone || '',
             }
         );
 

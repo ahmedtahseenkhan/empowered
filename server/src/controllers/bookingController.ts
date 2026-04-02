@@ -22,12 +22,13 @@ export const createBooking = async (req: AuthRequest, res: Response) => {
         if (!userId) return res.status(401).json({ error: 'Unauthorized' });
         if (role !== 'STUDENT') return res.status(403).json({ error: 'Only students can create bookings' });
 
-        const { tutorId, startDate, slotStarts, durationMinutes, frequency } = req.body as {
+        const { tutorId, startDate, slotStarts, durationMinutes, frequency, clientTimezone } = req.body as {
             tutorId?: string;
             startDate?: string;
             slotStarts?: string[];
             durationMinutes?: number;
             frequency?: 'ONCE' | 'WEEKLY' | 'TWICE_WEEKLY' | 'THRICE_WEEKLY';
+            clientTimezone?: string;
         };
 
         if (!tutorId) return res.status(400).json({ error: 'tutorId is required' });
@@ -181,6 +182,7 @@ export const createBooking = async (req: AuthRequest, res: Response) => {
                     payload: {
                         bookingId: booking.createdBooking.id,
                         tutorName: tutor.username,
+                        clientTimezone: clientTimezone || undefined,
                         start: firstLesson?.start_time ? firstLesson.start_time.toISOString() : null,
                         end: firstLesson?.end_time ? firstLesson.end_time.toISOString() : null,
                     },
@@ -253,7 +255,7 @@ export const createFreeSessionBooking = async (req: AuthRequest, res: Response) 
         if (!userId) return res.status(401).json({ error: 'Unauthorized' });
         if (role !== 'STUDENT') return res.status(403).json({ error: 'Only students can book free sessions' });
 
-        const { tutorId, slotStart } = req.body as { tutorId?: string; slotStart?: string };
+        const { tutorId, slotStart, clientTimezone } = req.body as { tutorId?: string; slotStart?: string; clientTimezone?: string };
 
         if (!tutorId) return res.status(400).json({ error: 'tutorId is required' });
         if (!slotStart) return res.status(400).json({ error: 'slotStart is required (ISO string)' });
@@ -355,6 +357,7 @@ export const createFreeSessionBooking = async (req: AuthRequest, res: Response) 
                     payload: {
                         bookingId: result.createdBooking.id,
                         tutorName: tutor.username,
+                        clientTimezone: clientTimezone || undefined,
                         start: result.lesson.start_time.toISOString(),
                         end: result.lesson.end_time.toISOString(),
                         freeSession: true,

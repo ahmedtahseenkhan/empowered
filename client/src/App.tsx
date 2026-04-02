@@ -72,7 +72,7 @@ const DashboardRouter = () => {
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
   const location = useLocation();
-  const [subLoading, setSubLoading] = useState(false);
+  const [subLoading, setSubLoading] = useState(true);
   const [subStatus, setSubStatus] = useState<{ subscription_status?: string | null; subscription_end_date?: string | null } | null>(null);
 
   const isTutor = user?.role !== 'STUDENT';
@@ -83,7 +83,10 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     const run = async () => {
-      if (!user || !isTutor || isAllowedWithoutSubscription) return;
+      if (!user || !isTutor || isAllowedWithoutSubscription) {
+        setSubLoading(false);
+        return;
+      }
 
       setSubLoading(true);
       try {
