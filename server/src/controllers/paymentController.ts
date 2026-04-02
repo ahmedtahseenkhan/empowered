@@ -623,6 +623,7 @@ const FinalizeStudentBookingSchema = z.object({
 });
 
 const PayNextBookingSessionSchema = z.object({
+    lessonId: z.string().uuid().optional(),
     bookingId: z.string().uuid().optional(),
     successUrl: z.string().url(),
     cancelUrl: z.string().url(),
@@ -752,7 +753,7 @@ export const finalizeStudentBookingCheckout = async (req: Request, res: Response
 export const payNextStudentBookingSession = async (req: Request, res: Response) => {
     try {
         const studentUserId = (req as any).user.id;
-        const { bookingId, successUrl, cancelUrl } = PayNextBookingSessionSchema.parse(req.body);
+        const { lessonId, bookingId, successUrl, cancelUrl } = PayNextBookingSessionSchema.parse(req.body);
 
         const student = await prisma.studentProfile.findUnique({
             where: { user_id: studentUserId },
@@ -760,32 +761,47 @@ export const payNextStudentBookingSession = async (req: Request, res: Response) 
 
         if (!student) return res.status(404).json({ error: 'Student profile not found' });
 
-        const schedule = await prisma.paymentSchedule.findFirst({
-            where: {
-                status: 'pending',
-                booking: {
-                    student_id: student.id,
-                    ...(bookingId ? { id: bookingId } : {}),
-                },
-                // Only allow paying when the item is due (48h window opens at due_date)
-                due_date: {
-                    lte: new Date(),
-                },
-            },
-            orderBy: {
-                due_date: 'asc',
-            },
-            include: {
-                booking: {
-                    include: {
-                        tutor: true,
+        let schedule;
+
+        if (lessonId) {
+            // Find the PaymentSchedule for this specific lesson via its expected due_date
+            const lesson = await prisma.lesson.findUnique({ where: { id: lessonId } });
+            if (!lesson) return res.status(404).json({ error: 'Lesson not found' });
+            if (!lesson.booking_id) return res.status(400).json({ error: 'Lesson is not part of a booking' });
+
+            const expectedDue = new Date(lesson.start_time.getTime() - 48 * 60 * 60 * 1000);
+            schedule = await prisma.paymentSchedule.findFirst({
+                where: {
+                    booking_id: lesson.booking_id,
+                    status: 'pending',
+                    due_date: {
+                        gte: new Date(expectedDue.getTime() - 60 * 60 * 1000), // -1h grace
+                        lte: new Date(expectedDue.getTime() + 60 * 60 * 1000), // +1h grace
                     },
                 },
-            },
-        });
+                include: { booking: { include: { tutor: true } } },
+            });
 
-        if (!schedule) {
-            return res.status(404).json({ error: 'No due session payment found.' });
+            if (!schedule) {
+                return res.status(404).json({ error: 'No pending payment found for this session.' });
+            }
+        } else {
+            // Fallback: oldest pending PaymentSchedule for the booking (no time restriction)
+            schedule = await prisma.paymentSchedule.findFirst({
+                where: {
+                    status: 'pending',
+                    booking: {
+                        student_id: student.id,
+                        ...(bookingId ? { id: bookingId } : {}),
+                    },
+                },
+                orderBy: { due_date: 'asc' },
+                include: { booking: { include: { tutor: true } } },
+            });
+
+            if (!schedule) {
+                return res.status(404).json({ error: 'No pending session payment found.' });
+            }
         }
 
         const tutor = schedule.booking?.tutor;

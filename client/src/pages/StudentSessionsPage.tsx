@@ -244,6 +244,7 @@ const StudentSessionsPage: React.FC = () => {
                                                             setPayError('');
                                                             const baseUrl = window.location.origin;
                                                             const res = await api.post('/payments/student/booking/pay-next', {
+                                                                lessonId: l.id,
                                                                 bookingId: l.booking_id || l.booking?.id,
                                                                 successUrl: `${baseUrl}/student/sessions/${l.id}`,
                                                                 cancelUrl: `${baseUrl}/student/sessions/${l.id}`,

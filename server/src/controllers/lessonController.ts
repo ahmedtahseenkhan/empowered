@@ -81,8 +81,8 @@ export const getMyLessons = async (req: AuthRequest, res: Response) => {
                 }
 
                 const dueDate = new Date(lesson.start_time.getTime() - 48 * 60 * 60 * 1000);
-                const dueStart = new Date(dueDate.getTime() - 60 * 1000);
-                const dueEnd = new Date(dueDate.getTime() + 60 * 1000);
+                const dueStart = new Date(dueDate.getTime() - 2 * 60 * 60 * 1000);
+                const dueEnd = new Date(dueDate.getTime() + 2 * 60 * 60 * 1000);
 
                 const schedule = await prisma.paymentSchedule.findFirst({
                     where: {
@@ -165,8 +165,8 @@ export const getLessonDetail = async (req: AuthRequest, res: Response) => {
             payment_status = 'not_required';
         } else if (lesson.booking_id) {
             const dueDate = new Date(lesson.start_time.getTime() - 48 * 60 * 60 * 1000);
-            const dueStart = new Date(dueDate.getTime() - 60 * 1000);
-            const dueEnd = new Date(dueDate.getTime() + 60 * 1000);
+            const dueStart = new Date(dueDate.getTime() - 2 * 60 * 60 * 1000);
+            const dueEnd = new Date(dueDate.getTime() + 2 * 60 * 60 * 1000);
 
             const schedule = await prisma.paymentSchedule.findFirst({
                 where: {

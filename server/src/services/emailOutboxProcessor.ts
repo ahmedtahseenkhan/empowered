@@ -232,7 +232,7 @@ async function sendOutboxRow(row: OutboxRow) {
         // Find the lesson that matches this payment schedule's due_date (due_date = lesson.start_time - 48h)
         const expectedStart = new Date(payment.due_date.getTime() + 48 * 60 * 60 * 1000);
         const matchedLesson = payment.booking.lessons.find((l) => {
-            return Math.abs(l.start_time.getTime() - expectedStart.getTime()) < 2 * 60 * 1000;
+            return Math.abs(l.start_time.getTime() - expectedStart.getTime()) < 2 * 60 * 60 * 1000;
         });
 
         const clientBase = (process.env.CLIENT_URL || process.env.CLIENT_BASE_URL || 'https://emplearnings.com').trim().replace(/\/+$/, '');
