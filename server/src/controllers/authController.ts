@@ -246,6 +246,7 @@ export const me = async (req: AuthRequest, res: Response) => {
                 is_suspended: user.is_suspended,
                 username: userProfile?.username,
                 tier: (userProfile as any)?.tier,
+                timezone: (userProfile as any)?.timezone,
                 profile_photo: userProfile?.profile_photo,
                 department: (userProfile as any)?.department
             },
@@ -275,11 +276,12 @@ export const login = async (req: Request, res: Response) => {
         const token = generateToken(user.id, user.role);
         const username = user.role === 'STUDENT' ? user.student_profile?.username : user.tutor_profile?.username;
         const tier = user.role === 'TUTOR' ? user.tutor_profile?.tier : undefined;
+        const timezone = user.role === 'TUTOR' ? user.tutor_profile?.timezone : undefined;
 
         res.json({
             message: 'Login successful',
             token,
-            user: { id: user.id, email: user.email, role: user.role, username, tier }
+            user: { id: user.id, email: user.email, role: user.role, username, tier, timezone }
         });
 
     } catch (error: any) {

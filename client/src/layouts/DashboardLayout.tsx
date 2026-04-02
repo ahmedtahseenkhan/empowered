@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import api from '../api/axios';
 
 import {
     User,
@@ -18,6 +19,17 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
     const { user, logout } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
+    const tzSynced = useRef(false);
+
+    // Auto-sync tutor timezone on first load (covers returning sessions from localStorage)
+    useEffect(() => {
+        if (tzSynced.current || !user || user.role !== 'TUTOR') return;
+        tzSynced.current = true;
+        const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (browserTz && browserTz !== user.timezone) {
+            api.put('/scheduling/me/timezone', { timezone: browserTz }).catch(() => {});
+        }
+    }, [user]);
 
     const isNavActive = (path: string) => {
         const p = location.pathname;

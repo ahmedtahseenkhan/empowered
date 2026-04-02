@@ -27,6 +27,14 @@ const LoginPage: React.FC = () => {
             const user = response.data.user;
             login(response.data.token, user);
 
+            // Auto-sync tutor's browser timezone to their profile
+            if (user.role === 'TUTOR') {
+                const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                if (browserTz && browserTz !== user.timezone) {
+                    api.put('/scheduling/me/timezone', { timezone: browserTz }).catch(() => {});
+                }
+            }
+
             const redirect = searchParams.get('redirect');
             if (redirect) {
                 navigate(redirect);

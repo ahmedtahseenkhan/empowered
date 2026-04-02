@@ -6,6 +6,7 @@ interface User {
     role: 'STUDENT' | 'TUTOR' | 'ADMIN';
     username: string;
     tier?: string;
+    timezone?: string;
 }
 
 interface AuthContextType {
