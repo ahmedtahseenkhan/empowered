@@ -731,7 +731,9 @@ export const finalizeStudentBookingCheckout = async (req: Request, res: Response
         if (session.payment_status !== 'paid') {
             return res.status(400).json({ error: 'Checkout session is not paid yet' });
         }
-        if ((session.metadata as any)?.type !== 'student_booking') {
+
+        const metaType = (session.metadata as any)?.type;
+        if (metaType !== 'student_booking' && metaType !== 'student_booking_payment') {
             return res.status(400).json({ error: 'Invalid checkout session type' });
         }
 
@@ -810,13 +812,17 @@ export const payNextStudentBookingSession = async (req: Request, res: Response) 
         const amountInCents = Math.round(totalAmount * 100);
         const platformFeeInCents = Math.round(platformFee * 100);
 
+        const successUrlWithSession = successUrl.includes('?')
+            ? `${successUrl}&session_id={CHECKOUT_SESSION_ID}`
+            : `${successUrl}?session_id={CHECKOUT_SESSION_ID}`;
+
         const session = await StripeService.createBookingCheckoutSession(
             amountInCents,
             'usd',
             stripeCustomerId,
             tutor.stripe_account_id,
             platformFeeInCents,
-            successUrl,
+            successUrlWithSession,
             cancelUrl,
             {
                 type: 'student_booking_payment',

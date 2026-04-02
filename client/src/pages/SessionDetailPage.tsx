@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Calendar, Clock, User, CreditCard, ExternalLink, CalendarDays } from 'lucide-react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { Card } from '../components/ui/Card';
@@ -46,6 +46,30 @@ const SessionDetailPage: React.FC = () => {
 
     const [joinBusy, setJoinBusy] = useState(false);
     const [joinError, setJoinError] = useState('');
+
+    const [searchParams, setSearchParams] = useSearchParams();
+    const [finalizeStatus, setFinalizeStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+
+    // Auto-finalize after returning from Stripe checkout
+    useEffect(() => {
+        const sessionId = searchParams.get('session_id');
+        if (!sessionId) return;
+        setFinalizeStatus('loading');
+        api.post('/payments/student/booking/finalize', { sessionId })
+            .then(() => {
+                setFinalizeStatus('success');
+                // Re-fetch lesson to get updated payment status
+                if (id) {
+                    api.get(`/lessons/${id}/detail`).then((r) => setLesson(r.data?.lesson || null));
+                }
+            })
+            .catch(() => setFinalizeStatus('error'))
+            .finally(() => {
+                // Remove session_id from URL
+                searchParams.delete('session_id');
+                setSearchParams(searchParams, { replace: true });
+            });
+    }, []);// eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
         if (!id) return;
@@ -210,6 +234,23 @@ const SessionDetailPage: React.FC = () => {
                         {(payError || joinError) && (
                             <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
                                 {payError || joinError}
+                            </div>
+                        )}
+
+                        {/* Finalize status after Stripe redirect */}
+                        {finalizeStatus === 'loading' && (
+                            <div className="text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+                                Confirming your payment...
+                            </div>
+                        )}
+                        {finalizeStatus === 'success' && (
+                            <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+                                Payment confirmed! Your session is booked.
+                            </div>
+                        )}
+                        {finalizeStatus === 'error' && (
+                            <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+                                We couldn't confirm your payment automatically. It may take a moment to update — please refresh the page.
                             </div>
                         )}
 
