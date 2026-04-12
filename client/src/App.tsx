@@ -62,6 +62,7 @@ import ConnectAccountPage from './pages/ConnectAccountPage';
 import BookDemoPage from './pages/BookDemoPage';
 import FAQPage from './pages/FAQPage';
 import VerifyEmailPage from './pages/VerifyEmailPage';
+import BetaPage from './pages/BetaPage';
 
 const DashboardRouter = () => {
   const { user } = useAuth();
@@ -181,6 +182,7 @@ function App() {
           <Route path="/faqs" element={<FAQPage />} />
           <Route path="/find-mentor" element={<FindMentorPage />} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
+          <Route path="/beta" element={<BetaPage />} />
           <Route path="/mentors" element={<MentorResultsPage />} />
           <Route path="/mentors/:id" element={<MentorPublicProfilePage />} />
           <Route path="/book/:id" element={<BookMentorPage />} />

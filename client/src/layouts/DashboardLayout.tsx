@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/axios';
@@ -20,6 +20,8 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
     const navigate = useNavigate();
     const location = useLocation();
     const tzSynced = useRef(false);
+    const photoFetched = useRef(false);
+    const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
 
     // Auto-sync tutor timezone on first load (covers returning sessions from localStorage)
     useEffect(() => {
@@ -29,6 +31,16 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
         if (browserTz && browserTz !== user.timezone) {
             api.put('/scheduling/me/timezone', { timezone: browserTz }).catch(() => {});
         }
+    }, [user]);
+
+    // Fetch profile photo once per mount
+    useEffect(() => {
+        if (photoFetched.current || !user) return;
+        photoFetched.current = true;
+        const endpoint = user.role === 'STUDENT' ? '/student/me' : '/tutor/me';
+        api.get(endpoint)
+            .then(res => setProfilePhoto(res.data?.profile_photo || null))
+            .catch(() => {});
     }, [user]);
 
     const isNavActive = (path: string) => {
@@ -79,9 +91,17 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
                         <span className="text-[17px] font-bold text-gray-900">Empower<span className="text-empowered-orange">Ed</span> Learnings</span>
                     </Link>
                     <div className="flex items-center gap-2.5 py-3 border-b border-gray-100">
-                        <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center text-primary-700 text-sm font-semibold shrink-0">
-                            {user?.username?.charAt(0).toUpperCase() || 'U'}
-                        </div>
+                        {profilePhoto ? (
+                            <img
+                                src={profilePhoto}
+                                alt={user?.username || 'Profile'}
+                                className="w-8 h-8 rounded-full object-cover shrink-0 border border-gray-200"
+                            />
+                        ) : (
+                            <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center text-primary-700 text-sm font-semibold shrink-0">
+                                {user?.username?.charAt(0).toUpperCase() || 'U'}
+                            </div>
+                        )}
                         <div className="min-w-0 flex-1">
                             <p className="text-sm font-medium text-gray-900 truncate">{user?.username || 'User'}</p>
                             <p className="text-xs text-gray-500">★ 0 reviews</p>

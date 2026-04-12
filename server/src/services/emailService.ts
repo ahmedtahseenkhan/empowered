@@ -550,6 +550,53 @@ class EmailService {
             html,
         });
     }
+
+    async sendBetaApplicationNotification(data: {
+        adminEmail: string;
+        full_name: string;
+        email: string;
+        phone_number: string;
+        service_description: string;
+        category: string;
+        session_management: string[];
+        has_active_clients: boolean;
+        biggest_challenge: string;
+        profile_link: string | null;
+    }): Promise<void> {
+        const rows = [
+            ['Name', data.full_name],
+            ['Email', data.email],
+            ['Phone', data.phone_number],
+            ['Services offered', data.service_description],
+            ['Category', data.category],
+            ['Session management', data.session_management.join(', ')],
+            ['Has active clients', data.has_active_clients ? 'Yes' : 'No'],
+            ['Biggest challenge', data.biggest_challenge],
+            ['Profile link', data.profile_link || '—'],
+        ]
+            .map(([label, value]) => `<tr><td style="padding:6px 12px;font-weight:600;background:#f3e5f5;white-space:nowrap">${label}</td><td style="padding:6px 12px">${value}</td></tr>`)
+            .join('');
+
+        const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="font-family:Poppins,sans-serif;color:#222;max-width:600px;margin:0 auto;padding:24px">
+  <h2 style="color:#4A148C">New Beta Application</h2>
+  <p>A new founding mentor beta application has been submitted.</p>
+  <table style="border-collapse:collapse;width:100%">
+    ${rows}
+  </table>
+  <p style="margin-top:24px;color:#666;font-size:13px">EmpowerEd Learnings — Beta Programme</p>
+</body>
+</html>`;
+
+        await this.sendEmail({
+            to: data.adminEmail,
+            subject: `[Beta Application] ${data.full_name}`,
+            html,
+        });
+    }
 }
 
 export default new EmailService();

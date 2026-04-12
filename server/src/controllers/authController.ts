@@ -131,6 +131,40 @@ export const changePassword = async (req: AuthRequest, res: Response) => {
     }
 };
 
+export const updateDisplayName = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user?.id;
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+        const { username } = req.body as { username?: string };
+        if (!username || typeof username !== 'string' || !username.trim()) {
+            return res.status(400).json({ error: 'username is required' });
+        }
+        const trimmed = username.trim();
+
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { id: true, role: true },
+        });
+        if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+        if (user.role === 'TUTOR') {
+            await prisma.tutorProfile.update({ where: { user_id: userId }, data: { username: trimmed } });
+        } else if (user.role === 'STUDENT') {
+            await prisma.studentProfile.update({ where: { user_id: userId }, data: { username: trimmed } });
+        } else if (user.role === 'ADMIN') {
+            await prisma.adminProfile.update({ where: { user_id: userId }, data: { username: trimmed } });
+        } else {
+            return res.status(400).json({ error: 'Cannot update name for this role' });
+        }
+
+        return res.json({ message: 'Name updated successfully', username: trimmed });
+    } catch (error) {
+        console.error('updateDisplayName error:', error);
+        return res.status(500).json({ error: 'Server error' });
+    }
+};
+
 export const forgotPassword = async (req: Request, res: Response) => {
     try {
         const { email } = req.body as { email?: string };

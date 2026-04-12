@@ -744,3 +744,20 @@ model AdminDemoTimeBlock {
 
   @@index([start_time, end_time])
 }
+
+model BetaApplication {
+  id                   String   @id @default(uuid())
+  full_name            String
+  email                String
+  phone_number         String
+  service_description  String   @db.Text
+  category             String
+  category_other       String?
+  session_management   String[]
+  has_active_clients   Boolean
+  biggest_challenge    String   @db.Text
+  profile_link         String?
+  created_at           DateTime @default(now())
+
+  @@index([email])
+}

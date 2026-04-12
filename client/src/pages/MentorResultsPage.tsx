@@ -1,41 +1,19 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Search, SlidersHorizontal, Star, MapPin, Users, ChevronDown, ChevronUp, BadgeCheck } from 'lucide-react';
 import { PageLayout } from '../layouts/PageLayout';
 import api from '../api/axios';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-
-type Subject =
-    | 'Mathematics'
-    | 'Science'
-    | 'English & Literature'
-    | 'History & Social Studies'
-    | 'Test Prep & College Readiness'
-    | 'Other';
-
-type Goal =
-    | 'Improve grades'
-    | 'Prepare for exams'
-    | 'Standardized tests'
-    | 'Understand difficult concepts';
+import { MENTOR_SEARCH_AGE_OPTIONS } from '../constants/mentorSearch';
 
 type Frequency = 'WEEKLY' | 'TWICE_WEEKLY';
 
-const SUBJECT_OPTIONS: Subject[] = [
-    'Mathematics',
-    'Science',
-    'English & Literature',
-    'History & Social Studies',
-    'Test Prep & College Readiness',
-    'Other',
-];
-
-const GOAL_OPTIONS: Goal[] = [
-    'Improve grades',
-    'Prepare for exams',
-    'Standardized tests',
-    'Understand difficult concepts',
-];
+type CategoryNode = {
+    id: string;
+    name: string;
+    children?: CategoryNode[];
+};
 
 type PublicTutor = {
     id: string;
@@ -51,54 +29,95 @@ type PublicTutor = {
     categories: { category: { id: string; name: string } }[];
 };
 
+const StarRating: React.FC<{ rating: number; size?: 'sm' | 'md' }> = ({ rating, size = 'sm' }) => {
+    const cls = size === 'sm' ? 'w-3.5 h-3.5' : 'w-4 h-4';
+    return (
+        <span className="inline-flex items-center gap-0.5">
+            {[1, 2, 3, 4, 5].map((i) => (
+                <Star
+                    key={i}
+                    className={`${cls} ${i <= Math.round(rating) ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'}`}
+                />
+            ))}
+        </span>
+    );
+};
+
 const MentorResultsPage: React.FC = () => {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const q = searchParams.get('q') || '';
-    const category = searchParams.get('category') || '';
+    const majorCategoryId = searchParams.get('majorCategoryId') || '';
+    const subcategoryId = searchParams.get('subcategoryId') || '';
+    const areaIdsParam = searchParams.get('areaIds') || '';
     const frequency: Frequency = searchParams.get('frequency') === 'TWICE_WEEKLY' ? 'TWICE_WEEKLY' : 'WEEKLY';
     const grade = searchParams.get('grade') || '';
     const age = searchParams.get('age') || '';
 
     const parseCsv = (value: string | null) => {
         if (!value) return [];
-        return value
-            .split(',')
-            .map(v => v.trim())
-            .filter(Boolean);
+        return value.split(',').map(v => v.trim()).filter(Boolean);
     };
+    const areaIdsParsed = parseCsv(areaIdsParam);
 
-    const subjectsParam = parseCsv(searchParams.get('subjects'));
-    const goalsParam = parseCsv(searchParams.get('goals'));
-
+    const [searchInput, setSearchInput] = useState(q);
     const [filtersOpen, setFiltersOpen] = useState(true);
     const [draftGrade, setDraftGrade] = useState<string>(grade);
     const [draftAge, setDraftAge] = useState<string>(age);
-    const [draftSubjects, setDraftSubjects] = useState<Subject[]>(subjectsParam as Subject[]);
-    const [draftGoals, setDraftGoals] = useState<Goal[]>(goalsParam as Goal[]);
     const [draftFrequency, setDraftFrequency] = useState<Frequency>(frequency);
+    const [draftMajorCategoryId, setDraftMajorCategoryId] = useState<string>(majorCategoryId);
+    const [draftSubcategoryId, setDraftSubcategoryId] = useState<string>(subcategoryId);
+    const [draftAreaIds, setDraftAreaIds] = useState<string[]>(areaIdsParsed);
+
+    const [catsBusy, setCatsBusy] = useState(false);
+    const [categories, setCategories] = useState<CategoryNode[]>([]);
 
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [mentors, setMentors] = useState<PublicTutor[]>([]);
 
     useEffect(() => {
-        // Keep draft in sync when URL params change (back/forward navigation)
+        setSearchInput(q);
         setDraftGrade(grade);
         setDraftAge(age);
-        setDraftSubjects(subjectsParam as Subject[]);
-        setDraftGoals(goalsParam as Goal[]);
         setDraftFrequency(frequency);
+        setDraftMajorCategoryId(majorCategoryId);
+        setDraftSubcategoryId(subcategoryId);
+        setDraftAreaIds(areaIdsParsed);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [grade, age, frequency, searchParams.toString()]);
+    }, [grade, age, frequency, majorCategoryId, subcategoryId, areaIdsParam, searchParams.toString()]);
+
+    useEffect(() => {
+        const fetchCategories = async () => {
+            try {
+                setCatsBusy(true);
+                const res = await api.get('/tutor/categories');
+                setCategories(res.data || []);
+            } catch (e) {
+                console.error('Failed to load categories', e);
+            } finally {
+                setCatsBusy(false);
+            }
+        };
+        fetchCategories();
+    }, []);
+
+    const selectedMajor = useMemo(() => categories.find(c => c.id === draftMajorCategoryId) || null, [categories, draftMajorCategoryId]);
+    const subcategories = useMemo(() => selectedMajor?.children || [], [selectedMajor]);
+    const selectedSubcategory = useMemo(() => subcategories.find(c => c.id === draftSubcategoryId) || null, [subcategories, draftSubcategoryId]);
+    const areas = useMemo(() => selectedSubcategory?.children || [], [selectedSubcategory]);
 
     const toggleArrayValue = <T,>(arr: T[], value: T) => {
         if (arr.includes(value)) return arr.filter(v => v !== value);
         return [...arr, value];
     };
 
-    const applyFilters = () => {
+    const applyFilters = (overrideQ?: string) => {
         const params = new URLSearchParams(searchParams);
+
+        const finalQ = overrideQ !== undefined ? overrideQ : searchInput;
+        if (finalQ) params.set('q', finalQ);
+        else params.delete('q');
 
         if (draftGrade) params.set('grade', draftGrade);
         else params.delete('grade');
@@ -106,31 +125,29 @@ const MentorResultsPage: React.FC = () => {
         if (draftAge) params.set('age', draftAge);
         else params.delete('age');
 
-        if (draftSubjects.length) params.set('subjects', draftSubjects.join(','));
-        else params.delete('subjects');
-
-        if (draftGoals.length) params.set('goals', draftGoals.join(','));
-        else params.delete('goals');
-
         params.set('frequency', draftFrequency);
 
-        // Generate q based on subjects + goals to keep backend compatible.
-        const generatedQ = [...draftSubjects, ...draftGoals].join(' ').trim();
-        if (generatedQ) params.set('q', generatedQ);
-        else params.delete('q');
+        if (draftMajorCategoryId) params.set('majorCategoryId', draftMajorCategoryId);
+        else params.delete('majorCategoryId');
+
+        if (draftSubcategoryId) params.set('subcategoryId', draftSubcategoryId);
+        else params.delete('subcategoryId');
+
+        if (draftAreaIds.length) params.set('areaIds', draftAreaIds.join(','));
+        else params.delete('areaIds');
 
         navigate(`/mentors?${params.toString()}`);
     };
 
     const resetFilters = () => {
-        const params = new URLSearchParams(searchParams);
-        params.delete('grade');
-        params.delete('age');
-        params.delete('subjects');
-        params.delete('goals');
-        params.delete('q');
-        params.set('frequency', 'WEEKLY');
-        navigate(`/mentors?${params.toString()}`);
+        setSearchInput('');
+        setDraftGrade('');
+        setDraftAge('');
+        setDraftMajorCategoryId('');
+        setDraftSubcategoryId('');
+        setDraftAreaIds([]);
+        setDraftFrequency('WEEKLY');
+        navigate('/mentors?frequency=WEEKLY');
     };
 
     useEffect(() => {
@@ -139,7 +156,14 @@ const MentorResultsPage: React.FC = () => {
                 setLoading(true);
                 setError('');
                 const res = await api.get('/tutor/public', {
-                    params: { q, category }
+                    params: {
+                        q: q || undefined,
+                        majorCategoryId: majorCategoryId || undefined,
+                        subcategoryId: subcategoryId || undefined,
+                        areaIds: areaIdsParam || undefined,
+                        grade: grade || undefined,
+                        age: age || undefined,
+                    }
                 });
                 setMentors(res.data.mentors || []);
             } catch (err: any) {
@@ -148,52 +172,91 @@ const MentorResultsPage: React.FC = () => {
                 setLoading(false);
             }
         };
-
         fetchMentors();
-    }, [q, category]);
+    }, [q, majorCategoryId, subcategoryId, areaIdsParam, grade, age]);
 
-    const title = useMemo(() => {
-        if (q) return `Mentors for "${q}"`;
-        if (category) return 'Recommended Mentors';
-        return 'Mentors';
-    }, [category, q]);
+    const pageTitle = useMemo(() => {
+        if (q) return `Results for "${q}"`;
+        return 'Find Your Perfect Mentor';
+    }, [q]);
 
     return (
         <PageLayout>
+            {/* Page Hero */}
+            <div className="bg-gradient-to-br from-primary-900 via-primary-800 to-secondary-700 text-white py-12 px-4">
+                <div className="max-w-6xl mx-auto text-center">
+                    <h1 className="text-3xl md:text-4xl font-extrabold mb-3">{pageTitle}</h1>
+                    <p className="text-primary-100 mb-8 max-w-xl mx-auto">
+                        Browse expert mentors and book a session that fits your schedule.
+                    </p>
+                    {/* Search bar */}
+                    <form
+                        className="flex items-center gap-2 max-w-lg mx-auto"
+                        onSubmit={e => { e.preventDefault(); applyFilters(searchInput); }}
+                    >
+                        <div className="relative flex-1">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                            <input
+                                type="text"
+                                placeholder="Search by name, subject, skill…"
+                                value={searchInput}
+                                onChange={e => setSearchInput(e.target.value)}
+                                className="w-full pl-9 pr-4 py-3 rounded-xl text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-accent-400"
+                            />
+                        </div>
+                        <button
+                            type="submit"
+                            className="px-5 py-3 bg-accent-900 hover:bg-accent-800 text-white font-semibold rounded-xl text-sm transition-colors"
+                        >
+                            Search
+                        </button>
+                    </form>
+                </div>
+            </div>
+
             <section className="section-container">
                 <div className="max-w-6xl mx-auto">
-                    <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-8">
-                        <div>
-                            <h1 className="heading-lg mb-2">{title}</h1>
-                            <p className="text-gray-600">Browse mentors and book a session when you’re ready.</p>
-                        </div>
-                        <div className="text-sm text-gray-600">
-                            Your preferred cadence: <span className="font-semibold">{frequency}</span>
-                        </div>
-                    </div>
 
-                    <Card className="p-5 mb-6">
-                        <div className="flex items-center justify-between gap-4">
-                            <div className="font-semibold text-gray-900">Filters</div>
+                    {/* Filter Panel */}
+                    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm mb-8 overflow-hidden">
+                        <div className="flex items-center justify-between px-5 py-4">
+                            <div className="flex items-center gap-2 font-semibold text-gray-900">
+                                <SlidersHorizontal className="w-4 h-4 text-primary-900" />
+                                Filters
+                            </div>
                             <div className="flex items-center gap-2">
-                                <Button variant="outline" onClick={() => setFiltersOpen(v => !v)}>
-                                    {filtersOpen ? 'Hide' : 'Show'}
-                                </Button>
-                                <Button variant="outline" onClick={resetFilters}>
+                                <button
+                                    type="button"
+                                    onClick={() => setFiltersOpen(v => !v)}
+                                    className="flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900 border border-gray-200 rounded-lg px-3 py-1.5 transition-colors"
+                                >
+                                    {filtersOpen ? <><ChevronUp className="w-3.5 h-3.5" />Hide</> : <><ChevronDown className="w-3.5 h-3.5" />Show</>}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={resetFilters}
+                                    className="text-sm text-gray-600 hover:text-gray-900 border border-gray-200 rounded-lg px-3 py-1.5 transition-colors"
+                                >
                                     Reset
-                                </Button>
-                                <Button onClick={applyFilters}>Apply</Button>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => applyFilters()}
+                                    className="text-sm bg-primary-900 text-white rounded-lg px-4 py-1.5 hover:bg-primary-800 transition-colors font-medium"
+                                >
+                                    Apply
+                                </button>
                             </div>
                         </div>
 
                         {filtersOpen && (
-                            <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-5">
+                            <div className="border-t border-gray-100 px-5 py-5 grid grid-cols-1 md:grid-cols-2 gap-5">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Grade</label>
+                                    <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">Grade</label>
                                     <select
-                                        className="w-full border border-gray-300 rounded-lg p-3 bg-white"
+                                        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
                                         value={draftGrade}
-                                        onChange={(e) => setDraftGrade(e.target.value)}
+                                        onChange={e => setDraftGrade(e.target.value)}
                                     >
                                         <option value="">Any</option>
                                         {Array.from({ length: 12 }).map((_, idx) => {
@@ -204,124 +267,246 @@ const MentorResultsPage: React.FC = () => {
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Age</label>
+                                    <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">Age</label>
                                     <select
-                                        className="w-full border border-gray-300 rounded-lg p-3 bg-white"
+                                        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
                                         value={draftAge}
-                                        onChange={(e) => setDraftAge(e.target.value)}
+                                        onChange={e => setDraftAge(e.target.value)}
                                     >
                                         <option value="">Any</option>
-                                        {Array.from({ length: 18 }).map((_, idx) => {
-                                            const a = String(idx + 1);
-                                            return <option key={a} value={a}>{a}</option>;
-                                        })}
+                                        {MENTOR_SEARCH_AGE_OPTIONS.map(({ value, label }) => (
+                                            <option key={value} value={value}>{label}</option>
+                                        ))}
                                     </select>
                                 </div>
 
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Subjects (select all that apply)</label>
-                                    <div className="space-y-2">
-                                        {SUBJECT_OPTIONS.map((s) => (
-                                            <label key={s} className="flex items-center gap-2 text-sm text-gray-800">
-                                                <input
-                                                    type="checkbox"
-                                                    className="h-4 w-4"
-                                                    checked={draftSubjects.includes(s)}
-                                                    onChange={() => setDraftSubjects(toggleArrayValue(draftSubjects, s))}
-                                                />
-                                                {s}
-                                            </label>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Goals (select all that apply)</label>
-                                    <div className="space-y-2">
-                                        {GOAL_OPTIONS.map((g) => (
-                                            <label key={g} className="flex items-center gap-2 text-sm text-gray-800">
-                                                <input
-                                                    type="checkbox"
-                                                    className="h-4 w-4"
-                                                    checked={draftGoals.includes(g)}
-                                                    onChange={() => setDraftGoals(toggleArrayValue(draftGoals, g))}
-                                                />
-                                                {g}
-                                            </label>
-                                        ))}
-                                    </div>
-                                </div>
-
                                 <div className="md:col-span-2">
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">How often do you want to meet?</label>
+                                    <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">How often do you want to meet?</label>
                                     <select
-                                        className="w-full border border-gray-300 rounded-lg p-3 bg-white"
+                                        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
                                         value={draftFrequency}
-                                        onChange={(e) => setDraftFrequency(e.target.value as Frequency)}
+                                        onChange={e => setDraftFrequency(e.target.value as Frequency)}
                                     >
                                         <option value="WEEKLY">Once a week (4 sessions)</option>
                                         <option value="TWICE_WEEKLY">Twice a week (8 sessions)</option>
                                     </select>
                                 </div>
+
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">Major Category</label>
+                                    <select
+                                        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
+                                        value={draftMajorCategoryId}
+                                        onChange={e => {
+                                            setDraftMajorCategoryId(e.target.value);
+                                            setDraftSubcategoryId('');
+                                            setDraftAreaIds([]);
+                                        }}
+                                        disabled={catsBusy}
+                                    >
+                                        <option value="">{catsBusy ? 'Loading…' : 'Any'}</option>
+                                        {categories.map(c => (
+                                            <option key={c.id} value={c.id}>{c.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">Subcategory</label>
+                                    <select
+                                        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
+                                        value={draftSubcategoryId}
+                                        onChange={e => {
+                                            setDraftSubcategoryId(e.target.value);
+                                            setDraftAreaIds([]);
+                                        }}
+                                        disabled={!draftMajorCategoryId || catsBusy}
+                                    >
+                                        <option value="">{!draftMajorCategoryId ? 'Select major first' : 'Any'}</option>
+                                        {subcategories.map(sc => (
+                                            <option key={sc.id} value={sc.id}>{sc.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div className="md:col-span-2">
+                                    <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">Areas of Expertise</label>
+                                    {!draftSubcategoryId ? (
+                                        <p className="text-sm text-gray-500 italic">Select a subcategory to see areas.</p>
+                                    ) : areas.length === 0 ? (
+                                        <p className="text-sm text-gray-500">No areas found.</p>
+                                    ) : (
+                                        <div className="flex flex-wrap gap-2">
+                                            {areas.map(a => (
+                                                <button
+                                                    key={a.id}
+                                                    type="button"
+                                                    onClick={() => setDraftAreaIds(toggleArrayValue(draftAreaIds, a.id))}
+                                                    className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                                                        draftAreaIds.includes(a.id)
+                                                            ? 'bg-primary-900 text-white border-primary-900'
+                                                            : 'bg-white text-gray-700 border-gray-200 hover:border-primary-400'
+                                                    }`}
+                                                >
+                                                    {a.name}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         )}
-                    </Card>
+                    </div>
 
-                    {loading && <div className="p-8 text-center">Loading mentors...</div>}
+                    {/* Results */}
+                    {loading && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {[...Array(4)].map((_, i) => (
+                                <div key={i} className="bg-white rounded-2xl border border-gray-100 p-6 animate-pulse">
+                                    <div className="flex gap-4">
+                                        <div className="w-14 h-14 rounded-full bg-gray-200" />
+                                        <div className="flex-1 space-y-2">
+                                            <div className="h-4 bg-gray-200 rounded w-1/2" />
+                                            <div className="h-3 bg-gray-100 rounded w-3/4" />
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
                     {!loading && error && (
-                        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6 text-sm">{error}</div>
+                        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl mb-6 text-sm">{error}</div>
                     )}
 
                     {!loading && !error && mentors.length === 0 && (
-                        <Card className="p-8 text-center">
-                            <div className="text-gray-700 font-semibold mb-2">No mentors found</div>
-                            <div className="text-sm text-gray-600">Try changing your keyword or category.</div>
-                        </Card>
+                        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-12 text-center">
+                            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <Users className="w-8 h-8 text-gray-400" />
+                            </div>
+                            <div className="text-lg font-semibold text-gray-900 mb-1">No mentors found</div>
+                            <div className="text-sm text-gray-500 mb-4">Try adjusting your filters or searching with different keywords.</div>
+                            <button
+                                type="button"
+                                onClick={resetFilters}
+                                className="text-sm text-primary-700 underline underline-offset-2"
+                            >
+                                Clear all filters
+                            </button>
+                        </div>
                     )}
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {mentors.map((m) => (
-                            <Card key={m.id} className="p-6">
-                                <div className="flex items-start justify-between gap-4">
-                                    <div>
-                                        <div className="flex items-center gap-2">
-                                            <h3 className="text-lg font-bold text-gray-900">{m.username}</h3>
-                                            {m.is_verified && (
-                                                <span className="text-[10px] bg-green-50 text-green-700 border border-green-200 px-2 py-0.5 rounded-full">Verified</span>
-                                            )}
-                                            <span className="text-[10px] bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">{m.tier}</span>
+                    {!loading && !error && mentors.length > 0 && (
+                        <>
+                            <p className="text-sm text-gray-500 mb-4">
+                                <span className="font-semibold text-gray-900">{mentors.length}</span> mentor{mentors.length !== 1 ? 's' : ''} found
+                            </p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                {mentors.map(m => {
+                                    const initials = m.username.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+                                    return (
+                                        <div
+                                            key={m.id}
+                                            className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow overflow-hidden"
+                                        >
+                                            {/* Card header stripe */}
+                                            <div className="h-1.5 bg-gradient-to-r from-primary-700 to-secondary-500" />
+                                            <div className="p-5">
+                                                <div className="flex items-start gap-4">
+                                                    {/* Avatar */}
+                                                    <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary-700 to-secondary-500 flex items-center justify-center text-white text-lg font-extrabold flex-shrink-0">
+                                                        {initials}
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex flex-wrap items-center gap-1.5">
+                                                            <h3 className="text-base font-bold text-gray-900">{m.username}</h3>
+                                                            {m.is_verified && (
+                                                                <BadgeCheck className="w-4 h-4 text-green-500" />
+                                                            )}
+                                                            <span className="text-[10px] bg-primary-50 text-primary-800 border border-primary-100 px-2 py-0.5 rounded-full font-medium">
+                                                                {m.tier}
+                                                            </span>
+                                                        </div>
+                                                        {m.tagline && (
+                                                            <p className="text-sm text-gray-500 mt-0.5 truncate">{m.tagline}</p>
+                                                        )}
+                                                        <div className="flex flex-wrap items-center gap-3 mt-1.5">
+                                                            {m.rating > 0 && (
+                                                                <span className="flex items-center gap-1 text-xs text-gray-600">
+                                                                    <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
+                                                                    <span className="font-semibold">{m.rating.toFixed(1)}</span>
+                                                                    <span className="text-gray-400">({m.review_count})</span>
+                                                                </span>
+                                                            )}
+                                                            {m.country && (
+                                                                <span className="flex items-center gap-1 text-xs text-gray-500">
+                                                                    <MapPin className="w-3 h-3" />
+                                                                    {m.country}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    {/* Price */}
+                                                    <div className="text-right flex-shrink-0">
+                                                        <div className="text-xl font-extrabold text-gray-900">${m.hourly_rate}</div>
+                                                        <div className="text-[10px] text-gray-400">/ session</div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Categories */}
+                                                {m.categories && m.categories.length > 0 && (
+                                                    <div className="mt-3 flex flex-wrap gap-1.5">
+                                                        {m.categories.slice(0, 4).map(c => (
+                                                            <span
+                                                                key={c.category.id}
+                                                                className="text-[11px] bg-purple-50 text-purple-700 border border-purple-100 px-2.5 py-0.5 rounded-full"
+                                                            >
+                                                                {c.category.name}
+                                                            </span>
+                                                        ))}
+                                                        {m.categories.length > 4 && (
+                                                            <span className="text-[11px] text-gray-400 px-1">+{m.categories.length - 4} more</span>
+                                                        )}
+                                                    </div>
+                                                )}
+
+                                                {/* About preview */}
+                                                <p className="mt-3 text-sm text-gray-600 line-clamp-2">
+                                                    {m.about || 'Experienced mentor ready to help you achieve your goals.'}
+                                                </p>
+
+                                                {/* Actions */}
+                                                <div className="mt-4 flex gap-2.5">
+                                                    <Link
+                                                        to={`/mentors/${m.id}?frequency=${encodeURIComponent(frequency)}`}
+                                                        className="flex-1"
+                                                    >
+                                                        <button
+                                                            type="button"
+                                                            className="w-full py-2 text-sm font-medium border border-primary-200 text-primary-900 rounded-xl hover:bg-primary-50 transition-colors"
+                                                        >
+                                                            View Profile
+                                                        </button>
+                                                    </Link>
+                                                    <Link
+                                                        to={`/book/${m.id}?frequency=${encodeURIComponent(frequency)}`}
+                                                        className="flex-1"
+                                                    >
+                                                        <button
+                                                            type="button"
+                                                            className="w-full py-2 text-sm font-semibold bg-primary-900 text-white rounded-xl hover:bg-primary-800 transition-colors"
+                                                        >
+                                                            Book Session
+                                                        </button>
+                                                    </Link>
+                                                </div>
+                                            </div>
                                         </div>
-                                        {m.tagline && <p className="text-sm text-gray-600 mt-1">{m.tagline}</p>}
-                                    </div>
-                                    <div className="text-right">
-                                        <div className="text-sm text-gray-500">50-min rate</div>
-                                        <div className="text-xl font-extrabold text-gray-900">${m.hourly_rate}</div>
-                                    </div>
-                                </div>
-
-                                <div className="mt-4 flex flex-wrap gap-2">
-                                    {m.categories?.slice(0, 3).map((c) => (
-                                        <span key={c.category.id} className="text-xs bg-purple-50 text-purple-700 border border-purple-100 px-2 py-1 rounded-full">
-                                            {c.category.name}
-                                        </span>
-                                    ))}
-                                </div>
-
-                                <div className="mt-4 text-sm text-gray-600 line-clamp-3">
-                                    {m.about || 'Mentor profile coming soon.'}
-                                </div>
-
-                                <div className="mt-6 flex gap-3">
-                                    <Link to={`/mentors/${m.id}?frequency=${encodeURIComponent(frequency)}`} className="flex-1">
-                                        <Button variant="outline" className="w-full">View Profile</Button>
-                                    </Link>
-                                    <Link to={`/book/${m.id}?frequency=${encodeURIComponent(frequency)}`} className="flex-1">
-                                        <Button className="w-full">Book</Button>
-                                    </Link>
-                                </div>
-                            </Card>
-                        ))}
-                    </div>
+                                    );
+                                })}
+                            </div>
+                        </>
+                    )}
                 </div>
             </section>
         </PageLayout>

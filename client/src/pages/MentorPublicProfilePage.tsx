@@ -1,5 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import {
+    Star, MapPin, Clock, Users, BadgeCheck, Briefcase, GraduationCap, Award,
+    Share2, Check, ChevronLeft, ChevronRight, Calendar, BookOpen, Zap, Video
+} from 'lucide-react';
 import { PageLayout } from '../layouts/PageLayout';
 import api from '../api/axios';
 import { Card } from '../components/ui/Card';
@@ -19,6 +23,8 @@ type PublicTutorProfile = {
     tier: string;
     is_verified: boolean;
     video_url: string | null;
+    marketing_video_url: string | null;
+    profile_photo: string | null;
     key_strengths: string | null;
     certifications: { id: string; name: string; issuer: string; year: number; is_verified: boolean }[];
     education: { id: string; institution: string; degree: string; field_of_study: string; year: number }[];
@@ -36,6 +42,7 @@ type PublicTutorProfile = {
     }[];
     total_students: number;
     student_levels?: string[];
+    free_session_enabled?: boolean;
     external_reviews?: {
         id: string;
         platform: string;
@@ -63,8 +70,6 @@ const MentorPublicProfilePage: React.FC = () => {
     const [slots, setSlots] = useState<Array<{ start: string; end: string }>>([]);
     const [monthOffset, setMonthOffset] = useState(0);
     const [selectedDayKey, setSelectedDayKey] = useState<string>('');
-
-    const [profileTab, setProfileTab] = useState<'EXPERIENCE' | 'EDUCATION' | 'CERTIFICATIONS'>('EXPERIENCE');
 
     const [reviews, setReviews] = useState<any[]>([]);
 
@@ -133,6 +138,60 @@ const MentorPublicProfilePage: React.FC = () => {
     const formatTimeLabel = (iso: string, timeZone: string) => {
         const d = new Date(iso);
         return new Intl.DateTimeFormat(undefined, { timeZone, hour: 'numeric', minute: '2-digit', hour12: true }).format(d);
+    };
+
+    // Helper: extract YouTube video ID
+    const extractYouTubeId = (url: string): string | null => {
+        const youtubeRegex = /(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
+        const match = url.match(youtubeRegex);
+        return match ? match[1] : null;
+    };
+
+    // Helper: extract Vimeo video ID
+    const extractVimeoId = (url: string): string | null => {
+        const vimeoRegex = /vimeo\.com\/(\d+)/;
+        const match = url.match(vimeoRegex);
+        return match ? match[1] : null;
+    };
+
+    // Helper: render appropriate video player based on URL type
+    const renderVideoPlayer = (videoUrl: string) => {
+        const youtubeId = extractYouTubeId(videoUrl);
+        const vimeoId = extractVimeoId(videoUrl);
+
+        if (youtubeId) {
+            return (
+                <iframe
+                    width="100%"
+                    height="100%"
+                    src={`https://www.youtube.com/embed/${youtubeId}`}
+                    title="YouTube video player"
+                    frameBorder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    className="rounded-xl"
+                />
+            );
+        }
+
+        if (vimeoId) {
+            return (
+                <iframe
+                    src={`https://player.vimeo.com/video/${vimeoId}`}
+                    width="100%"
+                    height="100%"
+                    frameBorder="0"
+                    allow="autoplay; fullscreen; picture-in-picture"
+                    allowFullScreen
+                    className="rounded-xl"
+                />
+            );
+        }
+
+        // Direct video file
+        return (
+            <video src={videoUrl} controls className="w-full h-full rounded-xl" />
+        );
     };
 
     const slotsByDay = useMemo(() => {
@@ -219,292 +278,303 @@ const MentorPublicProfilePage: React.FC = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [mentor?.id]);
 
+    const [copied, setCopied] = useState(false);
+
+    const displayCount = reviews.length;
+    const displayRating = reviews.length
+        ? (reviews.reduce((s: number, r: any) => s + r.rating, 0) / reviews.length).toFixed(1)
+        : (mentor?.rating ? mentor.rating.toFixed(1) : '—');
+
+    const handleShare = async () => {
+        try {
+            await navigator.clipboard.writeText(window.location.href);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2500);
+        } catch {
+            // ignore
+        }
+    };
+
     return (
         <PageLayout>
-            <section className="section-container">
-                <div className="max-w-5xl mx-auto">
-                    {loading && <div className="p-8 text-center">Loading profile...</div>}
-                    {!loading && error && (
-                        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6 text-sm">{error}</div>
-                    )}
+            {/* ── Loading / Error ── */}
+            {loading && (
+                <div className="max-w-5xl mx-auto px-4 py-20 text-center">
+                    <div className="w-12 h-12 border-4 border-primary-100 border-t-primary-900 rounded-full animate-spin mx-auto mb-4" />
+                    <p className="text-gray-500 text-sm">Loading profile…</p>
+                </div>
+            )}
+            {!loading && error && (
+                <div className="max-w-5xl mx-auto px-4 py-12">
+                    <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">{error}</div>
+                </div>
+            )}
 
-                    {!loading && mentor && (
-                        <>
-                            <div className="rounded-2xl overflow-hidden mb-8 border border-purple-100">
-                                <div className="bg-gradient-to-r from-purple-700 to-purple-600 px-6 py-7">
-                                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                                        <div>
-                                            <div className="flex items-center gap-2">
-                                                <h1 className="text-2xl md:text-3xl font-extrabold text-white">{mentor.username}</h1>
-                                                {mentor.is_verified && (
-                                                    <span className="text-[10px] bg-white/20 text-white border border-white/30 px-2 py-0.5 rounded-full">Verified</span>
-                                                )}
-                                                <span className="text-[10px] bg-white/15 text-white border border-white/20 px-2 py-0.5 rounded-full">{mentor.tier}</span>
-                                            </div>
-                                            {mentor.tagline && <div className="text-purple-50 mt-2">{mentor.tagline}</div>}
-                                            <div className="text-sm text-purple-100 mt-1">{mentor.country || 'Remote'} • Tutor timezone: {mentor.timezone}</div>
-                                        </div>
+            {!loading && mentor && (
+                <>
+                    {/* ── Hero Banner ── */}
+                    <div className="bg-gradient-to-br from-primary-900 via-primary-800 to-secondary-600 text-white">
+                        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+                            {/* Back link */}
+                            <Link
+                                to={`/mentors?frequency=${encodeURIComponent(frequency)}`}
+                                className="inline-flex items-center gap-1.5 text-primary-200 hover:text-white text-sm mb-6 transition-colors"
+                            >
+                                <ChevronLeft className="w-4 h-4" />
+                                Back to Mentors
+                            </Link>
 
-                                        <div className="flex gap-3">
-                                            <Link to={`/mentors?frequency=${encodeURIComponent(frequency)}`}>
-                                                <Button variant="outline">Back</Button>
-                                            </Link>
-                                            {!isPreview && (
-                                                <Button
-                                                    onClick={() => {
-                                                        const qs = new URLSearchParams();
-                                                        qs.set('frequency', frequency);
-                                                        navigate(`/book/${mentor.id}?${qs.toString()}`);
-                                                    }}
-                                                >
-                                                    Start Weekly Sessions
-                                                </Button>
-                                            )}
-                                        </div>
+                            <div className="flex flex-col sm:flex-row items-start gap-6">
+                                {/* Avatar */}
+                                {mentor.profile_photo ? (
+                                    <img
+                                        src={mentor.profile_photo}
+                                        alt={mentor.username}
+                                        className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover border-2 border-white/30 flex-shrink-0"
+                                    />
+                                ) : (
+                                    <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-white/20 border-2 border-white/30 backdrop-blur flex items-center justify-center text-3xl font-extrabold text-white flex-shrink-0">
+                                        {mentor.username.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
+                                    </div>
+                                )}
+
+                                <div className="flex-1 min-w-0">
+                                    {/* Name + badges */}
+                                    <div className="flex flex-wrap items-center gap-2 mb-1">
+                                        <h1 className="text-2xl sm:text-3xl font-extrabold">{mentor.username}</h1>
+                                        {mentor.is_verified && (
+                                            <span className="inline-flex items-center gap-1 text-xs bg-white/20 border border-white/30 px-2.5 py-0.5 rounded-full font-medium">
+                                                <BadgeCheck className="w-3 h-3" /> Verified
+                                            </span>
+                                        )}
+                                        <span className="text-xs bg-white/15 border border-white/20 px-2.5 py-0.5 rounded-full">
+                                            {mentor.tier}
+                                        </span>
+                                    </div>
+
+                                    {mentor.tagline && (
+                                        <p className="text-primary-100 text-base mb-2">{mentor.tagline}</p>
+                                    )}
+
+                                    <div className="flex flex-wrap items-center gap-4 text-sm text-primary-200">
+                                        {mentor.country && (
+                                            <span className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" />{mentor.country}</span>
+                                        )}
+                                        <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" />{mentor.timezone}</span>
                                     </div>
                                 </div>
 
-                                <div className="bg-white px-6 py-4">
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                        <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
-                                            <div className="text-xs text-gray-600">Rating</div>
-                                            <div className="text-lg font-extrabold text-gray-900">{mentor.rating || 0}</div>
-                                            <div className="text-xs text-gray-500">({mentor.review_count} reviews)</div>
-                                        </div>
-                                        <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
-                                            <div className="text-xs text-gray-600">Experience</div>
-                                            <div className="text-lg font-extrabold text-gray-900">{mentor.experience_years || 0}</div>
-                                            <div className="text-xs text-gray-500">years</div>
-                                        </div>
-                                        <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
-                                            <div className="text-xs text-gray-600">Price</div>
-                                            <div className="text-lg font-extrabold text-gray-900">${mentor.hourly_rate}</div>
-                                            <div className="text-xs text-gray-500">per 60 min</div>
-                                        </div>
-                                        <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
-                                            <div className="text-xs text-gray-600">Students</div>
-                                            <div className="text-lg font-extrabold text-gray-900">{mentor.total_students || 0}</div>
-                                            <div className="text-xs text-gray-500">taught</div>
-                                        </div>
-                                    </div>
-                                </div>
+                                {/* Share button */}
+                                <button
+                                    type="button"
+                                    onClick={handleShare}
+                                    className="flex items-center gap-2 px-4 py-2 rounded-xl border border-white/30 bg-white/10 hover:bg-white/20 transition-colors text-sm font-medium flex-shrink-0"
+                                >
+                                    {copied ? <><Check className="w-4 h-4" /> Copied!</> : <><Share2 className="w-4 h-4" /> Share Profile</>}
+                                </button>
                             </div>
 
-                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                                <div className="lg:col-span-2 space-y-6">
-                                    <Card className="p-6">
-                                        <h2 className="text-lg font-bold text-gray-900 mb-3">About Me</h2>
-                                        <div className="text-gray-700 text-sm whitespace-pre-line">
-                                            {mentor.about || 'No description added yet.'}
+                            {/* Stats bar */}
+                            <div className="mt-8 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                {[
+                                    { label: 'Rating', value: displayRating, sub: `${displayCount} review${displayCount !== 1 ? 's' : ''}`, icon: <Star className="w-4 h-4 fill-yellow-300 text-yellow-300" /> },
+                                    { label: 'Experience', value: `${mentor.experience_years || 0}`, sub: 'years', icon: <Briefcase className="w-4 h-4 text-primary-200" /> },
+                                    { label: 'Students', value: `${mentor.total_students || 0}`, sub: 'taught', icon: <Users className="w-4 h-4 text-primary-200" /> },
+                                    { label: 'Rate', value: `$${mentor.hourly_rate}`, sub: 'per session', icon: <Zap className="w-4 h-4 text-accent-300" /> },
+                                ].map(s => (
+                                    <div key={s.label} className="bg-white/10 backdrop-blur rounded-xl px-4 py-3 border border-white/10">
+                                        <div className="flex items-center gap-1.5 mb-0.5">
+                                            {s.icon}
+                                            <span className="text-xs text-primary-200">{s.label}</span>
                                         </div>
+                                        <div className="text-xl font-extrabold">{s.value}</div>
+                                        <div className="text-[11px] text-primary-300">{s.sub}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
 
-                                        {strengths.length > 0 && (
-                                            <div className="mt-5">
-                                                <div className="text-sm font-bold text-gray-900 mb-2">Key Strengths</div>
-                                                <div className="flex flex-wrap gap-2">
-                                                    {strengths.map((s) => (
-                                                        <span key={s} className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-full">{s}</span>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </Card>
+                    {/* ── Body ── */}
+                    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-7">
 
-                                    <Card className="p-6">
-                                        <div className="flex items-center justify-between gap-4 mb-4">
-                                            <h2 className="text-lg font-bold text-gray-900">Reviews</h2>
-                                            <div className="flex items-center gap-2">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setTab('REVIEWS')}
-                                                    className={`text-sm px-3 py-1.5 rounded-lg border ${tab === 'REVIEWS'
-                                                        ? 'bg-purple-600 text-white border-purple-600'
-                                                        : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}
-                                                >
-                                                    Reviews
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setTab('EXTERNAL')}
-                                                    className={`text-sm px-3 py-1.5 rounded-lg border ${tab === 'EXTERNAL'
-                                                        ? 'bg-purple-600 text-white border-purple-600'
-                                                        : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}
-                                                >
-                                                    External Reviews
-                                                </button>
+                            {/* ── Left column ── */}
+                            <div className="lg:col-span-2 space-y-6">
+
+                                {/* Marketing / Intro Video — shown above About Me */}
+                                {mentor.marketing_video_url && (
+                                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+                                        <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                                            <Video className="w-4 h-4 text-primary-700" /> Introduction Video
+                                        </h2>
+                                        <div className="aspect-video rounded-xl overflow-hidden bg-black">
+                                            {renderVideoPlayer(mentor.marketing_video_url)}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* About */}
+                                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+                                    <h2 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                                        <BookOpen className="w-4 h-4 text-primary-700" /> About Me
+                                    </h2>
+                                    <p className="text-gray-700 text-sm whitespace-pre-line leading-relaxed">
+                                        {mentor.about || 'No description added yet.'}
+                                    </p>
+
+                                    {strengths.length > 0 && (
+                                        <div className="mt-5">
+                                            <div className="text-sm font-semibold text-gray-900 mb-2">Key Strengths</div>
+                                            <div className="flex flex-wrap gap-2">
+                                                {strengths.map(s => (
+                                                    <span key={s} className="text-xs bg-primary-50 text-primary-800 border border-primary-100 px-3 py-1 rounded-full">
+                                                        {s}
+                                                    </span>
+                                                ))}
                                             </div>
                                         </div>
+                                    )}
 
-                                        <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-6 text-center">
-                                            {tab === 'REVIEWS' ? (
-                                                <div className="space-y-4">
-                                                    {reviews && reviews.length > 0 ? (
-                                                        reviews.map((review: any) => (
-                                                            <div key={review.id} className="border-b border-gray-100 pb-4 last:border-0 text-left">
-                                                                <div className="flex items-center justify-between mb-2">
-                                                                    <div className="flex items-center gap-2">
-                                                                        <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-600">
-                                                                            {review.student.username.charAt(0).toUpperCase()}
-                                                                        </div>
-                                                                        <div className="text-sm font-semibold text-gray-900">{review.student.username}</div>
-                                                                    </div>
-                                                                    <div className="text-xs text-gray-500">
-                                                                        {new Date(review.created_at).toLocaleDateString()}
-                                                                    </div>
-                                                                </div>
-                                                                <div className="flex items-center gap-1 mb-2">
-                                                                    {[...Array(5)].map((_, i) => (
-                                                                        <span key={i} className={`text-sm ${i < review.rating ? 'text-yellow-400' : 'text-gray-300'}`}>★</span>
+                                    {mentor.student_levels && mentor.student_levels.length > 0 && (
+                                        <div className="mt-5">
+                                            <div className="text-sm font-semibold text-gray-900 mb-2">Student Levels</div>
+                                            <div className="flex flex-wrap gap-2">
+                                                {(mentor.student_levels as string[]).map(id => {
+                                                    const labels: Record<string, string> = {
+                                                        ELEMENTARY_SCHOOL: 'Elementary School',
+                                                        MIDDLE_SCHOOL: 'Middle School',
+                                                        HIGH_SCHOOL: 'High School',
+                                                        COLLEGE_ADULT: 'College & Adult',
+                                                    };
+                                                    return (
+                                                        <span key={id} className="text-xs bg-secondary-50 text-secondary-800 border border-secondary-100 px-3 py-1 rounded-full">
+                                                            {labels[id] || id}
+                                                        </span>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Expertise */}
+                                {categoryGroups.length > 0 && (
+                                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+                                        <h2 className="text-lg font-bold text-gray-900 mb-4">Areas of Expertise</h2>
+                                        <div className="space-y-4">
+                                            {categoryGroups.map(g => (
+                                                <div key={g.group} className="rounded-xl border border-purple-100 bg-purple-50/50 p-4">
+                                                    <div className="font-bold text-purple-900 mb-3">{g.group}</div>
+                                                    <div className="space-y-3">
+                                                        {g.subs.map(s => (
+                                                            <div key={`${g.group}-${s.sub}`}>
+                                                                <div className="text-xs font-semibold text-purple-700 uppercase tracking-wider mb-2">{s.sub}</div>
+                                                                <div className="flex flex-wrap gap-1.5">
+                                                                    {s.items.map(item => (
+                                                                        <span key={item} className="text-xs bg-white text-gray-700 border border-gray-200 px-2.5 py-1 rounded-full shadow-sm">
+                                                                            {item}
+                                                                        </span>
                                                                     ))}
                                                                 </div>
-                                                                {review.comment && (
-                                                                    <p className="text-sm text-gray-700">{review.comment}</p>
-                                                                )}
                                                             </div>
-                                                        ))
-                                                    ) : (
-                                                        <div className="text-center py-4">
-                                                            <div className="font-semibold text-gray-900">No Reviews Yet</div>
-                                                            <div className="text-sm text-gray-600 mt-1">
-                                                                This tutor doesn't have any reviews yet.
-                                                            </div>
-                                                        </div>
-                                                    )}
+                                                        ))}
+                                                    </div>
                                                 </div>
-                                            ) : (
-                                                <div className="space-y-4">
-                                                    {mentor.external_reviews && mentor.external_reviews.length > 0 ? (
-                                                        mentor.external_reviews.map((review: any) => (
-                                                            <div key={review.id} className="border-b border-gray-100 pb-4 last:border-0 text-left">
-                                                                <div className="flex items-center justify-between mb-2">
-                                                                    <div className="flex items-center gap-2">
-                                                                        <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-xs font-bold text-blue-600">
-                                                                            {review.reviewer?.charAt(0)?.toUpperCase()}
-                                                                        </div>
-                                                                        <div>
-                                                                            <div className="text-sm font-semibold text-gray-900">{review.reviewer}</div>
-                                                                            <div className="text-[10px] text-gray-500">via {review.platform}</div>
-                                                                        </div>
-                                                                    </div>
-                                                                    {review.date && (
-                                                                        <div className="text-xs text-gray-500">
-                                                                            {new Date(review.date).toLocaleDateString()}
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                                <div className="flex items-center gap-1 mb-2">
-                                                                    {[...Array(5)].map((_, i) => (
-                                                                        <span key={i} className={`text-sm ${i < review.rating ? 'text-yellow-400' : 'text-gray-300'}`}>★</span>
-                                                                    ))}
-                                                                </div>
-                                                                {review.comment && (
-                                                                    <p className="text-sm text-gray-700">{review.comment}</p>
-                                                                )}
-                                                            </div>
-                                                        ))
-                                                    ) : (
-                                                        <div className="text-center py-4">
-                                                            <div className="font-semibold text-gray-900">No External Reviews</div>
-                                                            <div className="text-sm text-gray-600 mt-1">
-                                                                No external reviews available yet.
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )}
+                                            ))}
                                         </div>
-                                    </Card>
+                                    </div>
+                                )}
 
-                                    <Card className="p-6">
-                                        <h2 className="text-lg font-bold text-gray-900 mb-3">{isPreview ? 'Availability' : 'Book a Session'}</h2>
-                                        <div className="text-sm text-gray-600 mb-4">Select a date to see available times (shown in tutor timezone: {mentor.timezone}).</div>
+                                {/* Availability */}
+                                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                                    <h3 className="text-sm font-bold text-gray-900 mb-4 flex items-center gap-2">
+                                        <Calendar className="w-4 h-4 text-primary-700" /> Availability
+                                    </h3>
+                                    <p className="text-xs text-gray-500 mb-4">Times shown in tutor timezone: <span className="font-medium text-gray-700">{mentor.timezone}</span></p>
 
-                                        {slotsBusy ? (
-                                            <div className="text-sm text-gray-600">Loading availability...</div>
-                                        ) : !calendarMeta ? null : (
-                                            <div className="rounded-xl border border-gray-200 bg-white p-4">
-                                                <div className="flex items-center justify-between mb-3">
-                                                    <div className="font-bold text-gray-900">{calendarMeta.monthLabel}</div>
-                                                    <div className="flex items-center gap-2">
-                                                        <button
-                                                            type="button"
-                                                            className="h-8 w-8 rounded-lg border border-gray-200 hover:bg-gray-50"
-                                                            onClick={() => setMonthOffset((v) => v - 1)}
-                                                        >
-                                                            {'<'}
+                                    {slotsBusy ? (
+                                        <div className="h-8 flex items-center text-xs text-gray-400">Loading…</div>
+                                    ) : calendarMeta && (
+                                        <>
+                                            <div className="rounded-xl border border-gray-100 overflow-hidden">
+                                                <div className="flex items-center justify-between px-3 py-2.5 bg-gray-50 border-b border-gray-100">
+                                                    <span className="text-sm font-semibold text-gray-800">{calendarMeta.monthLabel}</span>
+                                                    <div className="flex items-center gap-1">
+                                                        <button type="button" onClick={() => setMonthOffset(v => v - 1)} className="p-1 rounded hover:bg-gray-200 transition-colors">
+                                                            <ChevronLeft className="w-4 h-4 text-gray-600" />
                                                         </button>
-                                                        <button
-                                                            type="button"
-                                                            className="h-8 w-8 rounded-lg border border-gray-200 hover:bg-gray-50"
-                                                            onClick={() => setMonthOffset((v) => v + 1)}
-                                                        >
-                                                            {'>'}
+                                                        <button type="button" onClick={() => setMonthOffset(v => v + 1)} className="p-1 rounded hover:bg-gray-200 transition-colors">
+                                                            <ChevronRight className="w-4 h-4 text-gray-600" />
                                                         </button>
                                                     </div>
                                                 </div>
-
-                                                <div className="grid grid-cols-7 text-xs text-gray-500 mb-2">
-                                                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
-                                                        <div key={d} className="text-center py-1">{d}</div>
-                                                    ))}
+                                                <div className="p-3">
+                                                    <div className="grid grid-cols-7 text-[10px] text-gray-400 text-center mb-2">
+                                                        {['S','M','T','W','T','F','S'].map((d, i) => <div key={i}>{d}</div>)}
+                                                    </div>
+                                                    <div className="grid grid-cols-7 gap-1">
+                                                        {calendarMeta.cells.map((c, idx) => {
+                                                            if (!c.day || !c.dayKey) return <div key={idx} className="h-8" />;
+                                                            const isAvail = availableDayKeys.has(c.dayKey);
+                                                            const isSel = selectedDayKey === c.dayKey;
+                                                            return (
+                                                                <button
+                                                                    key={`${c.dayKey}-${idx}`}
+                                                                    type="button"
+                                                                    disabled={!isAvail}
+                                                                    onClick={() => setSelectedDayKey(c.dayKey || '')}
+                                                                    className={`h-8 rounded-lg text-xs font-medium transition-colors ${
+                                                                        !isAvail
+                                                                            ? 'text-gray-300 cursor-not-allowed'
+                                                                            : isSel
+                                                                                ? 'bg-primary-900 text-white'
+                                                                                : 'text-gray-800 bg-green-50 border border-green-200 hover:bg-green-100'
+                                                                    }`}
+                                                                >
+                                                                    {c.day}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
                                                 </div>
-
-                                                <div className="grid grid-cols-7 gap-2">
-                                                    {calendarMeta.cells.map((c, idx) => {
-                                                        if (!c.day || !c.dayKey) return <div key={idx} className="h-10" />;
-                                                        const isAvailable = availableDayKeys.has(c.dayKey);
-                                                        const isSelected = selectedDayKey === c.dayKey;
-                                                        return (
-                                                            <button
-                                                                key={`${c.dayKey}-${idx}`}
-                                                                type="button"
-                                                                disabled={!isAvailable}
-                                                                onClick={() => setSelectedDayKey(c.dayKey || '')}
-                                                                className={`h-10 rounded-lg text-sm border transition-colors ${!isAvailable
-                                                                    ? 'bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed'
-                                                                    : isSelected
-                                                                        ? 'bg-purple-600 text-white border-purple-600'
-                                                                        : 'bg-white text-gray-900 border-green-300 hover:bg-green-50'}`}
-                                                            >
-                                                                {c.day}
-                                                            </button>
-                                                        );
-                                                    })}
-                                                </div>
-
-                                                <div className="flex items-center gap-4 text-xs text-gray-600 mt-4">
-                                                    <div className="flex items-center gap-2"><span className="inline-block h-3 w-3 rounded border border-green-400 bg-white" /> Available</div>
-                                                    <div className="flex items-center gap-2"><span className="inline-block h-3 w-3 rounded border border-gray-200 bg-gray-50" /> Not available</div>
+                                                <div className="flex items-center gap-3 px-3 pb-3 text-[10px] text-gray-500">
+                                                    <span className="flex items-center gap-1"><span className="w-3 h-3 rounded border border-green-300 bg-green-50 inline-block" />Available</span>
+                                                    <span className="flex items-center gap-1"><span className="w-3 h-3 rounded border border-gray-100 bg-white inline-block" />Unavailable</span>
                                                 </div>
                                             </div>
-                                        )}
 
-                                        {selectedDayKey && (slotsByDay.get(selectedDayKey) || []).length > 0 && (
-                                            <div className="mt-4">
-                                                <div className="text-sm font-bold text-gray-900 mb-2">Available times</div>
-                                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                                    {(slotsByDay.get(selectedDayKey) || []).slice(0, 12).map((s) => (
-                                                        <button
-                                                            key={s.start}
-                                                            type="button"
-                                                            className={`px-3 py-2 rounded-lg text-sm border border-gray-200 ${isPreview ? 'bg-gray-50 text-gray-400 cursor-not-allowed' : 'hover:bg-gray-50'}`}
-                                                            disabled={isPreview}
-                                                            onClick={() => {
-                                                                if (isPreview) return;
-                                                                const qs = new URLSearchParams();
-                                                                qs.set('frequency', frequency);
-                                                                qs.set('day', selectedDayKey);
-                                                                qs.set('slotStart', s.start);
-                                                                navigate(`/book/${mentor.id}?${qs.toString()}`);
-                                                            }}
-                                                        >
-                                                            {formatTimeLabel(s.start, mentor.timezone || 'UTC')}
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                                {!isPreview && (
-                                                    <div className="mt-4">
+                                            {selectedDayKey && (slotsByDay.get(selectedDayKey) || []).length > 0 && (
+                                                <div className="mt-4">
+                                                    <div className="text-xs font-semibold text-gray-800 mb-2">Available times</div>
+                                                    <div className="grid grid-cols-2 gap-1.5">
+                                                        {(slotsByDay.get(selectedDayKey) || []).slice(0, 8).map(s => (
+                                                            <button
+                                                                key={s.start}
+                                                                type="button"
+                                                                disabled={isPreview}
+                                                                className={`px-2 py-1.5 rounded-lg text-xs border font-medium transition-colors ${
+                                                                    isPreview
+                                                                        ? 'bg-gray-50 text-gray-300 border-gray-100'
+                                                                        : 'bg-white border-gray-200 hover:border-primary-400 hover:text-primary-800'
+                                                                }`}
+                                                                onClick={() => {
+                                                                    if (isPreview) return;
+                                                                    const qs = new URLSearchParams();
+                                                                    qs.set('frequency', frequency);
+                                                                    qs.set('day', selectedDayKey);
+                                                                    qs.set('slotStart', s.start);
+                                                                    navigate(`/book/${mentor.id}?${qs.toString()}`);
+                                                                }}
+                                                            >
+                                                                {formatTimeLabel(s.start, mentor.timezone || 'UTC')}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                    {!isPreview && (
                                                         <Button
+                                                            size="sm"
+                                                            className="w-full mt-3"
                                                             onClick={() => {
                                                                 const qs = new URLSearchParams();
                                                                 qs.set('frequency', frequency);
@@ -514,182 +584,214 @@ const MentorPublicProfilePage: React.FC = () => {
                                                         >
                                                             Continue to Booking
                                                         </Button>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )}
-                                    </Card>
-
-                                    <Card className="p-6">
-                                        <div className="flex items-center justify-center gap-6 mb-5">
-                                            <button
-                                                type="button"
-                                                onClick={() => setProfileTab('EXPERIENCE')}
-                                                className={`text-sm font-bold px-2 pb-2 border-b-2 ${profileTab === 'EXPERIENCE' ? 'border-purple-600 text-purple-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}
-                                            >
-                                                Professional experience
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => setProfileTab('EDUCATION')}
-                                                className={`text-sm font-bold px-2 pb-2 border-b-2 ${profileTab === 'EDUCATION' ? 'border-purple-600 text-purple-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}
-                                            >
-                                                Education
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => setProfileTab('CERTIFICATIONS')}
-                                                className={`text-sm font-bold px-2 pb-2 border-b-2 ${profileTab === 'CERTIFICATIONS' ? 'border-purple-600 text-purple-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}
-                                            >
-                                                Certifications
-                                            </button>
-                                        </div>
-
-                                        {profileTab === 'EXPERIENCE' && (
-                                            <div className="space-y-4">
-                                                {mentor.experience?.length ? mentor.experience
-                                                    .slice()
-                                                    .sort((a, b) => b.start_year - a.start_year)
-                                                    .map((e) => (
-                                                        <div key={e.id} className="rounded-xl border border-gray-200 bg-white p-4">
-                                                            <div className="font-semibold text-gray-900">{e.role || 'Not Added Yet'}</div>
-                                                            <div className="text-sm text-gray-600">{e.company || 'Not Added Yet'} • {e.start_year}{e.end_year ? ` - ${e.end_year}` : ' - Present'}</div>
-                                                            {e.description && <div className="text-sm text-gray-700 mt-2 whitespace-pre-line">{e.description}</div>}
-                                                        </div>
-                                                    )) : (
-                                                    <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">Not Added Yet</div>
-                                                )}
-                                            </div>
-                                        )}
-
-                                        {profileTab === 'EDUCATION' && (
-                                            <div className="space-y-4">
-                                                {mentor.education?.length ? mentor.education
-                                                    .slice()
-                                                    .sort((a, b) => (b.year || 0) - (a.year || 0))
-                                                    .map((ed) => (
-                                                        <div key={ed.id} className="rounded-xl border border-gray-200 bg-white p-4">
-                                                            <div className="text-sm text-gray-600">Institution</div>
-                                                            <div className="font-semibold text-gray-900">{ed.institution || 'Not Added Yet'}</div>
-                                                            <div className="mt-3 text-sm text-gray-600">Degree</div>
-                                                            <div className="font-semibold text-gray-900">{ed.degree || 'Not Added Yet'}{ed.field_of_study ? ` • ${ed.field_of_study}` : ''}</div>
-                                                            <div className="mt-3 text-sm text-gray-600">Graduation Year</div>
-                                                            <div className="font-semibold text-gray-900">{ed.year || 'Not Added Yet'}</div>
-                                                        </div>
-                                                    )) : (
-                                                    <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">Not Added Yet</div>
-                                                )}
-                                            </div>
-                                        )}
-
-                                        {profileTab === 'CERTIFICATIONS' && (
-                                            <div className="space-y-3">
-                                                {mentor.certifications?.length ? mentor.certifications.map((c) => (
-                                                    <div key={c.id} className="flex items-start justify-between gap-4 p-4 bg-white border border-gray-200 rounded-xl">
-                                                        <div>
-                                                            <div className="font-semibold text-gray-900">{c.name}</div>
-                                                            <div className="text-sm text-gray-600">{c.issuer} ({c.year})</div>
-                                                        </div>
-                                                        <div>
-                                                            {c.is_verified ? (
-                                                                <span className="text-[10px] bg-green-50 text-green-700 border border-green-200 px-2 py-0.5 rounded-full">Verified</span>
-                                                            ) : (
-                                                                <span className="text-[10px] bg-yellow-50 text-yellow-800 border border-yellow-200 px-2 py-0.5 rounded-full">Pending</span>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                )) : (
-                                                    <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">Not Added Yet</div>
-                                                )}
-                                            </div>
-                                        )}
-                                    </Card>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
                                 </div>
 
-                                <div className="space-y-6">
-                                    <Card className="p-6">
-                                        <h2 className="text-lg font-bold text-gray-900 mb-3">Pricing</h2>
-                                        <div className="text-sm text-gray-600">50-minute lesson rate</div>
-                                        <div className="text-3xl font-extrabold text-gray-900">${mentor.hourly_rate}</div>
-                                        <div className="mt-4 text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-3">
-                                            You will be charged weekly based on your selected time slots. You can stop upcoming weekly payments before your next billing date.
+                                {/* Reviews */}
+                                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+                                    <div className="flex items-center justify-between gap-4 mb-5">
+                                        <h2 className="text-lg font-bold text-gray-900">Reviews</h2>
+                                        <div className="flex items-center gap-1.5">
+                                            {(['REVIEWS', 'EXTERNAL'] as const).map(t => (
+                                                <button
+                                                    key={t}
+                                                    type="button"
+                                                    onClick={() => setTab(t)}
+                                                    className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors ${
+                                                        tab === t
+                                                            ? 'bg-primary-900 text-white border-primary-900'
+                                                            : 'text-gray-600 border-gray-200 hover:bg-gray-50'
+                                                    }`}
+                                                >
+                                                    {t === 'REVIEWS' ? 'Platform Reviews' : 'External Reviews'}
+                                                </button>
+                                            ))}
                                         </div>
-                                    </Card>
+                                    </div>
 
-                                    <Card className="p-6">
-                                        <h2 className="text-lg font-bold text-gray-900 mb-3">Approved Categories</h2>
-                                        {categoryGroups.length ? (
-                                            <div className="space-y-4">
-                                                {categoryGroups.map((g) => (
-                                                    <div key={g.group} className="rounded-2xl border border-purple-200 bg-purple-50/40 p-4">
-                                                        <div className="text-lg font-extrabold text-purple-800">{g.group}</div>
-                                                        <div className="mt-3 space-y-3">
-                                                            {g.subs.map((s) => (
-                                                                <div key={`${g.group}-${s.sub}`}>
-                                                                    <div className="text-sm font-bold text-purple-700">{s.sub}</div>
-                                                                    <div className="flex flex-wrap gap-2 mt-2">
-                                                                        {s.items.map((i) => (
-                                                                            <span key={i} className="text-xs bg-white text-gray-800 border border-gray-200 px-3 py-1 rounded-full">{i}</span>
-                                                                        ))}
-                                                                    </div>
+                                    {tab === 'REVIEWS' && (
+                                        <div className="space-y-4">
+                                            {reviews && reviews.length > 0 ? reviews.map((r: any) => (
+                                                <div key={r.id} className="border-b border-gray-50 pb-4 last:border-0 last:pb-0">
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <div className="flex items-center gap-2.5">
+                                                            <div className="w-9 h-9 rounded-full bg-primary-100 flex items-center justify-center text-sm font-bold text-primary-800">
+                                                                {r.student.username.charAt(0).toUpperCase()}
+                                                            </div>
+                                                            <div>
+                                                                <div className="text-sm font-semibold text-gray-900">{r.student.username}</div>
+                                                                <div className="flex items-center gap-0.5 mt-0.5">
+                                                                    {[1,2,3,4,5].map(i => (
+                                                                        <Star key={i} className={`w-3 h-3 ${i <= r.rating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-200'}`} />
+                                                                    ))}
                                                                 </div>
-                                                            ))}
+                                                            </div>
                                                         </div>
+                                                        <span className="text-xs text-gray-400">{new Date(r.created_at).toLocaleDateString()}</span>
                                                     </div>
-                                                ))}
-                                            </div>
-                                        ) : (
-                                            <div className="text-sm text-gray-600">No categories added yet.</div>
-                                        )}
-                                    </Card>
-
-                                    {mentor.student_levels && mentor.student_levels.length > 0 && (
-                                        <Card className="p-6">
-                                            <h2 className="text-lg font-bold text-gray-900 mb-2">Student Levels</h2>
-                                            <div className="text-sm text-gray-700">
-                                                {(mentor.student_levels as string[]).map((id) => {
-                                                    const labels: Record<string, string> = {
-                                                        ELEMENTARY_SCHOOL: 'Elementary School',
-                                                        MIDDLE_SCHOOL: 'Middle School',
-                                                        HIGH_SCHOOL: 'High School',
-                                                        COLLEGE_ADULT: 'College & Adult Learners',
-                                                    };
-                                                    return labels[id] || id;
-                                                }).join(' • ')}
-                                            </div>
-                                        </Card>
+                                                    {r.comment && <p className="text-sm text-gray-600 mt-2 ml-11">{r.comment}</p>}
+                                                </div>
+                                            )) : (
+                                                <div className="text-center py-8 text-gray-400 text-sm">No reviews yet.</div>
+                                            )}
+                                        </div>
                                     )}
 
-                                    {mentor.certifications?.length > 0 && (
-                                        <Card className="p-6">
-                                            <h2 className="text-lg font-bold text-gray-900 mb-3">Certifications</h2>
-                                            <div className="space-y-3">
-                                                {mentor.certifications.map((c) => (
-                                                    <div key={c.id} className="flex items-start justify-between gap-4 p-3 bg-gray-50 border border-gray-100 rounded-lg">
-                                                        <div>
-                                                            <div className="font-semibold text-gray-900">{c.name}</div>
-                                                            <div className="text-sm text-gray-600">{c.issuer} ({c.year})</div>
+                                    {tab === 'EXTERNAL' && (
+                                        <div className="space-y-4">
+                                            {mentor.external_reviews && mentor.external_reviews.length > 0 ? mentor.external_reviews.map(r => (
+                                                <div key={r.id} className="border-b border-gray-50 pb-4 last:border-0 last:pb-0">
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <div className="flex items-center gap-2.5">
+                                                            <div className="w-9 h-9 rounded-full bg-blue-50 flex items-center justify-center text-sm font-bold text-blue-600">
+                                                                {r.reviewer?.charAt(0)?.toUpperCase()}
+                                                            </div>
+                                                            <div>
+                                                                <div className="text-sm font-semibold text-gray-900">{r.reviewer}</div>
+                                                                <div className="text-[10px] text-gray-400">via {r.platform}</div>
+                                                                <div className="flex items-center gap-0.5 mt-0.5">
+                                                                    {[1,2,3,4,5].map(i => (
+                                                                        <Star key={i} className={`w-3 h-3 ${i <= r.rating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-200'}`} />
+                                                                    ))}
+                                                                </div>
+                                                            </div>
                                                         </div>
-                                                        <div>
-                                                            {c.is_verified ? (
-                                                                <span className="text-[10px] bg-green-50 text-green-700 border border-green-200 px-2 py-0.5 rounded-full">Verified</span>
-                                                            ) : (
-                                                                <span className="text-[10px] bg-yellow-50 text-yellow-800 border border-yellow-200 px-2 py-0.5 rounded-full">Pending</span>
-                                                            )}
-                                                        </div>
+                                                        {r.date && <span className="text-xs text-gray-400">{new Date(r.date).toLocaleDateString()}</span>}
                                                     </div>
-                                                ))}
-                                            </div>
-                                        </Card>
+                                                    {r.comment && <p className="text-sm text-gray-600 mt-2 ml-11">{r.comment}</p>}
+                                                </div>
+                                            )) : (
+                                                <div className="text-center py-8 text-gray-400 text-sm">No external reviews yet.</div>
+                                            )}
+                                        </div>
                                     )}
                                 </div>
                             </div>
-                        </>
-                    )}
-                </div>
-            </section >
-        </PageLayout >
+
+                            {/* ── Right sticky column ── */}
+                            <div className="lg:col-span-1">
+                                <div className="sticky top-24 space-y-5">
+
+                                    {/* Booking card */}
+                                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                                        <div className="bg-gradient-to-r from-primary-900 to-primary-700 px-5 py-4">
+                                            <div className="text-white text-2xl font-extrabold">${mentor.hourly_rate}</div>
+                                            <div className="text-primary-200 text-xs mt-0.5">per 60-minute session</div>
+                                        </div>
+
+                                        <div className="p-5">
+                                            {mentor.free_session_enabled && (
+                                                <div className="flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 mb-4">
+                                                    <BadgeCheck className="w-3.5 h-3.5 flex-shrink-0" />
+                                                    Free intro session available
+                                                </div>
+                                            )}
+
+                                            {!isPreview ? (
+                                                <Button
+                                                    onClick={() => {
+                                                        const qs = new URLSearchParams();
+                                                        qs.set('frequency', frequency);
+                                                        navigate(`/book/${mentor.id}?${qs.toString()}`);
+                                                    }}
+                                                    className="w-full"
+                                                    size="lg"
+                                                >
+                                                    Book a Session
+                                                </Button>
+                                            ) : (
+                                                <div className="text-center py-2 text-sm text-gray-400 italic">Preview mode — booking disabled</div>
+                                            )}
+
+                                            <div className="mt-4 text-xs text-gray-500 bg-gray-50 rounded-lg p-3 leading-relaxed">
+                                                Charged weekly based on your selected time slots. Cancel upcoming payments before your next billing date.
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Professional Experience */}
+                                    {mentor.experience?.length > 0 && (
+                                        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                                            <h3 className="text-sm font-bold text-gray-900 mb-4 flex items-center gap-2">
+                                                <Briefcase className="w-4 h-4 text-primary-700" /> Professional Experience
+                                            </h3>
+                                            <div className="space-y-4">
+                                                {mentor.experience
+                                                    .slice().sort((a, b) => b.start_year - a.start_year)
+                                                    .map(e => (
+                                                        <div key={e.id} className="relative pl-4 before:absolute before:left-0 before:top-2 before:w-2 before:h-2 before:rounded-full before:bg-primary-400 before:content-['']">
+                                                            <div className="font-semibold text-gray-900 text-sm">{e.role || 'Not Added Yet'}</div>
+                                                            <div className="text-xs text-gray-500 mt-0.5">{e.company} · {e.start_year}{e.end_year ? ` – ${e.end_year}` : ' – Present'}</div>
+                                                            {e.description && <p className="text-sm text-gray-600 mt-1 whitespace-pre-line">{e.description}</p>}
+                                                        </div>
+                                                    ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Education */}
+                                    {mentor.education?.length > 0 && (
+                                        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                                            <h3 className="text-sm font-bold text-gray-900 mb-4 flex items-center gap-2">
+                                                <GraduationCap className="w-4 h-4 text-primary-700" /> Education
+                                            </h3>
+                                            <div className="space-y-3">
+                                                {mentor.education
+                                                    .slice().sort((a, b) => (b.year || 0) - (a.year || 0))
+                                                    .map(ed => (
+                                                        <div key={ed.id} className="rounded-xl bg-gray-50 border border-gray-100 p-3">
+                                                            <div className="font-semibold text-gray-900 text-sm">{ed.institution || 'N/A'}</div>
+                                                            <div className="text-xs text-gray-600 mt-0.5">{ed.degree}{ed.field_of_study ? ` · ${ed.field_of_study}` : ''}</div>
+                                                            {ed.year && <div className="text-xs text-gray-400 mt-0.5">Class of {ed.year}</div>}
+                                                        </div>
+                                                    ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Certifications */}
+                                    {mentor.certifications?.length > 0 && (
+                                        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                                            <h3 className="text-sm font-bold text-gray-900 mb-4 flex items-center gap-2">
+                                                <Award className="w-4 h-4 text-primary-700" /> Certifications
+                                            </h3>
+                                            <div className="space-y-3">
+                                                {mentor.certifications.map(c => (
+                                                    <div key={c.id} className="flex items-start justify-between gap-3 p-3 bg-gray-50 border border-gray-100 rounded-xl">
+                                                        <div>
+                                                            <div className="font-semibold text-gray-900 text-sm">{c.name}</div>
+                                                            <div className="text-xs text-gray-500 mt-0.5">{c.issuer} · {c.year}</div>
+                                                        </div>
+                                                        {c.is_verified ? (
+                                                            <span className="flex items-center gap-1 text-[10px] bg-green-50 text-green-700 border border-green-200 px-2 py-0.5 rounded-full whitespace-nowrap">
+                                                                <BadgeCheck className="w-3 h-3" /> Verified
+                                                            </span>
+                                                        ) : null}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Quick share */}
+                                    <button
+                                        type="button"
+                                        onClick={handleShare}
+                                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                                    >
+                                        {copied ? <><Check className="w-4 h-4 text-green-500" /> Link copied!</> : <><Share2 className="w-4 h-4" /> Share this profile</>}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </>
+            )}
+        </PageLayout>
     );
 };
-
 export default MentorPublicProfilePage;

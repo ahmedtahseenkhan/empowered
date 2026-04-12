@@ -17,10 +17,14 @@ type MeResponse = {
 };
 
 const AccountSettingsPage: React.FC = () => {
-    const { user } = useAuth();
+    const { user, login: refreshAuth } = useAuth();
 
     const [me, setMe] = useState<MeResponse['user'] | null>(null);
     const [loading, setLoading] = useState(true);
+
+    const [editingName, setEditingName] = useState(false);
+    const [nameValue, setNameValue] = useState('');
+    const [savingName, setSavingName] = useState(false);
 
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
@@ -35,6 +39,7 @@ const AccountSettingsPage: React.FC = () => {
                 setLoading(true);
                 const res = await api.get<MeResponse>('/auth/me');
                 setMe(res.data.user);
+                setNameValue(res.data.user.username || '');
             } catch (e) {
                 console.error('Failed to load account', e);
             } finally {
@@ -44,6 +49,26 @@ const AccountSettingsPage: React.FC = () => {
 
         fetchMe();
     }, []);
+
+    const handleSaveName = async () => {
+        setError('');
+        setSuccess('');
+        if (!nameValue.trim()) {
+            setError('Name cannot be empty.');
+            return;
+        }
+        setSavingName(true);
+        try {
+            await api.put('/auth/update-profile', { username: nameValue.trim() });
+            setMe(prev => prev ? { ...prev, username: nameValue.trim() } : prev);
+            setEditingName(false);
+            setSuccess('Name updated successfully.');
+        } catch (err: any) {
+            setError(err.response?.data?.error || 'Failed to update name');
+        } finally {
+            setSavingName(false);
+        }
+    };
 
     const handleChangePassword = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -76,13 +101,53 @@ const AccountSettingsPage: React.FC = () => {
                     <p className="text-gray-600 mt-1">Manage your account information and password.</p>
                 </div>
 
+                {(error || success) && (
+                    <div className={`px-4 py-3 rounded-lg text-sm border ${
+                        error
+                            ? 'bg-red-50 border-red-200 text-red-700'
+                            : 'bg-green-50 border-green-200 text-green-700'
+                    }`}>
+                        {error || success}
+                    </div>
+                )}
+
                 {loading ? (
                     <div className="text-gray-600">Loading...</div>
                 ) : (
                     <Card className="p-6">
-                        <h2 className="text-lg font-bold text-gray-900 mb-4">Account</h2>
+                        <h2 className="text-lg font-bold text-gray-900 mb-4">Account Information</h2>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <Input label="Name" value={me?.username || user?.username || ''} disabled />
+                            {/* Editable Name field */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                                {editingName ? (
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            value={nameValue}
+                                            onChange={e => setNameValue(e.target.value)}
+                                            onKeyDown={e => { if (e.key === 'Enter') handleSaveName(); if (e.key === 'Escape') setEditingName(false); }}
+                                            autoFocus
+                                            className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
+                                        />
+                                        <Button size="sm" onClick={handleSaveName} disabled={savingName}>
+                                            {savingName ? 'Saving…' : 'Save'}
+                                        </Button>
+                                        <Button size="sm" variant="outline" onClick={() => { setEditingName(false); setNameValue(me?.username || ''); }}>
+                                            Cancel
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-900">
+                                            {me?.username || user?.username || '—'}
+                                        </div>
+                                        <Button size="sm" variant="outline" onClick={() => setEditingName(true)}>
+                                            Edit
+                                        </Button>
+                                    </div>
+                                )}
+                            </div>
                             <Input label="Email" value={me?.email || user?.email || ''} disabled />
                         </div>
                     </Card>
@@ -90,17 +155,6 @@ const AccountSettingsPage: React.FC = () => {
 
                 <Card className="p-6">
                     <h2 className="text-lg font-bold text-gray-900 mb-4">Change Password</h2>
-
-                    {error && (
-                        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4 text-sm">
-                            {error}
-                        </div>
-                    )}
-                    {success && (
-                        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-4 text-sm">
-                            {success}
-                        </div>
-                    )}
 
                     <form onSubmit={handleChangePassword} className="space-y-4">
                         <Input
@@ -134,3 +188,4 @@ const AccountSettingsPage: React.FC = () => {
 };
 
 export default AccountSettingsPage;
+

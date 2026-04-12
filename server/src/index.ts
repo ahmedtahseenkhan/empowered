@@ -43,6 +43,7 @@ import demoRoutes from './routes/demoRoutes';
 import paymentRoutes from './routes/paymentRoutes';
 import webhookRoutes from './routes/webhookRoutes';
 import supportRoutes from './routes/supportRoutes';
+import betaRoutes from './routes/betaRoutes';
 import { startEmailOutboxProcessor } from './services/emailOutboxProcessor';
 import { startEmailScheduler } from './services/emailScheduler';
 
@@ -74,6 +75,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/demo', demoRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/support', supportRoutes);
+app.use('/api/beta', betaRoutes);
 
 // Health Check
 app.get('/', (req, res) => {
