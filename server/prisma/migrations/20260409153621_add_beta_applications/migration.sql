@@ -1,6 +1,3 @@
--- AlterTable
-ALTER TABLE "TutorProfile" ADD COLUMN     "stripe_customer_id" TEXT;
-
 -- CreateTable
 CREATE TABLE "BetaApplication" (
     "id" TEXT NOT NULL,
