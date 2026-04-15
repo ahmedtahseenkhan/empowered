@@ -597,6 +597,33 @@ class EmailService {
             html,
         });
     }
+
+    async sendBetaApplicationConfirmation(data: {
+        full_name: string;
+        email: string;
+    }): Promise<void> {
+        const baseUrl = this.getClientBaseUrl();
+        const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="font-family:Poppins,sans-serif;color:#222;max-width:600px;margin:0 auto;padding:24px">
+  <h2 style="color:#4A148C;margin-bottom:12px">Thanks for applying to the Empower<span style="color:#DD5D00">Ed</span> Beta</h2>
+  <p style="margin:0 0 12px 0">Hi ${data.full_name},</p>
+  <p style="margin:0 0 12px 0">We have received your founding mentor beta application successfully.</p>
+  <p style="margin:0 0 12px 0">Our team will review your submission and contact you if you are selected for the next step.</p>
+  <p style="margin:0 0 20px 0">If you have any urgent questions, reply to this email and our team will help you.</p>
+  <a href="${baseUrl}" style="display:inline-block;background:#DD5D00;color:#fff;text-decoration:none;padding:10px 16px;border-radius:9999px;font-weight:600">Visit EmpowerEd Learnings</a>
+  <p style="margin-top:24px;color:#666;font-size:13px">EmpowerEd Learnings — Beta Programme</p>
+</body>
+</html>`;
+
+        await this.sendEmail({
+            to: data.email,
+            subject: 'We Received Your Beta Application - EmpowerEd Learnings',
+            html,
+        });
+    }
 }
 
 export default new EmailService();

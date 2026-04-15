@@ -19,7 +19,7 @@ const SESSION_METHODS = [
 ] as const;
 
 const PERKS = [
-    '2 months free access instead of 1',
+    '2 months free access',
     'No credit card required to start',
     'Founding Mentor badge on your profile',
     'Priority placement in the marketplace',
@@ -27,13 +27,6 @@ const PERKS = [
     'Dedicated ad placement through platform channels',
     'AI tools for lesson planning',
     'Full access to all features during beta',
-];
-
-const PAIN_POINTS = [
-    'Managing bookings manually',
-    'Handling payments across tools',
-    'Building a professional presence',
-    'Getting consistent visibility',
 ];
 
 const BEST_FOR = [
@@ -206,32 +199,11 @@ const BetaPage: React.FC = () => {
                                 </li>
                             ))}
                         </ul>
-                        <p className="text-center text-[#4A148C] font-semibold mt-8 text-lg">
-                            You are getting early visibility, priority support, and full access from day one.
-                        </p>
-                    </div>
-                </section>
-
-                {/* ── WHY THIS MATTERS ── */}
-                <section className="py-20 px-4 bg-white">
-                    <div className="max-w-3xl mx-auto">
-                        <h2 className="text-3xl md:text-4xl font-bold font-poppins text-gray-900 text-center mb-4">
-                            Why this matters
-                        </h2>
-                        <p className="text-center text-gray-600 mb-10">
-                            Most independent mentors struggle with:
-                        </p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
-                            {PAIN_POINTS.map(point => (
-                                <div key={point} className="flex items-start gap-3 border border-gray-100 rounded-xl px-5 py-4 shadow-sm">
-                                    <span className="w-2 h-2 bg-[#DD5D00] rounded-full flex-shrink-0 mt-2" />
-                                    <span className="text-gray-700">{point}</span>
-                                </div>
-                            ))}
+                        <div className="mt-8 flex justify-center">
+                            <p className="inline-flex items-center rounded-full border border-[#DD5D00]/30 bg-[#FFF3EA] px-6 py-3 text-center text-[#A64300] font-bold text-lg shadow-sm">
+                                You are getting early visibility, priority support, and full access from day one.
+                            </p>
                         </div>
-                        <p className="text-center text-gray-700 text-lg font-medium">
-                            This platform is designed to solve that.
-                        </p>
                     </div>
                 </section>
 
@@ -292,7 +264,7 @@ const BetaPage: React.FC = () => {
                         <div className="flex justify-center mt-8">
                             <button
                                 onClick={scrollToForm}
-                                className="bg-[#4A148C] hover:bg-[#380e6e] text-white font-semibold px-10 py-4 rounded-full text-lg shadow-lg transition-colors duration-200"
+                                className="bg-[#DD5D00] hover:bg-[#c25200] text-white font-semibold px-10 py-4 rounded-full text-lg shadow-lg transition-colors duration-200"
                             >
                                 Apply for Beta Access
                             </button>

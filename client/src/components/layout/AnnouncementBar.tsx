@@ -4,7 +4,7 @@ import { Zap } from 'lucide-react';
 
 export const AnnouncementBar: React.FC = () => {
     const message =
-        '🎉 Special Offer — Enjoy 2 Months FREE, No Registration Fees, No Subscription Costs. Limited Time!';
+        '🎉 Special Offer — Enjoy 2 Months FREE, No Subscription Costs. Limited Time!';
 
     return (
         <div className="bg-primary-900 text-white text-xs font-medium py-2 overflow-hidden select-none">

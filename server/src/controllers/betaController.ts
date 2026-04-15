@@ -80,6 +80,16 @@ export const submitBetaApplication = async (req: Request, res: Response) => {
             }
         }
 
+        // Confirmation email to applicant
+        try {
+            await emailService.sendBetaApplicationConfirmation({
+                full_name,
+                email,
+            });
+        } catch (e) {
+            console.error('Failed to send beta application confirmation email:', e);
+        }
+
         return res.status(201).json({ message: 'Application submitted successfully.', id: application.id });
     } catch (error) {
         console.error('Beta application error:', error);

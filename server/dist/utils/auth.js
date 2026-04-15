@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.verifyToken = exports.generateToken = exports.comparePassword = exports.hashPassword = void 0;
+exports.verifyToken = exports.generateVerificationToken = exports.generateToken = exports.comparePassword = exports.hashPassword = void 0;
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const dotenv_1 = __importDefault(require("dotenv"));
@@ -24,6 +24,12 @@ const generateToken = (userId, role) => {
     });
 };
 exports.generateToken = generateToken;
+const generateVerificationToken = (userId) => {
+    return jsonwebtoken_1.default.sign({ id: userId, type: 'email_verification' }, JWT_SECRET, {
+        expiresIn: '24h',
+    });
+};
+exports.generateVerificationToken = generateVerificationToken;
 const verifyToken = (token) => {
     try {
         return jsonwebtoken_1.default.verify(token, JWT_SECRET);
