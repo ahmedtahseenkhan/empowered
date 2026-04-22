@@ -66,7 +66,7 @@ const WhyUs = () => {
                                     <p className="text-sm text-gray-600 leading-relaxed">{card.description}</p>
                                 </div>
                                 <div className="relative h-[200px] w-full mt-auto">
-                                    <img
+                                    <img loading="lazy" decoding="async"
                                         src={card.image}
                                         alt={card.title}
                                         className="object-cover w-full h-full"
@@ -86,7 +86,7 @@ const WhyUs = () => {
                                 <p className="text-sm text-gray-600 leading-relaxed">{cards[currentIndex].description}</p>
                             </div>
                             <div className="relative h-[200px] w-full">
-                                <img
+                                <img loading="lazy" decoding="async"
                                     src={cards[currentIndex].image}
                                     alt={cards[currentIndex].title}
                                     className="object-cover w-full h-full"

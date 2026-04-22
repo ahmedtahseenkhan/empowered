@@ -54,7 +54,7 @@ export const Header: React.FC = () => {
 
                         {/* Logo */}
                         <Link to="/" className="flex items-center gap-2.5 flex-shrink-0">
-                            <img src={logo} alt="EmpowerEd Learnings" className="h-12 w-auto" />
+                            <img loading="lazy" decoding="async" src={logo} alt="EmpowerEd Learnings" className="h-12 w-auto" />
                             <span className="text-lg font-bold text-gray-900 leading-tight">
                                 Empower<span className="text-accent-900">Ed</span>{' '}
                                 <span className="block text-xs font-medium text-gray-500 tracking-wide">

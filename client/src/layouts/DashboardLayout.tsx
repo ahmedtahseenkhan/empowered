@@ -92,7 +92,7 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
                     </Link>
                     <div className="flex items-center gap-2.5 py-3 border-b border-gray-100">
                         {profilePhoto ? (
-                            <img
+                            <img loading="lazy" decoding="async"
                                 src={profilePhoto}
                                 alt={user?.username || 'Profile'}
                                 className="w-8 h-8 rounded-full object-cover shrink-0 border border-gray-200"

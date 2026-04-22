@@ -25,7 +25,7 @@ const BottomSection = () => {
                 <div className="flex flex-col-reverse md:flex-row justify-between items-center w-full px-8">
                     {/* Left SVG (shown on mobile) */}
                     <div className="mt-5 md:mt-0 flex-shrink-0 relative">
-                        <img
+                        <img loading="lazy" decoding="async"
                             src={B_section1}
                             alt="Bottom Section"
                             className="w-full md:w-[250px] lg:w-[300px] h-auto object-contain"
@@ -45,7 +45,7 @@ const BottomSection = () => {
                     {/* Right SVG */}
                     <div className="hidden md:block flex-shrink-0">
                         <div className="mt-5 md:mt-0">
-                            <img
+                            <img loading="lazy" decoding="async"
                                 src={B_section2}
                                 alt="Bottom Section"
                                 className="w-full md:w-[250px] lg:w-[300px] h-auto object-contain"

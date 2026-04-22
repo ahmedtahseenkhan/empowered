@@ -21,14 +21,14 @@ const HeroSection = () => {
 
                     {/* div for the image */}
                     <div className="relative">
-                        <img
+                        <img loading="eager" decoding="async" fetchPriority="high"
                             src={HeroSection_image}
                             alt="Hero Section Image"
                             className="object-cover rounded-2xl h-[250px] w-[350px] md:h-[300px] md:w-[400px] shadow-lg"
                         />
                         {/* Rocket ship image */}
                         <div className="absolute -top-[20px] sm:-top-[25px] md:-top-[30px] lg:-top-[37px] right-[10px] md:right-[15px] lg:right-[20px]">
-                            <img
+                            <img loading="eager" decoding="async" fetchPriority="high"
                                 src={space_rocket}
                                 alt="Rocket"
                                 className="w-[35px] h-[35px] sm:w-[45px] sm:h-[45px] md:w-[55px] md:h-[55px] lg:w-[65px] lg:h-[65px]"
@@ -36,7 +36,7 @@ const HeroSection = () => {
                         </div>
                         {/* Spiral Arrow on top of image */}
                         <div className="absolute top-4 -left-[15px] sm:-left-[20px] md:-left-[25px] lg:-left-[50px]">
-                            <img
+                            <img loading="eager" decoding="async" fetchPriority="high"
                                 src={spiral_arrow}
                                 alt="Spiral Arrow"
                                 className="w-[50px] h-[30px] sm:w-[70px] sm:h-[50px] md:w-[90px] md:h-[70px] lg:w-[110px] lg:h-[90px]"

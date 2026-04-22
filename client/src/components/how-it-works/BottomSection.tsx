@@ -25,7 +25,7 @@ const BottomSection = () => {
                 <div className="flex flex-col-reverse md:flex-row justify-between items-center w-full px-4 md:px-10 pb-10">
                     {/* Left SVG (shown on mobile) */}
                     <div className="mt-5 md:mt-0">
-                        <img
+                        <img loading="lazy" decoding="async"
                             src={HIW_bottom_img1}
                             alt="How it works"
                             className="w-full md:w-[250px] lg:w-[300px] h-auto object-contain"
@@ -46,7 +46,7 @@ const BottomSection = () => {
 
                     {/* Right SVG (hidden on mobile, shown on desktop) */}
                     <div className="hidden md:block">
-                        <img
+                        <img loading="lazy" decoding="async"
                             src={HIW_bottom_img2}
                             alt="How it works"
                             className="w-full md:w-[250px] lg:w-[300px] h-auto object-contain"

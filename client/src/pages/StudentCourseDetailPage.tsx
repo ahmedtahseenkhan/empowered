@@ -133,7 +133,7 @@ const StudentCourseDetailPage: React.FC = () => {
                         {/* Hero thumbnail */}
                         <div className="rounded-2xl overflow-hidden bg-gradient-to-br from-purple-600 to-purple-900 h-64 flex items-center justify-center">
                             {course.thumbnail_url ? (
-                                <img src={course.thumbnail_url} alt={course.title} className="w-full h-full object-cover" />
+                                <img loading="lazy" decoding="async" src={course.thumbnail_url} alt={course.title} className="w-full h-full object-cover" />
                             ) : (
                                 <BookOpen className="w-24 h-24 text-white/60" />
                             )}

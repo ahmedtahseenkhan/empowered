@@ -38,7 +38,7 @@ const steps = [
 
 const StepSVG = memo(({ src, alt }: { src: string; alt: string }) => (
     <div className="relative h-[60px] w-[60px] md:h-[70px] md:w-[70px]">
-        <img src={src} alt={alt} className="w-full h-full object-contain" />
+        <img loading="lazy" decoding="async" src={src} alt={alt} className="w-full h-full object-contain" />
     </div>
 ));
 
@@ -55,7 +55,7 @@ const DecorativeSVG = memo(
         className: string;
     }) => (
         <div className={className}>
-            <img src={src} alt={alt} style={{ width: 114, height: 130 }} className="object-contain" />
+            <img loading="lazy" decoding="async" src={src} alt={alt} style={{ width: 114, height: 130 }} className="object-contain" />
         </div>
     )
 );
@@ -104,13 +104,13 @@ const Step = memo(
             {index === 1 && (
                 <div className="relative md:block hidden">
                     <div className="absolute -right-[30px] -top-[70px]">
-                        <img src={HIW_svg_5} alt="" width={114} height={130} />
+                        <img loading="lazy" decoding="async" src={HIW_svg_5} alt="" width={114} height={130} />
                     </div>
                     <div className="absolute -right-[70px]">
-                        <img src={HIW_svg_6} alt="" width={114} height={130} />
+                        <img loading="lazy" decoding="async" src={HIW_svg_6} alt="" width={114} height={130} />
                     </div>
                     <div className="absolute -right-[30px] top-[90px]">
-                        <img src={HIW_svg_7} alt="" width={114} height={130} />
+                        <img loading="lazy" decoding="async" src={HIW_svg_7} alt="" width={114} height={130} />
                     </div>
                 </div>
             )}

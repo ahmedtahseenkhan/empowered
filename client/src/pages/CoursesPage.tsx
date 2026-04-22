@@ -178,7 +178,7 @@ const CoursesPage: React.FC = () => {
                                 {/* Course Thumbnail */}
                                 <div className="h-48 bg-gradient-to-br from-purple-600 to-purple-900 flex items-center justify-center overflow-hidden">
                                     {course.thumbnail_url ? (
-                                        <img src={course.thumbnail_url} alt={course.title} className="w-full h-full object-cover" />
+                                        <img loading="lazy" decoding="async" src={course.thumbnail_url} alt={course.title} className="w-full h-full object-cover" />
                                     ) : (
                                         <span className="text-6xl">🎓</span>
                                     )}

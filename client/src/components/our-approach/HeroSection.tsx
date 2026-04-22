@@ -21,7 +21,7 @@ const HeroSection = () => {
 
                     {/* Responsive image container */}
                     <div className="w-full sm:w-[60%] md:w-[40%] h-[250px] sm:h-[300px] relative mt-5 md:mt-0">
-                        <img
+                        <img loading="eager" decoding="async" fetchPriority="high"
                             src={our_approach_heroSection}
                             className="object-cover rounded-3xl border-[1px] border-[#4A148C] w-full h-full"
                             alt="Hero Section Image"
@@ -30,7 +30,7 @@ const HeroSection = () => {
                         {/* Overlay image with responsive positioning */}
                         <div className="absolute h-[150px] md:h-[200px] w-[300px] z-10 top-[50px] md:top-[120px] sm:top-[200px] left-[50%] md:left-[20px] transform -translate-x-1/2 md:translate-x-0 -translate-y-1/2 pointer-events-none">
                             {/* Adjusted positioning slightly for img tag vs next/image layout */}
-                            <img
+                            <img loading="eager" decoding="async" fetchPriority="high"
                                 src={overlay}
                                 className="object-cover w-full h-full"
                                 alt="Hero Section Overlay"

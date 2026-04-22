@@ -232,9 +232,9 @@ const ChoosePlanDesktop = ({
                             </div>
 
                             <div className="flex items-center justify-center gap-4 mb-4">
-                                <img src={Star} alt="Star" className="w-8 h-8" />
+                                <img loading="lazy" decoding="async" src={Star} alt="Star" className="w-8 h-8" />
                                 <h3 className="text-xl md:text-2xl font-semibold font-poppins">Don't Miss Out on Our Early Bird Deal!</h3>
-                                <img src={Clock} alt="Clock" className="w-8 h-8" />
+                                <img loading="lazy" decoding="async" src={Clock} alt="Clock" className="w-8 h-8" />
                             </div>
 
                             <p className="text-[#4A148C] font-semibold text-lg md:text-xl">

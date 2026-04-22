@@ -33,13 +33,13 @@ const CardComponent: React.FC<TestimonialCardProps> = ({
             <div className="flex flex-col md:flex-row gap-6 items-start">
                 {/* Quote Icon */}
                 <div className="absolute top-6 left-6 opacity-20">
-                    <img src={singleQuote_1} alt="Quote" className="w-10 h-10" />
+                    <img loading="lazy" decoding="async" src={singleQuote_1} alt="Quote" className="w-10 h-10" />
                 </div>
 
                 {/* Image/Avatar */}
                 <div className="z-10 mt-2 ml-2 md:mt-0 md:ml-0 flex-shrink-0">
                     {imgSrc ? (
-                        <img
+                        <img loading="lazy" decoding="async"
                             src={imgSrc}
                             alt={name}
                             className="w-16 h-16 md:w-20 md:h-20 rounded-full object-cover border-2 border-white shadow-md"
@@ -68,7 +68,7 @@ const CardComponent: React.FC<TestimonialCardProps> = ({
                                 className="mt-2 flex items-center gap-1 text-sm font-semibold text-[#4A148C] hover:underline"
                             >
                                 {isOpen ? 'Read Less' : 'Read More'}
-                                <img
+                                <img loading="lazy" decoding="async"
                                     src={Acc_arrow}
                                     alt="Toggle"
                                     className={`w-3 h-3 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}

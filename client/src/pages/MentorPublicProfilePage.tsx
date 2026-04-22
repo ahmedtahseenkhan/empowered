@@ -326,7 +326,7 @@ const MentorPublicProfilePage: React.FC = () => {
                             <div className="flex flex-col sm:flex-row items-start gap-6">
                                 {/* Avatar */}
                                 {mentor.profile_photo ? (
-                                    <img
+                                    <img loading="lazy" decoding="async"
                                         src={mentor.profile_photo}
                                         alt={mentor.username}
                                         className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover border-2 border-white/30 flex-shrink-0"

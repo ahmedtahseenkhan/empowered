@@ -13,7 +13,7 @@ const HeroSection = () => {
                         <span className="text-[#4A148C]">Three Easy Steps!</span>
                     </div>
                     <div className="relative bottom-5 md:block hidden">
-                        <img
+                        <img loading="eager" decoding="async" fetchPriority="high"
                             src={Hero_svg}
                             alt="Hero Section"
                             width={100}

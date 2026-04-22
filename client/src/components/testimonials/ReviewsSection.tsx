@@ -105,12 +105,12 @@ const ReviewsSection = () => {
                 <div className="flex flex-col my-[5%] px-5 md:px-0 items-center font-poppins relative">
                     <h1 className="text-4xl font-bold text-center relative text-gray-900">
                         What Our Users Say
-                        <img
+                        <img loading="lazy" decoding="async"
                             src={three_lines}
                             alt="lines"
                             className="absolute -right-9 hidden md:block -top-0 w-[40px] h-[40px]"
                         />
-                        <img
+                        <img loading="lazy" decoding="async"
                             src={Crown}
                             alt="Crown"
                             className="absolute -top-10 left-1/2 transform -translate-x-1/2 hidden md:block w-15 h-auto w-[40px]"
@@ -126,14 +126,14 @@ const ReviewsSection = () => {
                         >
                             <div className="flex justify-between items-start mb-4">
                                 <div className="flex items-center gap-3">
-                                    <img
+                                    <img loading="lazy" decoding="async"
                                         src={comment.imageSrc}
                                         alt="User"
                                         className="h-[40px] w-[40px] rounded-full object-cover"
                                     />
                                     <div className="flex items-center gap-2">
                                         <h1 className="font-bold text-xl">{comment.name}</h1>
-                                        <img
+                                        <img loading="lazy" decoding="async"
                                             src={tick}
                                             alt="Verified"
                                             className="w-6 h-6 object-contain"
@@ -141,7 +141,7 @@ const ReviewsSection = () => {
                                     </div>
                                 </div>
                                 <div className="mt-1">
-                                    <img
+                                    <img loading="lazy" decoding="async"
                                         src={stars}
                                         alt="Rating"
                                         className="w-20 h-auto"

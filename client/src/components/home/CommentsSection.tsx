@@ -129,7 +129,7 @@ const CommentsSection = () => {
                         </h1>
                     </div>
                     <div className="relative bottom-5 md:block hidden">
-                        <img
+                        <img loading="lazy" decoding="async"
                             src={comments_svg1}
                             alt="Comments Icon"
                             className="w-[90px] h-[90px] object-contain"
@@ -190,7 +190,7 @@ const CommentsSection = () => {
             </div>
             {/* Trust Indicator - Optional */}
             {/* <div className="mt-8 flex justify-center gap-2 items-center font-poppins text-gray-600">
-        <img
+        <img loading="lazy" decoding="async"
           src={trusted_families}
           alt="Trusted Families"
           className="w-6 h-6 inline"

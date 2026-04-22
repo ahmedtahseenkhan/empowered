@@ -172,7 +172,7 @@ const StudentCourseMarketplacePage: React.FC = () => {
                                 {/* Thumbnail */}
                                 <div className="h-48 bg-gradient-to-br from-purple-500 to-purple-900 flex items-center justify-center overflow-hidden relative">
                                     {course.thumbnail_url ? (
-                                        <img
+                                        <img loading="lazy" decoding="async"
                                             src={course.thumbnail_url}
                                             alt={course.title}
                                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"

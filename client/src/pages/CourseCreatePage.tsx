@@ -131,7 +131,7 @@ const CourseCreatePage: React.FC = () => {
                                     className={inputClass}
                                 />
                                 {formData.thumbnail_url && (
-                                    <img
+                                    <img loading="lazy" decoding="async"
                                         src={formData.thumbnail_url}
                                         alt="Thumbnail preview"
                                         className="mt-3 w-full h-28 object-cover rounded-lg"

@@ -33,7 +33,7 @@ export const EnrolledStudentCard: React.FC<EnrolledStudentCardProps> = ({
             <div className="flex flex-col md:flex-row gap-6 items-start">
                 {/* Left Column: Avatar, Status, Send Note */}
                 <div className="flex flex-col items-center gap-3 min-w-[120px]">
-                    <img
+                    <img loading="lazy" decoding="async"
                         src={student.profilePhoto || `https://ui-avatars.com/api/?name=${student.name}&background=random&color=fff`}
                         alt={student.name}
                         className="w-24 h-24 rounded-full object-cover border-4 border-white shadow-md cursor-pointer hover:opacity-90 transition-opacity"

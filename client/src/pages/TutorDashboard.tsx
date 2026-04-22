@@ -523,7 +523,7 @@ const TutorDashboard: React.FC = () => {
                                     <Button size="sm" variant="outline" onClick={handleDisconnectGoogleCalendar}>Disconnect</Button>
                                 ) : (
                                     <Button size="sm" variant="outline" onClick={handleConnectGoogleCalendar} className="inline-flex items-center gap-1.5">
-                                        <img src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg" alt="" className="w-4 h-4" />
+                                        <img loading="lazy" decoding="async" src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg" alt="" className="w-4 h-4" />
                                         Connect Google
                                     </Button>
                                 )}

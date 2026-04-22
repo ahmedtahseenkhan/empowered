@@ -57,7 +57,7 @@ const ApproachSteps = () => {
                     </div>
                     {step.titleImg && (
                         <div>
-                            <img src={step.titleImg} alt="" height={50} width={50} className="w-[50px] h-[50px]" />
+                            <img loading="lazy" decoding="async" src={step.titleImg} alt="" height={50} width={50} className="w-[50px] h-[50px]" />
                         </div>
                     )}
                 </div>
@@ -66,7 +66,7 @@ const ApproachSteps = () => {
                     className={`flex flex-wrap items-start justify-around w-[90%] mx-auto mt-10 mb-10 gap-8 lg:gap-0 ${rowClass}`}
                 >
                     <div className="w-full md:w-[40%] md:h-[600px] flex justify-center items-center relative">
-                        <img
+                        <img loading="lazy" decoding="async"
                             src={step.img}
                             className="object-cover rounded-3xl w-full h-auto md:h-full box-shadow-xl"
                             alt="Description of the image"

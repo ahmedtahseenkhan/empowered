@@ -61,7 +61,7 @@ const EasySteps = () => {
                             {/* Arrow (except after last item) */}
                             {index < steps.length - 1 && (
                                 <div className="hidden md:block">
-                                    <img
+                                    <img loading="lazy" decoding="async"
                                         src={arrow}
                                         alt="Next"
                                         className="w-16 h-auto opacity-80"
@@ -70,7 +70,7 @@ const EasySteps = () => {
                             )}
                             {index < steps.length - 1 && (
                                 <div className="block md:hidden my-2">
-                                    <img
+                                    <img loading="lazy" decoding="async"
                                         src={arrow}
                                         alt="Next"
                                         className="w-10 h-auto transform rotate-90 opacity-80"

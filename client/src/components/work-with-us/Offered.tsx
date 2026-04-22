@@ -27,7 +27,7 @@ const Offered = () => {
                                     className={`${index < 3 ? "bg-[#4A148C]" : "bg-[#F4F4F5]"
                                         } p-2 rounded-full flex-shrink-0 w-[50px] h-[50px] flex items-center justify-center`}
                                 >
-                                    <img
+                                    <img loading="lazy" decoding="async"
                                         src={offer.img} // Note: .src might not be needed if imported as url
                                         alt={offer.title}
                                         className="w-[30px] h-[30px] object-contain"
@@ -48,7 +48,7 @@ const Offered = () => {
                                         "bg-[#F4F4F5] p-2 rounded-full flex-shrink-0 w-[50px] h-[50px] flex items-center justify-center"
                                     }
                                 >
-                                    <img
+                                    <img loading="lazy" decoding="async"
                                         src={offer.img}
                                         alt={offer.title}
                                         className="w-[30px] h-[30px] object-contain"
@@ -57,7 +57,7 @@ const Offered = () => {
                                 <div className="mt-2 text-[#FFFFFF] relative">
                                     <h1 className="font-bold text-lg">{offer.title}</h1>
                                     <p className="mt-3 text-sm opacity-90 leading-relaxed">{offer.description}</p>
-                                    <img
+                                    <img loading="lazy" decoding="async"
                                         src={Crown}
                                         alt="Crown Image"
                                         className="absolute -top-24 -right-2 md:-top-16 md:-right-4 w-20 md:w-24"

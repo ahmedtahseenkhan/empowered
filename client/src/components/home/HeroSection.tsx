@@ -38,7 +38,7 @@ const HeroSection = () => {
 
                     {/* div for the image */}
                     <div className="relative pt-5">
-                        <img
+                        <img loading="eager" decoding="async" fetchPriority="high"
                             src={Hero_image}
                             alt="Hero Section"
                             className="object-cover rounded-3xl h-[280px] w-[280px] sm:h-[320px] sm:w-[320px] md:h-[360px] md:w-[360px] lg:h-[400px] lg:w-[400px] shadow-2xl"

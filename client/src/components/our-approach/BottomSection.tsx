@@ -22,7 +22,7 @@ const BottomSection = () => {
                             </p>
                         </div>
 
-                        <img
+                        <img loading="lazy" decoding="async"
                             src={cup_person}
                             alt="Person Holding Cup Image"
                             className="absolute h-[120px] w-[120px] right-4 top-4 sm:right-10 sm:top-10 md:h-[200px] md:w-[200px] lg:h-[300px] lg:w-[300px] md:right-10 md:top-[-50px] opacity-90"

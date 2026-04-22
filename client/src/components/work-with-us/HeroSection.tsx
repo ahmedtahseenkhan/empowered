@@ -20,7 +20,7 @@ export default function HeroSection() {
 
             <div className="flex flex-wrap justify-evenly my-[5%] items-start">
                 <div className="relative w-full md:w-[539px] h-auto">
-                    <img
+                    <img loading="eager" decoding="async" fetchPriority="high"
                         src={Hero_section}
                         alt="EmpowerEd Learnings Team"
                         className="object-cover w-full h-auto"
@@ -37,7 +37,7 @@ export default function HeroSection() {
                     </h2>
                     <div className="hidden xl:block absolute right-4 bottom-[-20px] translate-y-full">
                         {/* Adjusted positioning slightly as next/image behaves differently */}
-                        <img
+                        <img loading="eager" decoding="async" fetchPriority="high"
                             src={Green_Arrow}
                             alt="Green Arrow"
                             className="object-contain w-[120px] h-[150px]"

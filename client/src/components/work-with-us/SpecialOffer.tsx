@@ -9,7 +9,7 @@ const SpecialOffer = () => {
                 </h1>
                 <div className="flex items-center px-5 md:px-0 gap-4 md:gap-8 justify-center my-6">
                     <div>
-                        <img
+                        <img loading="lazy" decoding="async"
                             src={Star}
                             alt="Special Offer Star"
                             className="w-[30px] h-[30px] md:w-[40px] md:h-[40px]"
@@ -19,7 +19,7 @@ const SpecialOffer = () => {
                         Don’t Miss Out on Our Early Bird Deal!
                     </h3>
                     <div>
-                        <img
+                        <img loading="lazy" decoding="async"
                             src={Clock}
                             alt="Special Offer Clock"
                             className="w-[30px] h-[30px] md:w-[40px] md:h-[40px]"

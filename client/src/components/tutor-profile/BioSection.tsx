@@ -99,7 +99,7 @@ export const BioSection: React.FC<BioSectionProps> = ({ onBack }) => {
                 >
                     {profilePhoto ? (
                         <div className="flex flex-col items-center gap-3">
-                            <img
+                            <img loading="lazy" decoding="async"
                                 src={profilePhoto}
                                 alt="Profile preview"
                                 className="w-24 h-24 rounded-full object-cover border border-gray-200"

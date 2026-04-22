@@ -35,7 +35,7 @@ export const ScheduledMentorCard: React.FC<ScheduledMentorCardProps> = ({
             <div className="flex flex-col md:flex-row gap-6">
                 {/* Avatar Section */}
                 <div className="flex-shrink-0">
-                    <img
+                    <img loading="lazy" decoding="async"
                         src={mentor.profilePhoto || `https://ui-avatars.com/api/?name=${mentor.name}&background=random`}
                         alt={mentor.name}
                         className="w-20 h-20 rounded-full object-cover border-4 border-gray-50 shadow-sm"
