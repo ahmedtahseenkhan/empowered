@@ -37,10 +37,6 @@ const LOOKING_FOR_OPTIONS = [
 
 const DALLAS_TZ = 'America/Chicago';
 
-function formatSlotInDallas(iso: string): string {
-    const d = new Date(iso);
-    return d.toLocaleString('en-US', { timeZone: DALLAS_TZ, weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
-}
 
 function formatDallasDayKey(iso: string): string {
     const d = new Date(iso);

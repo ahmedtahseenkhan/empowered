@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Crown, Check, X, AlertTriangle, Sparkles, Zap, Shield, RefreshCw } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { DashboardLayout } from '../layouts/DashboardLayout';

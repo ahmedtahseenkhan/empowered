@@ -163,12 +163,6 @@ const FindMentorPage: React.FC = () => {
         return null;
     }, [step, isAcademic, isSkill, isLife, questionnaireStepIndex]);
 
-    const isLastQuestionnaireStep = useMemo(() => {
-        if (isAcademic) return questionnaireStepIndex === academicSteps.length - 1;
-        if (isSkill) return questionnaireStepIndex === skillSteps.length - 1;
-        if (isLife) return questionnaireStepIndex === lifeSteps.length - 1;
-        return false;
-    }, [isAcademic, isSkill, isLife, questionnaireStepIndex]);
 
     const validateCurrentStep = (): boolean => {
         setError('');

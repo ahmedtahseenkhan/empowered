@@ -17,7 +17,7 @@ type MeResponse = {
 };
 
 const AccountSettingsPage: React.FC = () => {
-    const { user, login: refreshAuth } = useAuth();
+    const { user } = useAuth();
 
     const [me, setMe] = useState<MeResponse['user'] | null>(null);
     const [loading, setLoading] = useState(true);

@@ -450,14 +450,14 @@ const BookMentorPage: React.FC = () => {
                                 <dt className="text-gray-500">Date</dt>
                                 <dd className="font-medium text-gray-900">
                                     {firstSelectedStart
-                                        ? firstSelectedStart.toLocaleDateString(undefined, { timeZone: studentTimezone, weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+                                        ? firstSelectedStart.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
                                         : '—'}
                                 </dd>
                             </div>
                             <div className="flex justify-between py-2 border-b border-gray-100">
                                 <dt className="text-gray-500">Time</dt>
                                 <dd className="font-medium text-gray-900">
-                                    {firstSelectedStart ? formatTimeLabel(firstSelectedStart.toISOString(), studentTimezone) : '—'}
+                                    {firstSelectedStart ? formatTimeLabel(firstSelectedStart.toISOString()) : '—'}
                                 </dd>
                             </div>
                             <div className="flex justify-between py-2 border-b border-gray-100">

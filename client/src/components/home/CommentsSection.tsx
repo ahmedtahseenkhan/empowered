@@ -1,20 +1,12 @@
-import React, { useRef, useState, useEffect, useMemo } from "react";
+import { useRef, useState, useEffect, useMemo } from "react";
 import {
     comments_bg,
     comments_svg1,
     comment_1,
     comment_2,
     comment_3,
-    comment_5,
-    comment_6,
     comment_7,
-    comment_8,
-    comment_9,
-    comment_10,
     comment_11,
-    comment_12,
-    comment_13,
-    trusted_families,
 } from "../../assets";
 import CardComponent from "./CardComponent";
 
@@ -85,21 +77,6 @@ const CommentsSection = () => {
     // Typewriter effect
     useEffect(() => {
         const currentPhrase = phrases[loopIndex % phrases.length];
-        const type = () => {
-            setDisplayText((prev) => currentPhrase.substring(0, prev.length + 1));
-            if (displayText === currentPhrase) { // Fixed comparison logic
-                setTimeout(() => setIsDeleting(true), 1000); // Pause before deleting
-            }
-        };
-
-        const erase = () => {
-            setDisplayText((prev) => prev.substring(0, prev.length - 1));
-            if (displayText === "") {
-                setIsDeleting(false);
-                setLoopIndex((prev) => prev + 1);
-            }
-        };
-
         const timer = setTimeout(
             () => {
                 // Correctly handle the updating logic to avoid stuck state

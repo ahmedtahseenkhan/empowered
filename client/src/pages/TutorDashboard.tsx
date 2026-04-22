@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { Users, UserCheck, Clock, Calendar, CreditCard, CheckCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Users, UserCheck, Clock, Calendar, CreditCard, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import { Modal } from '../components/ui/Modal';

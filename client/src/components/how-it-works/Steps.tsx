@@ -1,4 +1,4 @@
-import React, { memo } from "react";
+import { memo } from "react";
 import {
     SvgStep1,
     SvgStep2,
@@ -11,10 +11,6 @@ import {
     HIW_svg_7,
 } from "../../assets";
 
-// Helper to replace next/image
-const Img = ({ src, alt, className, ...props }: any) => (
-    <img src={src} alt={alt} className={className} {...props} />
-);
 
 const steps = [
     {

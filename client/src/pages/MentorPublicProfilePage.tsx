@@ -5,9 +5,8 @@ import {
     Share2, Check, ChevronLeft, ChevronRight, Calendar, BookOpen, Zap, Video
 } from 'lucide-react';
 import { PageLayout } from '../layouts/PageLayout';
-import api from '../api/axios';
-import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
+import api from '../api/axios';
 
 type PublicTutorProfile = {
     id: string;

@@ -318,14 +318,6 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({ onBack }) => {
         // STANDARD: only 1 major allowed
         return majorCount < 1;
     })();
-    const canAddSubForCurrentMajor = (() => {
-        if (!editingItem?.mainId) return false;
-        if (tier === 'STANDARD') return subCount < 1;
-        if (tier === 'PRO') return subCount < 3;
-        // PREMIUM: check subs for THIS major
-        const subsForThisMajor = subsByMajor.get(editingItem.mainId)?.size || 0;
-        return subsForThisMajor < 3;
-    })();
 
     // Plan limit messages
     const planLimitMessage = (() => {

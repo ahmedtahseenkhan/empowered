@@ -32,20 +32,11 @@ interface UpcomingPayment {
     paymentDueDate: string;
 }
 
-interface SubscriptionInfo {
-    plan: string;
-    status: string;
-    currentPeriodEnd: string;
-    amount: number | null;
-    interval: string | null;
-    cancelAtPeriodEnd: boolean;
-}
 
 const PaymentsPage: React.FC = () => {
     const [overview, setOverview] = useState<EarningsOverview | null>(null);
     const [paymentHistory, setPaymentHistory] = useState<PaymentHistory[]>([]);
     const [upcomingPayments, setUpcomingPayments] = useState<UpcomingPayment[]>([]);
-    const [subscriptionInfo, setSubscriptionInfo] = useState<SubscriptionInfo | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [currentPage, setCurrentPage] = useState(1);
@@ -59,18 +50,16 @@ const PaymentsPage: React.FC = () => {
         try {
             setLoading(true);
             setError(null);
-            const [overviewRes, historyRes, upcomingRes, subscriptionRes] = await Promise.all([
+            const [overviewRes, historyRes, upcomingRes] = await Promise.all([
                 api.get('/payments/tutor/earnings/overview'),
                 api.get(`/payments/tutor/earnings/history?page=${currentPage}&limit=10`),
                 api.get('/payments/tutor/earnings/upcoming'),
-                api.get('/payments/tutor/subscription-info'),
             ]);
 
             setOverview(overviewRes.data || null);
             setPaymentHistory(historyRes.data?.payments || []);
             setTotalPages(historyRes.data?.pagination?.totalPages || 1);
             setUpcomingPayments(upcomingRes.data || []);
-            setSubscriptionInfo(subscriptionRes.data || null);
         } catch (error: any) {
             console.error('Error fetching payment data:', error);
             console.error('Error details:', error.response?.data || error.message);

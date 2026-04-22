@@ -15,12 +15,6 @@ type Goal =
     | 'Standardized tests'
     | 'Understand difficult concepts';
 
-const GOAL_OPTIONS: Goal[] = [
-    'Improve grades',
-    'Prepare for exams',
-    'Standardized tests',
-    'Understand difficult concepts',
-];
 
 type CategoryNode = {
     id: string;

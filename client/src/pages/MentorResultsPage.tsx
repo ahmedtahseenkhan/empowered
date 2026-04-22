@@ -3,8 +3,6 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Search, SlidersHorizontal, Star, MapPin, Users, ChevronDown, ChevronUp, BadgeCheck } from 'lucide-react';
 import { PageLayout } from '../layouts/PageLayout';
 import api from '../api/axios';
-import { Card } from '../components/ui/Card';
-import { Button } from '../components/ui/Button';
 import { MENTOR_SEARCH_AGE_OPTIONS } from '../constants/mentorSearch';
 
 type Frequency = 'WEEKLY' | 'TWICE_WEEKLY';
@@ -29,19 +27,6 @@ type PublicTutor = {
     categories: { category: { id: string; name: string } }[];
 };
 
-const StarRating: React.FC<{ rating: number; size?: 'sm' | 'md' }> = ({ rating, size = 'sm' }) => {
-    const cls = size === 'sm' ? 'w-3.5 h-3.5' : 'w-4 h-4';
-    return (
-        <span className="inline-flex items-center gap-0.5">
-            {[1, 2, 3, 4, 5].map((i) => (
-                <Star
-                    key={i}
-                    className={`${cls} ${i <= Math.round(rating) ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'}`}
-                />
-            ))}
-        </span>
-    );
-};
 
 const MentorResultsPage: React.FC = () => {
     const navigate = useNavigate();
