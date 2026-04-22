@@ -25,6 +25,9 @@ import {
     adminCreateDemoBlock,
     adminUpdateDemoBlock,
     adminDeleteDemoBlock,
+    adminListBetaApplications,
+    adminApproveBetaApplication,
+    adminRejectBetaApplication,
 } from '../controllers/adminController';
 
 const router = express.Router();
@@ -65,5 +68,9 @@ router.get('/demo-blocks', adminListDemoBlocks);
 router.post('/demo-blocks', adminCreateDemoBlock);
 router.put('/demo-blocks/:id', adminUpdateDemoBlock);
 router.delete('/demo-blocks/:id', adminDeleteDemoBlock);
+
+router.get('/beta-applications', adminListBetaApplications);
+router.put('/beta-applications/:id/approve', adminApproveBetaApplication);
+router.put('/beta-applications/:id/reject', adminRejectBetaApplication);
 
 export default router;

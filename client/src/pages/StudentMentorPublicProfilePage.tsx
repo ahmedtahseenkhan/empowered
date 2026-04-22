@@ -88,6 +88,11 @@ const StudentMentorPublicProfilePage: React.FC = () => {
     const [freeEligible, setFreeEligible] = useState<boolean>(true);
 
     const [profileTab, setProfileTab] = useState<'EXPERIENCE' | 'EDUCATION' | 'CERTIFICATIONS'>('EXPERIENCE');
+    const [mentorCourses, setMentorCourses] = useState<Array<{
+        id: string; title: string; description: string | null; duration: string | null;
+        category: string | null; thumbnail_url: string | null; price: string;
+        _count: { purchases: number };
+    }>>([]);
 
     const studentTimezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', []);
 
@@ -106,6 +111,13 @@ const StudentMentorPublicProfilePage: React.FC = () => {
         };
         fetchMentor();
     }, [id]);
+
+    useEffect(() => {
+        if (!mentor?.id) return;
+        api.get(`/courses/tutor/${mentor.id}/public`)
+            .then(res => setMentorCourses(res.data || []))
+            .catch(() => {});
+    }, [mentor?.id]);
 
     useEffect(() => {
         const fetchEligibility = async () => {
@@ -960,6 +972,42 @@ const StudentMentorPublicProfilePage: React.FC = () => {
                                 )}
                             </div>
                         </div>
+
+                        {/* Courses offered by this mentor */}
+                        {mentorCourses.length > 0 && (
+                            <div className="mt-8">
+                                <h2 className="text-2xl font-bold text-gray-900 mb-5">Courses by this Mentor</h2>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                    {mentorCourses.map(course => (
+                                        <div
+                                            key={course.id}
+                                            onClick={() => navigate(`/student/courses/${course.id}`)}
+                                            className="bg-white rounded-2xl shadow-md hover:shadow-xl transition-all duration-200 cursor-pointer overflow-hidden flex group"
+                                        >
+                                            <div className="w-28 h-28 shrink-0 bg-gradient-to-br from-purple-500 to-purple-900 flex items-center justify-center overflow-hidden">
+                                                {course.thumbnail_url ? (
+                                                    <img src={course.thumbnail_url} alt={course.title} className="w-full h-full object-cover" />
+                                                ) : (
+                                                    <span className="text-3xl">🎓</span>
+                                                )}
+                                            </div>
+                                            <div className="p-4 flex flex-col justify-between flex-1">
+                                                <div>
+                                                    {course.category && (
+                                                        <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium">{course.category}</span>
+                                                    )}
+                                                    <h3 className="font-bold text-gray-900 text-sm mt-1 leading-snug line-clamp-2">{course.title}</h3>
+                                                </div>
+                                                <div className="flex items-center justify-between mt-2">
+                                                    <span className="text-[#4A1D96] font-extrabold">${Number(course.price).toFixed(2)}</span>
+                                                    <span className="text-xs text-purple-700 font-semibold group-hover:underline">View →</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </>
                 )}
             </div>

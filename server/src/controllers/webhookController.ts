@@ -371,6 +371,18 @@ export async function handleCheckoutSessionCompleted(session: any) {
                 },
             });
         }
+    } else if (metadata.type === 'course_purchase') {
+        const { courseId, studentId } = metadata as { courseId?: string; studentId?: string };
+        if (!courseId || !studentId) {
+            console.error('[Stripe Webhook] Missing courseId or studentId for course_purchase');
+            return;
+        }
+        const amountTotal = session.amount_total as number | null;
+        const amountPaid = amountTotal ? amountTotal / 100 : 0;
+        const stripePaymentId = (session.payment_intent as string) || session.id;
+
+        const { createCoursePurchaseFromWebhook } = await import('./courseController');
+        await createCoursePurchaseFromWebhook({ courseId, studentId, stripePaymentId, amountPaid });
     }
 }
 

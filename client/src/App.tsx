@@ -48,6 +48,8 @@ import MentorPublicProfilePage from './pages/MentorPublicProfilePage';
 import BookMentorPage from './pages/BookMentorPage';
 import BookingConfirmationPage from './pages/BookingConfirmationPage';
 import StudentCoursesPage from './pages/StudentCoursesPage';
+import StudentCourseMarketplacePage from './pages/StudentCourseMarketplacePage';
+import StudentCourseDetailPage from './pages/StudentCourseDetailPage';
 import StudentMentorsPage from './pages/StudentMentorsPage';
 import MentorNotesPage from './pages/MentorNotesPage';
 import StudentMentorResultsPage from './pages/StudentMentorResultsPage';
@@ -165,6 +167,34 @@ const GuestRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
+/** Restricts a route to PREMIUM-tier tutors only. Must be used inside ProtectedRoute. */
+const PremiumRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user } = useAuth();
+  const [tier, setTier] = useState<string | null>(null);
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    api.get('/payments/mentor/status')
+      .then(res => setTier(res.data?.tier ?? null))
+      .catch(() => setTier(null))
+      .finally(() => setChecking(false));
+  }, [user?.id]);
+
+  if (checking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-16 h-16 border-4 border-primary-200 border-t-primary-900 rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  if (tier !== 'PREMIUM') {
+    return <Navigate to="/subscription-settings?upgrade=ai-assist" replace />;
+  }
+
+  return <>{children}</>;
+};
+
 function App() {
   return (
     <AuthProvider>
@@ -225,6 +255,22 @@ function App() {
             element={
               <ProtectedRoute>
                 <StudentCoursesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/student/courses/marketplace"
+            element={
+              <ProtectedRoute>
+                <StudentCourseMarketplacePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/student/courses/:id"
+            element={
+              <ProtectedRoute>
+                <StudentCourseDetailPage />
               </ProtectedRoute>
             }
           />
@@ -416,7 +462,9 @@ function App() {
             path="/tutor/ai-assist"
             element={
               <ProtectedRoute>
-                <TutorAIAssistPage />
+                <PremiumRoute>
+                  <TutorAIAssistPage />
+                </PremiumRoute>
               </ProtectedRoute>
             }
           />

@@ -1,9 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Upload, Link as LinkIcon } from 'lucide-react';
+import { ArrowLeft, Image, Link as LinkIcon } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import api from '../api/axios';
+
+const COURSE_CATEGORIES = [
+    'Mathematics', 'Science', 'English', 'History', 'Geography',
+    'Physics', 'Chemistry', 'Biology', 'Computer Science', 'Programming',
+    'Art & Design', 'Music', 'Languages', 'Business', 'Economics',
+    'Psychology', 'Philosophy', 'Test Prep', 'Other',
+];
 
 const CourseCreatePage: React.FC = () => {
     const navigate = useNavigate();
@@ -16,6 +23,8 @@ const CourseCreatePage: React.FC = () => {
         duration: '',
         learning_objectives: '',
         target_audience: '',
+        thumbnail_url: '',
+        category: '',
         course_url: '',
         preview_url: '',
         price: '',
@@ -23,9 +32,7 @@ const CourseCreatePage: React.FC = () => {
     });
 
     useEffect(() => {
-        if (isEditMode) {
-            fetchCourse();
-        }
+        if (isEditMode) fetchCourse();
     }, [id]);
 
     const fetchCourse = async () => {
@@ -38,6 +45,8 @@ const CourseCreatePage: React.FC = () => {
                 duration: course.duration || '',
                 learning_objectives: course.learning_objectives || '',
                 target_audience: course.target_audience || '',
+                thumbnail_url: course.thumbnail_url || '',
+                category: course.category || '',
                 course_url: course.course_url || '',
                 preview_url: course.preview_url || '',
                 price: course.price ? String(course.price) : '',
@@ -58,20 +67,19 @@ const CourseCreatePage: React.FC = () => {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
-
         try {
             const payload = {
                 ...formData,
                 price: parseFloat(formData.price),
                 preview_url: formData.preview_url || undefined,
+                thumbnail_url: formData.thumbnail_url || undefined,
+                category: formData.category || undefined,
             };
 
             if (isEditMode) {
                 await api.put(`/courses/${id}`, payload);
-                alert('Course updated successfully!');
             } else {
                 await api.post('/courses', payload);
-                alert('Course created successfully!');
             }
             navigate('/courses');
         } catch (err: any) {
@@ -82,214 +90,211 @@ const CourseCreatePage: React.FC = () => {
         }
     };
 
+    const inputClass = 'w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4A1D96]';
+
     return (
         <DashboardLayout>
             <div className="w-full">
-                {/* Header */}
-                <div className="mb-8">
-                    <Link to="/courses" className="inline-flex items-center text-[#4A1D96] hover:underline mb-4">
-                        <ArrowLeft size={20} className="mr-2" />
-                        Back to My Courses
-                    </Link>
-                    <div className="bg-gradient-to-r from-purple-50 to-purple-100 p-8 rounded-2xl text-center mb-6">
-                        <h1 className="text-4xl font-bold text-[#4A1D96] mb-2">
-                            {isEditMode ? 'Edit Course' : 'Add a new Course'}
-                        </h1>
-                        <p className="text-purple-800">
-                            {isEditMode
-                                ? 'Update your course details and save changes'
-                                : 'This could be start of something Magical. Add a great course and reach out to your Pupils'
-                            }
-                        </p>
-                    </div>
+                <Link to="/courses" className="inline-flex items-center text-[#4A1D96] hover:underline mb-6">
+                    <ArrowLeft size={18} className="mr-2" />
+                    Back to My Courses
+                </Link>
+
+                <div className="bg-gradient-to-r from-purple-50 to-purple-100 p-8 rounded-2xl text-center mb-8">
+                    <h1 className="text-3xl font-bold text-[#4A1D96] mb-1">
+                        {isEditMode ? 'Edit Course' : 'Create a New Course'}
+                    </h1>
+                    <p className="text-purple-700 text-sm">
+                        {isEditMode
+                            ? 'Update your course details below'
+                            : 'Fill in the details below to publish your course to students'}
+                    </p>
                 </div>
 
-                {/* Form */}
                 <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-lg p-8 space-y-6">
-                    {/* Title Image & Intro Video */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {/* Title Image */}
-                        <div>
-                            <label className="block text-sm font-semibold text-gray-900 mb-2">
-                                Add Title Image
-                            </label>
-                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-[#4A1D96] transition-colors">
-                                <Upload className="mx-auto text-gray-400 mb-2" size={40} />
-                                <p className="text-sm text-gray-600 mb-2">Upload a File</p>
-                                <p className="text-xs text-gray-500">JPG, PNG</p>
-                                <input
-                                    type="text"
-                                    name="preview_url"
-                                    placeholder="Or paste image URL"
-                                    value={formData.preview_url}
-                                    onChange={handleChange}
-                                    className="mt-3 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4A1D96]"
-                                />
-                            </div>
-                        </div>
 
-                        {/* Intro Video */}
+                    {/* Thumbnail + Preview video */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
                             <label className="block text-sm font-semibold text-gray-900 mb-2">
-                                Add an Introductory Video
+                                Course Thumbnail URL
                             </label>
-                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-[#4A1D96] transition-colors">
-                                <LinkIcon className="mx-auto text-gray-400 mb-2" size={40} />
-                                <p className="text-sm text-gray-600 mb-2">Paste Video Link</p>
-                                <p className="text-xs text-gray-500">Only .mp4, .mov, .avi, .flv, .mkv formats are accessible</p>
+                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-[#4A1D96] transition-colors">
+                                <Image className="mx-auto text-gray-400 mb-2" size={32} />
+                                <p className="text-xs text-gray-500 text-center mb-2">Paste an image URL (JPG, PNG)</p>
                                 <input
                                     type="url"
-                                    name="course_url"
-                                    placeholder="YouTube, Vimeo, Google Drive URL"
-                                    value={formData.course_url}
+                                    name="thumbnail_url"
+                                    placeholder="https://example.com/image.jpg"
+                                    value={formData.thumbnail_url}
                                     onChange={handleChange}
-                                    required
-                                    className="mt-3 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4A1D96]"
+                                    className={inputClass}
+                                />
+                                {formData.thumbnail_url && (
+                                    <img
+                                        src={formData.thumbnail_url}
+                                        alt="Thumbnail preview"
+                                        className="mt-3 w-full h-28 object-cover rounded-lg"
+                                        onError={(e) => (e.currentTarget.style.display = 'none')}
+                                    />
+                                )}
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-semibold text-gray-900 mb-2">
+                                Preview / Intro Video URL
+                            </label>
+                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-[#4A1D96] transition-colors">
+                                <LinkIcon className="mx-auto text-gray-400 mb-2" size={32} />
+                                <p className="text-xs text-gray-500 text-center mb-2">YouTube, Vimeo short preview</p>
+                                <input
+                                    type="url"
+                                    name="preview_url"
+                                    placeholder="https://youtube.com/watch?v=..."
+                                    value={formData.preview_url}
+                                    onChange={handleChange}
+                                    className={inputClass}
                                 />
                             </div>
                         </div>
-                    </div>
-
-                    {/* Info Notice */}
-                    <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg flex items-start">
-                        <div className="flex-shrink-0 mr-3">
-                            <svg className="w-5 h-5 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                            </svg>
-                        </div>
-                        <p className="text-sm text-blue-800">
-                            Provide a course title that accurately defines what your course is about
-                        </p>
                     </div>
 
                     {/* Title */}
                     <div>
                         <label className="block text-sm font-semibold text-gray-900 mb-2">
-                            Title <span className="text-red-500">*</span>
+                            Course Title <span className="text-red-500">*</span>
                         </label>
                         <input
                             type="text"
                             name="title"
-                            placeholder="Introduction to Figma..."
+                            placeholder="e.g., Introduction to Calculus"
                             value={formData.title}
                             onChange={handleChange}
                             required
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4A1D96]"
+                            className={inputClass}
                         />
                     </div>
 
-                    {/* Level */}
-                    <div>
-                        <label className="block text-sm font-semibold text-gray-900 mb-2">
-                            Levels
-                        </label>
-                        <select
-                            name="target_audience"
-                            value={formData.target_audience}
-                            onChange={handleChange}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4A1D96]"
-                        >
-                            <option value="">Select Level</option>
-                            <option value="Beginner">Beginner</option>
-                            <option value="Intermediate">Intermediate</option>
-                            <option value="Advanced">Advanced</option>
-                            <option value="All Levels">All Levels</option>
-                        </select>
+                    {/* Category + Level in a row */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label className="block text-sm font-semibold text-gray-900 mb-2">Category</label>
+                            <select name="category" value={formData.category} onChange={handleChange} className={inputClass}>
+                                <option value="">Select category</option>
+                                {COURSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-semibold text-gray-900 mb-2">Level</label>
+                            <select name="target_audience" value={formData.target_audience} onChange={handleChange} className={inputClass}>
+                                <option value="">Select level</option>
+                                <option value="Beginner">Beginner</option>
+                                <option value="Intermediate">Intermediate</option>
+                                <option value="Advanced">Advanced</option>
+                                <option value="All Levels">All Levels</option>
+                            </select>
+                        </div>
                     </div>
 
                     {/* Duration */}
                     <div>
-                        <label className="block text-sm font-semibold text-gray-900 mb-2">
-                            Duration
-                        </label>
+                        <label className="block text-sm font-semibold text-gray-900 mb-2">Duration</label>
                         <input
                             type="text"
                             name="duration"
                             placeholder="e.g., 4 hours, 10 lessons"
                             value={formData.duration}
                             onChange={handleChange}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4A1D96]"
+                            className={inputClass}
                         />
                     </div>
 
                     {/* Description */}
                     <div>
-                        <label className="block text-sm font-semibold text-gray-900 mb-2">
-                            Description
-                        </label>
+                        <label className="block text-sm font-semibold text-gray-900 mb-2">Description</label>
                         <textarea
                             name="description"
-                            placeholder="Write your review here"
+                            placeholder="What is this course about? Who is it for? What will students achieve?"
                             value={formData.description}
                             onChange={handleChange}
-                            rows={6}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4A1D96]"
+                            rows={5}
+                            className={inputClass}
                         />
                     </div>
 
                     {/* Learning Objectives */}
                     <div>
-                        <label className="block text-sm font-semibold text-gray-900 mb-2">
-                            Learning Objectives
-                        </label>
+                        <label className="block text-sm font-semibold text-gray-900 mb-2">Learning Objectives</label>
                         <textarea
                             name="learning_objectives"
-                            placeholder="What will students learn from this course?"
+                            placeholder="List what students will learn (one per line or comma separated)"
                             value={formData.learning_objectives}
                             onChange={handleChange}
                             rows={4}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4A1D96]"
+                            className={inputClass}
                         />
                     </div>
 
-                    {/* Price */}
+                    {/* Course URL (required) */}
                     <div>
                         <label className="block text-sm font-semibold text-gray-900 mb-2">
-                            Price <span className="text-red-500">*</span>
+                            Course Content URL <span className="text-red-500">*</span>
                         </label>
-                        <div className="relative">
-                            <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-500">$</span>
-                            <input
-                                type="number"
-                                name="price"
-                                placeholder="0.00"
-                                value={formData.price}
-                                onChange={handleChange}
-                                required
-                                min="0"
-                                step="0.01"
-                                className="w-full pl-8 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4A1D96]"
-                            />
+                        <p className="text-xs text-gray-500 mb-2">
+                            Link to the full course content — YouTube playlist, Vimeo, Google Drive, etc.
+                        </p>
+                        <input
+                            type="url"
+                            name="course_url"
+                            placeholder="https://youtube.com/playlist?list=..."
+                            value={formData.course_url}
+                            onChange={handleChange}
+                            required
+                            className={inputClass}
+                        />
+                    </div>
+
+                    {/* Price + Status */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label className="block text-sm font-semibold text-gray-900 mb-2">
+                                Price (USD) <span className="text-red-500">*</span>
+                            </label>
+                            <div className="relative">
+                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-semibold">$</span>
+                                <input
+                                    type="number"
+                                    name="price"
+                                    placeholder="0.00"
+                                    value={formData.price}
+                                    onChange={handleChange}
+                                    required
+                                    min="1"
+                                    step="0.01"
+                                    className={`${inputClass} pl-8`}
+                                />
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-semibold text-gray-900 mb-2">Status</label>
+                            <select name="status" value={formData.status} onChange={handleChange} className={inputClass}>
+                                <option value="DRAFT">Draft — not visible to students</option>
+                                <option value="PUBLISHED">Published — visible & purchasable</option>
+                            </select>
                         </div>
                     </div>
 
-                    {/* Status */}
-                    <div>
-                        <label className="block text-sm font-semibold text-gray-900 mb-2">
-                            Status
-                        </label>
-                        <select
-                            name="status"
-                            value={formData.status}
-                            onChange={handleChange}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4A1D96]"
-                        >
-                            <option value="DRAFT">Draft</option>
-                            <option value="PUBLISHED">Published</option>
-                        </select>
-                    </div>
-
-                    {/* Submit Button */}
-                    <div className="flex justify-end pt-4">
+                    <div className="flex justify-end pt-2 gap-3">
+                        <Button type="button" variant="outline" onClick={() => navigate('/courses')}>Cancel</Button>
                         <Button
                             type="submit"
                             disabled={loading}
                             className="bg-[#4A1D96] text-white rounded-full px-8 py-3 font-semibold"
                         >
                             {loading
-                                ? (isEditMode ? 'Updating...' : 'Creating...')
-                                : (isEditMode ? 'Update Course' : 'Confirm')
-                            }
+                                ? (isEditMode ? 'Saving...' : 'Creating...')
+                                : (isEditMode ? 'Save Changes' : 'Create Course')}
                         </Button>
                     </div>
                 </form>

@@ -214,17 +214,44 @@ const TutorRegisterPage: React.FC = () => {
 
 
 
-    // STEP 4: Plan Selection -> Activate 2-month trial (no Stripe; trial without payment)
+    // STEP 4: Plan Selection
+    // Beta-approved users get a 2-month free trial.
+    // Everyone else is redirected to Stripe to pay for their chosen plan.
     const handlePlanSubmit = async () => {
         setLoading(true);
         setError('');
         try {
+            // Try beta trial first
             await api.put('/tutor/me/tier', { tier: formData.plan });
             await api.post('/payments/mentor/subscription/activate-trial', { tier: formData.plan });
             setCurrentStep(5);
         } catch (err: any) {
-            console.error(err);
-            setError(err.response?.data?.error || 'Failed to activate trial.');
+            if (err.response?.status === 403) {
+                // Not a beta user — redirect to Stripe for paid subscription
+                try {
+                    const selectedPlan = plans.find(p => p.id === formData.plan);
+                    const priceId = selectedPlan?.priceId;
+                    if (!priceId) {
+                        setError('Could not find pricing for the selected plan. Please try again.');
+                        return;
+                    }
+                    const res = await api.post('/payments/mentor/subscription', {
+                        priceId,
+                        tier: formData.plan,
+                        successUrl: `${window.location.origin}/dashboard`,
+                        cancelUrl: window.location.href,
+                    });
+                    if (res.data?.url) {
+                        window.location.href = res.data.url;
+                    } else {
+                        setError('Failed to start checkout. Please try again.');
+                    }
+                } catch (stripeErr: any) {
+                    setError(stripeErr.response?.data?.error || 'Failed to start checkout. Please try again.');
+                }
+            } else {
+                setError(err.response?.data?.error || 'Failed to activate plan.');
+            }
         } finally {
             setLoading(false);
         }

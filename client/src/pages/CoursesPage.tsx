@@ -11,6 +11,8 @@ interface Course {
     description: string | null;
     price: number;
     status: 'DRAFT' | 'PUBLISHED';
+    category: string | null;
+    thumbnail_url: string | null;
     created_at: string;
     _count: {
         purchases: number;
@@ -173,22 +175,29 @@ const CoursesPage: React.FC = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {filteredCourses.map((course) => (
                             <div key={course.id} className="bg-white rounded-2xl shadow-md hover:shadow-xl transition-shadow overflow-hidden">
-                                {/* Course Preview */}
-                                <div className="h-48 bg-gradient-to-br from-purple-600 to-purple-900 flex items-center justify-center">
-                                    <span className="text-6xl">🎓</span>
+                                {/* Course Thumbnail */}
+                                <div className="h-48 bg-gradient-to-br from-purple-600 to-purple-900 flex items-center justify-center overflow-hidden">
+                                    {course.thumbnail_url ? (
+                                        <img src={course.thumbnail_url} alt={course.title} className="w-full h-full object-cover" />
+                                    ) : (
+                                        <span className="text-6xl">🎓</span>
+                                    )}
                                 </div>
 
                                 {/* Course Info */}
                                 <div className="p-6">
-                                    <div className="flex items-start justify-between mb-3">
-                                        <h3 className="text-xl font-bold text-gray-900 flex-1">{course.title}</h3>
-                                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${course.status === 'PUBLISHED'
+                                    <div className="flex items-start justify-between mb-2">
+                                        <h3 className="text-lg font-bold text-gray-900 flex-1 leading-snug">{course.title}</h3>
+                                        <span className={`ml-2 shrink-0 px-3 py-1 rounded-full text-xs font-semibold ${course.status === 'PUBLISHED'
                                             ? 'bg-green-100 text-green-800'
                                             : 'bg-gray-100 text-gray-800'
                                             }`}>
                                             {course.status}
                                         </span>
                                     </div>
+                                    {course.category && (
+                                        <span className="inline-block text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full mb-2">{course.category}</span>
+                                    )}
 
                                     <p className="text-gray-600 text-sm mb-4 line-clamp-2">
                                         {course.description || 'No description'}

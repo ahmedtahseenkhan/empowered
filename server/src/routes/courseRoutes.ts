@@ -9,10 +9,17 @@ import {
     toggleCourseStatus,
     getCourseSalesStats,
     getStudentCourses,
-    purchaseCourse
+    purchaseCourse,
+    getMarketplaceCourses,
+    createCourseCheckout,
+    getPublicTutorCourses,
 } from '../controllers/courseController';
 
 const router = Router();
+
+// Public routes (no auth needed — must come before /:id to avoid conflicts)
+router.get('/marketplace', getMarketplaceCourses);
+router.get('/tutor/:tutorId/public', getPublicTutorCourses);
 
 // Tutor routes (requires authentication)
 router.get('/my-courses', authenticateToken, getMyCourses);
@@ -25,8 +32,9 @@ router.patch('/:id/status', authenticateToken, toggleCourseStatus);
 // Student routes
 router.get('/student/purchased', authenticateToken, getStudentCourses);
 router.post('/:id/purchase', authenticateToken, purchaseCourse);
+router.post('/:id/checkout', authenticateToken, createCourseCheckout);
 
-// Public routes
+// Public course detail (must be last to avoid catching named segments)
 router.get('/:id', getCourseById);
 
 export default router;

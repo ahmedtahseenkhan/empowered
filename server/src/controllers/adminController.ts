@@ -760,3 +760,71 @@ export const adminDeleteDemoBlock = async (req: AuthRequest, res: Response) => {
         return res.status(500).json({ error: 'Server error' });
     }
 };
+
+// ── Beta Applications ────────────────────────────────────────────────────────
+
+export const adminListBetaApplications = async (req: AuthRequest, res: Response) => {
+    try {
+        const status = req.query.status as string | undefined;
+        const where = status ? { status: status as any } : {};
+        const applications = await prisma.betaApplication.findMany({
+            where,
+            orderBy: { created_at: 'desc' },
+        });
+        return res.json({ applications });
+    } catch (error) {
+        console.error('adminListBetaApplications error:', error);
+        return res.status(500).json({ error: 'Server error' });
+    }
+};
+
+export const adminApproveBetaApplication = async (req: AuthRequest, res: Response) => {
+    try {
+        const { id } = req.params;
+        const application = await prisma.betaApplication.findUnique({ where: { id } });
+        if (!application) return res.status(404).json({ error: 'Application not found' });
+        if (application.status !== 'PENDING') {
+            return res.status(400).json({ error: `Application is already ${application.status.toLowerCase()}` });
+        }
+
+        const updated = await prisma.betaApplication.update({
+            where: { id },
+            data: { status: 'APPROVED', actioned_at: new Date() },
+        });
+
+        try {
+            await emailService.sendBetaApplicationAccepted({
+                full_name: application.full_name,
+                email: application.email,
+            });
+        } catch (e) {
+            console.error('Failed to send beta acceptance email:', e);
+        }
+
+        return res.json({ application: updated });
+    } catch (error) {
+        console.error('adminApproveBetaApplication error:', error);
+        return res.status(500).json({ error: 'Server error' });
+    }
+};
+
+export const adminRejectBetaApplication = async (req: AuthRequest, res: Response) => {
+    try {
+        const { id } = req.params;
+        const application = await prisma.betaApplication.findUnique({ where: { id } });
+        if (!application) return res.status(404).json({ error: 'Application not found' });
+        if (application.status !== 'PENDING') {
+            return res.status(400).json({ error: `Application is already ${application.status.toLowerCase()}` });
+        }
+
+        const updated = await prisma.betaApplication.update({
+            where: { id },
+            data: { status: 'REJECTED', actioned_at: new Date() },
+        });
+
+        return res.json({ application: updated });
+    } catch (error) {
+        console.error('adminRejectBetaApplication error:', error);
+        return res.status(500).json({ error: 'Server error' });
+    }
+};

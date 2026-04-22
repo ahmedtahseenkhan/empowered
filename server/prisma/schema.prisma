@@ -459,6 +459,10 @@ model Course {
   learning_objectives String? @db.Text
   target_audience     String?
 
+  // Media
+  thumbnail_url String? // Course thumbnail image URL
+  category      String? // e.g., "Mathematics", "Science"
+
   // External Hosting
   course_url  String // YouTube, Vimeo, Google Drive link
   preview_url String? // Preview video/image URL
@@ -745,19 +749,28 @@ model AdminDemoTimeBlock {
   @@index([start_time, end_time])
 }
 
+enum BetaApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model BetaApplication {
-  id                   String   @id @default(uuid())
+  id                   String                @id @default(uuid())
   full_name            String
   email                String
   phone_number         String
-  service_description  String   @db.Text
+  service_description  String                @db.Text
   category             String
   category_other       String?
   session_management   String[]
   has_active_clients   Boolean
-  biggest_challenge    String   @db.Text
+  biggest_challenge    String                @db.Text
   profile_link         String?
-  created_at           DateTime @default(now())
+  status               BetaApplicationStatus @default(PENDING)
+  actioned_at          DateTime?
+  created_at           DateTime              @default(now())
 
   @@index([email])
+  @@index([status])
 }

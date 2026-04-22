@@ -176,8 +176,20 @@ export const activateMentorTrial = async (req: Request, res: Response) => {
 
         const tutor = await prisma.tutorProfile.findUnique({
             where: { user_id: userId },
+            include: { user: { select: { email: true } } },
         });
         if (!tutor) return res.status(404).json({ error: 'Tutor profile not found' });
+
+        // Only approved beta applicants may activate the trial
+        const betaApproval = await prisma.betaApplication.findFirst({
+            where: { email: tutor.user.email, status: 'APPROVED' },
+            select: { id: true },
+        });
+        if (!betaApproval) {
+            return res.status(403).json({
+                error: 'Beta access only. Apply at emplearnings.com/beta and wait for approval before activating your account.',
+            });
+        }
 
         const hasTrialHistory = !!tutor.subscription_end_date
             || !!tutor.stripe_subscription_id

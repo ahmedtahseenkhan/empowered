@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { Send, Bot, User as UserIcon, Sparkles } from 'lucide-react';
 import { Button } from '../components/ui/Button';
+import api from '../api/axios';
+import ReactMarkdown from 'react-markdown';
 
 interface Message {
     id: string;
@@ -10,14 +12,26 @@ interface Message {
     timestamp: Date;
 }
 
+interface ApiMessage {
+    role: 'user' | 'assistant';
+    content: string;
+}
+
+const QUICK_PROMPTS = [
+    'Write a lecture on photosynthesis for high school students',
+    'Give me key points for teaching the quadratic formula',
+    'Create a lesson plan for introducing fractions to grade 4',
+    'Write quiz questions on World War II causes',
+];
+
 const TutorAIAssistPage: React.FC = () => {
     const [messages, setMessages] = useState<Message[]>([
         {
             id: '1',
-            text: "Hello! I'm your AI Assistant. I can help you create lesson plans, generate quiz questions, or suggest teaching strategies. How can I help you today?",
+            text: "Hello! I'm your AI Assistant. I can help you write full lectures, generate key points, create lesson plans, or suggest teaching strategies. How can I help you today?",
             sender: 'ai',
-            timestamp: new Date()
-        }
+            timestamp: new Date(),
+        },
     ]);
     const [inputValue, setInputValue] = useState('');
     const [isTyping, setIsTyping] = useState(false);
@@ -31,32 +45,62 @@ const TutorAIAssistPage: React.FC = () => {
         scrollToBottom();
     }, [messages]);
 
-    const handleSendMessage = async () => {
-        if (!inputValue.trim()) return;
+    const buildApiHistory = (currentMessages: Message[]): ApiMessage[] => {
+        // Skip the initial greeting, then map to DeepSeek role format
+        return currentMessages.slice(1).map((m) => ({
+            role: m.sender === 'user' ? 'user' : 'assistant',
+            content: m.text,
+        }));
+    };
 
-        const newUserMessage: Message = {
+    const sendMessage = async (text: string) => {
+        if (!text.trim() || isTyping) return;
+
+        const userMessage: Message = {
             id: Date.now().toString(),
-            text: inputValue,
+            text,
             sender: 'user',
-            timestamp: new Date()
+            timestamp: new Date(),
         };
 
-        setMessages(prev => [...prev, newUserMessage]);
+        const updatedMessages = [...messages, userMessage];
+        setMessages(updatedMessages);
         setInputValue('');
         setIsTyping(true);
 
-        // Simulate AI response delay
-        setTimeout(() => {
-            const aiResponse: Message = {
-                id: (Date.now() + 1).toString(),
-                text: "That's a great question! As an AI assistant, I can help you structure that. Here is a sample outline based on your request...",
-                sender: 'ai',
-                timestamp: new Date()
-            };
-            setMessages(prev => [...prev, aiResponse]);
+        try {
+            const history = buildApiHistory(updatedMessages);
+            const { data } = await api.post<{ reply: string }>('/ai/chat', {
+                messages: history,
+            });
+
+            setMessages((prev) => [
+                ...prev,
+                {
+                    id: (Date.now() + 1).toString(),
+                    text: data.reply,
+                    sender: 'ai',
+                    timestamp: new Date(),
+                },
+            ]);
+        } catch (err: any) {
+            const errorMsg =
+                err?.response?.data?.error || 'Something went wrong. Please try again.';
+            setMessages((prev) => [
+                ...prev,
+                {
+                    id: (Date.now() + 1).toString(),
+                    text: `⚠️ ${errorMsg}`,
+                    sender: 'ai',
+                    timestamp: new Date(),
+                },
+            ]);
+        } finally {
             setIsTyping(false);
-        }, 1500);
+        }
     };
+
+    const handleSendMessage = () => sendMessage(inputValue);
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -75,7 +119,7 @@ const TutorAIAssistPage: React.FC = () => {
                             <Sparkles className="w-5 h-5" />
                         </div>
                         <div>
-                            <h1 className="text-lg font-bold text-gray-900">AI  Assistant</h1>
+                            <h1 className="text-lg font-bold text-gray-900">AI Assistant</h1>
                             <p className="text-xs text-green-600 font-medium flex items-center gap-1">
                                 <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
                                 Online & Ready
@@ -94,23 +138,54 @@ const TutorAIAssistPage: React.FC = () => {
                             key={msg.id}
                             className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
                         >
-                            <div className={`flex max-w-[80%] items-start gap-3 ${msg.sender === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm ${msg.sender === 'user' ? 'bg-gray-200 text-gray-600' : 'bg-primary-100 text-primary-600'
-                                    }`}>
-                                    {msg.sender === 'user' ? <UserIcon className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
+                            <div
+                                className={`flex max-w-[80%] items-start gap-3 ${
+                                    msg.sender === 'user' ? 'flex-row-reverse' : 'flex-row'
+                                }`}
+                            >
+                                <div
+                                    className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm ${
+                                        msg.sender === 'user'
+                                            ? 'bg-gray-200 text-gray-600'
+                                            : 'bg-primary-100 text-primary-600'
+                                    }`}
+                                >
+                                    {msg.sender === 'user' ? (
+                                        <UserIcon className="w-4 h-4" />
+                                    ) : (
+                                        <Bot className="w-4 h-4" />
+                                    )}
                                 </div>
-                                <div className={`p-4 rounded-2xl shadow-sm text-sm leading-relaxed ${msg.sender === 'user'
-                                    ? 'bg-primary-600 text-white rounded-tr-none'
-                                    : 'bg-white text-gray-800 border border-gray-100 rounded-tl-none'
-                                    }`}>
-                                    {msg.text}
-                                    <div className={`text-[10px] mt-2 opacity-70 ${msg.sender === 'user' ? 'text-primary-100' : 'text-gray-400'}`}>
-                                        {msg.timestamp.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: true })}
+                                <div
+                                    className={`p-4 rounded-2xl shadow-sm text-sm leading-relaxed ${
+                                        msg.sender === 'user'
+                                            ? 'bg-primary-600 text-white rounded-tr-none'
+                                            : 'bg-white text-gray-800 border border-gray-100 rounded-tl-none'
+                                    }`}
+                                >
+                                    {msg.sender === 'ai' ? (
+                                        <div className="prose prose-sm max-w-none prose-headings:text-gray-900 prose-strong:text-gray-900">
+                                            <ReactMarkdown>{msg.text}</ReactMarkdown>
+                                        </div>
+                                    ) : (
+                                        msg.text
+                                    )}
+                                    <div
+                                        className={`text-[10px] mt-2 opacity-70 ${
+                                            msg.sender === 'user' ? 'text-primary-100' : 'text-gray-400'
+                                        }`}
+                                    >
+                                        {msg.timestamp.toLocaleTimeString(undefined, {
+                                            hour: '2-digit',
+                                            minute: '2-digit',
+                                            hour12: true,
+                                        })}
                                     </div>
                                 </div>
                             </div>
                         </div>
                     ))}
+
                     {isTyping && (
                         <div className="flex justify-start">
                             <div className="bg-white border border-gray-100 p-4 rounded-2xl rounded-tl-none shadow-sm flex items-center gap-2">
@@ -120,8 +195,24 @@ const TutorAIAssistPage: React.FC = () => {
                             </div>
                         </div>
                     )}
+
                     <div ref={messagesEndRef} />
                 </div>
+
+                {/* Quick Prompts — show only when just the greeting is visible */}
+                {messages.length === 1 && (
+                    <div className="px-6 pb-3 flex flex-wrap gap-2">
+                        {QUICK_PROMPTS.map((prompt) => (
+                            <button
+                                key={prompt}
+                                onClick={() => sendMessage(prompt)}
+                                className="text-xs bg-gray-50 border border-gray-200 text-gray-600 rounded-full px-3 py-1.5 hover:bg-primary-50 hover:border-primary-300 hover:text-primary-700 transition-colors"
+                            >
+                                {prompt}
+                            </button>
+                        ))}
+                    </div>
+                )}
 
                 {/* Input Area */}
                 <div className="p-4 bg-white border-t border-gray-100">
@@ -131,14 +222,17 @@ const TutorAIAssistPage: React.FC = () => {
                             value={inputValue}
                             onChange={(e) => setInputValue(e.target.value)}
                             onKeyDown={handleKeyDown}
-                            placeholder="Ask me to create a lesson plan..."
+                            placeholder="Ask me to write a lecture, key points, lesson plan..."
                             className="flex-1 p-4 pr-12 text-sm text-gray-900 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all placeholder:text-gray-400"
                         />
                         <Button
                             onClick={handleSendMessage}
                             disabled={!inputValue.trim() || isTyping}
-                            className={`absolute right-2 p-2 h-auto rounded-lg transition-all ${!inputValue.trim() ? 'bg-gray-200 text-gray-400 cursor-not-allowed hover:bg-gray-200' : 'bg-primary-600 hover:bg-primary-700 text-white shadow-md'
-                                }`}
+                            className={`absolute right-2 p-2 h-auto rounded-lg transition-all ${
+                                !inputValue.trim() || isTyping
+                                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed hover:bg-gray-200'
+                                    : 'bg-primary-600 hover:bg-primary-700 text-white shadow-md'
+                            }`}
                         >
                             <Send className="w-4 h-4" />
                         </Button>

@@ -602,25 +602,76 @@ class EmailService {
         full_name: string;
         email: string;
     }): Promise<void> {
-        const baseUrl = this.getClientBaseUrl();
+        const firstName = data.full_name.split(' ')[0];
         const html = `
 <!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"></head>
-<body style="font-family:Poppins,sans-serif;color:#222;max-width:600px;margin:0 auto;padding:24px">
-  <h2 style="color:#4A148C;margin-bottom:12px">Thanks for applying to the Empower<span style="color:#DD5D00">Ed</span> Beta</h2>
-  <p style="margin:0 0 12px 0">Hi ${data.full_name},</p>
-  <p style="margin:0 0 12px 0">We have received your founding mentor beta application successfully.</p>
-  <p style="margin:0 0 12px 0">Our team will review your submission and contact you if you are selected for the next step.</p>
-  <p style="margin:0 0 20px 0">If you have any urgent questions, reply to this email and our team will help you.</p>
-  <a href="${baseUrl}" style="display:inline-block;background:#DD5D00;color:#fff;text-decoration:none;padding:10px 16px;border-radius:9999px;font-weight:600">Visit EmpowerEd Learnings</a>
-  <p style="margin-top:24px;color:#666;font-size:13px">EmpowerEd Learnings — Beta Programme</p>
+<body style="font-family:Arial,sans-serif;color:#222;max-width:600px;margin:0 auto;padding:32px 24px;background:#fff">
+  <p style="margin:0 0 16px 0">Hi ${firstName},</p>
+  <p style="margin:0 0 16px 0">Thanks for applying to join the EmpowerEd Learnings Founding Mentor Beta.</p>
+  <p style="margin:0 0 16px 0">We are reviewing applications on a rolling basis and selecting a limited group of mentors for this early phase.</p>
+  <p style="margin:0 0 16px 0">If selected, you will receive the next steps by email, including how to get started on the platform and what to expect during beta.</p>
+  <p style="margin:0 0 16px 0">No credit card is required for beta access.</p>
+  <p style="margin:0 0 32px 0">We appreciate your interest and look forward to learning more about your work.</p>
+  <p style="margin:0">Team EmpowerEd Learnings</p>
 </body>
 </html>`;
 
         await this.sendEmail({
             to: data.email,
-            subject: 'We Received Your Beta Application - EmpowerEd Learnings',
+            subject: 'We received your beta application',
+            html,
+        });
+    }
+
+    async sendBetaApplicationAccepted(data: {
+        full_name: string;
+        email: string;
+    }): Promise<void> {
+        const firstName = data.full_name.split(' ')[0];
+        const baseUrl = this.getClientBaseUrl();
+        const createAccountUrl = `${baseUrl}/register`;
+        const bookDemoUrl = `${baseUrl}/book-demo`;
+
+        const perks = [
+            '2 months free beta access',
+            'No credit card required to get started',
+            'Featured Founding Mentor badge',
+            'Priority placement in the marketplace',
+            'Access to premium beta features',
+            'Optional onboarding support if you\'d like help setting up your profile',
+        ]
+            .map(p => `<li style="margin-bottom:8px">${p}</li>`)
+            .join('');
+
+        const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="font-family:Arial,sans-serif;color:#222;max-width:600px;margin:0 auto;padding:32px 24px;background:#fff">
+  <p style="margin:0 0 16px 0">Hi ${firstName},</p>
+  <p style="margin:0 0 16px 0">We're excited to let you know that you've been accepted into the EmpowerEd Learnings Founding Mentor Beta.</p>
+  <p style="margin:0 0 8px 0">As one of our first 50 founding mentors, you'll receive:</p>
+  <ul style="margin:0 0 24px 0;padding-left:20px;line-height:1.7">
+    ${perks}
+  </ul>
+  <p style="margin:0 0 16px 0">To get started, create your account here:</p>
+  <p style="margin:0 0 24px 0">
+    <a href="${createAccountUrl}" style="display:inline-block;background:#4A148C;color:#fff;text-decoration:none;padding:12px 28px;border-radius:9999px;font-weight:600;font-size:15px">Create My Account</a>
+  </p>
+  <p style="margin:0 0 16px 0">If you'd prefer a more personalised setup experience, you can also book a quick demo call with our team here:</p>
+  <p style="margin:0 0 32px 0">
+    <a href="${bookDemoUrl}" style="display:inline-block;background:#DD5D00;color:#fff;text-decoration:none;padding:12px 28px;border-radius:9999px;font-weight:600;font-size:15px">Book a Demo Call</a>
+  </p>
+  <p style="margin:0 0 32px 0">We're excited to have you join us.</p>
+  <p style="margin:0">Team EmpowerEd Learnings</p>
+</body>
+</html>`;
+
+        await this.sendEmail({
+            to: data.email,
+            subject: "You've been accepted into the EmpowerEd Learnings Founding Mentor Beta",
             html,
         });
     }
