@@ -255,6 +255,76 @@ async function sendOutboxRow(row: OutboxRow) {
         return;
     }
 
+    if (row.type === 'SESSION_CANCELLED_UNPAID_STUDENT') {
+        const lessonId = row.payload?.lessonId as string | undefined;
+        if (!lessonId) throw new Error('Missing lessonId in payload');
+
+        const lesson = await prisma.lesson.findUnique({
+            where: { id: lessonId },
+            include: {
+                student: { select: { username: true } },
+                tutor: { select: { username: true, timezone: true } },
+            },
+        });
+
+        if (!lesson) throw new Error(`Lesson not found: ${lessonId}`);
+
+        const clientBase = (process.env.CLIENT_URL || process.env.CLIENT_BASE_URL || 'https://emplearnings.com').trim().replace(/\/+$/, '');
+        const timeZone = lesson.tutor?.timezone || 'UTC';
+        const amountDollars = ((row.payload?.amount as number || 0) / 100).toFixed(2);
+
+        await emailService.sendEmail({
+            to: row.to_email,
+            subject: 'Your session has been cancelled — payment not received',
+            html: `
+<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 24px;color:#222">
+  <h2 style="color:#b91c1c;margin:0 0 16px 0">Session Cancelled</h2>
+  <p style="margin:0 0 12px 0">Hi ${lesson.student?.username || 'there'},</p>
+  <p style="margin:0 0 12px 0">Your session with <strong>${lesson.tutor?.username || 'your mentor'}</strong> scheduled for
+    <strong>${formatDatePart(lesson.start_time, timeZone)} at ${formatTimePart(lesson.start_time, timeZone)}</strong>
+    has been cancelled because the payment of <strong>$${amountDollars}</strong> was not received before the 24-hour deadline.</p>
+  <p style="margin:0 0 24px 0">If you would like to rebook, you can do so from your dashboard.</p>
+  <a href="${clientBase}/student/sessions" style="display:inline-block;background:#4A1D96;color:#fff;text-decoration:none;padding:12px 28px;border-radius:9999px;font-weight:600">Go to My Sessions</a>
+  <p style="margin:32px 0 0 0;color:#999;font-size:12px">— EmpowerEd Learnings</p>
+</div>`,
+        });
+        return;
+    }
+
+    if (row.type === 'SESSION_CANCELLED_UNPAID_TUTOR') {
+        const lessonId = row.payload?.lessonId as string | undefined;
+        if (!lessonId) throw new Error('Missing lessonId in payload');
+
+        const lesson = await prisma.lesson.findUnique({
+            where: { id: lessonId },
+            include: {
+                student: { select: { username: true } },
+                tutor: { select: { username: true, timezone: true } },
+            },
+        });
+
+        if (!lesson) throw new Error(`Lesson not found: ${lessonId}`);
+
+        const timeZone = lesson.tutor?.timezone || 'UTC';
+        const studentName = (row.payload?.studentName as string | undefined) || lesson.student?.username || 'A student';
+
+        await emailService.sendEmail({
+            to: row.to_email,
+            subject: 'Session slot freed — student payment not received',
+            html: `
+<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 24px;color:#222">
+  <h2 style="color:#b91c1c;margin:0 0 16px 0">Session Slot Freed</h2>
+  <p style="margin:0 0 12px 0">Hi ${lesson.tutor?.username || 'there'},</p>
+  <p style="margin:0 0 12px 0">The session with <strong>${studentName}</strong> scheduled for
+    <strong>${formatDatePart(lesson.start_time, timeZone)} at ${formatTimePart(lesson.start_time, timeZone)}</strong>
+    has been automatically cancelled because the student did not make payment within 24 hours of the session.</p>
+  <p style="margin:0 0 24px 0">That slot is now free and available for other bookings.</p>
+  <p style="margin:0;color:#999;font-size:12px">— EmpowerEd Learnings</p>
+</div>`,
+        });
+        return;
+    }
+
     if (row.type === 'DEMO_BOOKING_CONFIRMATION') {
         const p = row.payload as { fullName?: string; email?: string; callDate?: string; callTime?: string; meetingLink?: string; addToCalendarUrl?: string };
         // Mentor-style demo confirmation with meeting link (per System Generated Emails doc)
