@@ -203,16 +203,16 @@ const TutorSessionsPage: React.FC = () => {
                                     onCardClick={() => navigate(`/sessions/${l.id}`)}
                                     actions={
                                         <>
-                                            {l.meeting_link ? (
+                                            {l.meeting_link && !['COMPLETED', 'CANCELLED', 'MISSED'].includes(l.status.toUpperCase()) ? (
                                                 <a href={l.meeting_link} target="_blank" rel="noreferrer">
                                                     <Button className="flex items-center gap-2">
                                                         <ExternalLink className="w-4 h-4" />
                                                         Join Session
                                                     </Button>
                                                 </a>
-                                            ) : (
+                                            ) : l.meeting_link ? (
                                                 <Button disabled>Join Session</Button>
-                                            )}
+                                            ) : null}
                                             {l.google_calendar_html_link ? (
                                                 <a href={l.google_calendar_html_link} target="_blank" rel="noreferrer">
                                                     <Button variant="outline">Open in Calendar</Button>

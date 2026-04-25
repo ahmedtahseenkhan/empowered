@@ -4,6 +4,7 @@ import { ArrowLeft, Calendar, Clock, User, CreditCard, ExternalLink, CalendarDay
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
+import { Modal } from '../components/ui/Modal';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/axios';
 
@@ -46,6 +47,7 @@ const SessionDetailPage: React.FC = () => {
 
     const [joinBusy, setJoinBusy] = useState(false);
     const [joinError, setJoinError] = useState('');
+    const [errorModalOpen, setErrorModalOpen] = useState(false);
 
     const [searchParams, setSearchParams] = useSearchParams();
     const [finalizeStatus, setFinalizeStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -117,7 +119,7 @@ const SessionDetailPage: React.FC = () => {
     const isJoinable = lesson && (() => {
         const start = new Date(lesson.start_time).getTime();
         const now = Date.now();
-        return now >= start - 15 * 60 * 1000 && now <= start + 50 * 60 * 1000;
+        return now >= start - 15 * 60 * 1000 && now <= start + 50 * 60 * 1000 && !['COMPLETED', 'CANCELLED', 'MISSED'].includes(lesson.status.toUpperCase());
     })();
 
     const paymentBadge = () => {
@@ -152,9 +154,11 @@ const SessionDetailPage: React.FC = () => {
                 window.location.href = res.data.url;
             } else {
                 setPayError('Failed to start payment – please try again.');
+                setErrorModalOpen(true);
             }
         } catch (e: any) {
             setPayError(e?.response?.data?.error || 'Unable to process payment.');
+            setErrorModalOpen(true);
         } finally {
             setPayBusy(false);
         }
@@ -171,9 +175,11 @@ const SessionDetailPage: React.FC = () => {
                 window.open(url, '_blank');
             } else {
                 setJoinError('Meeting link is not available yet.');
+                setErrorModalOpen(true);
             }
         } catch (e: any) {
             setJoinError(e?.response?.data?.error || 'Unable to join session.');
+            setErrorModalOpen(true);
         } finally {
             setJoinBusy(false);
         }
@@ -238,11 +244,7 @@ const SessionDetailPage: React.FC = () => {
                     {/* Body */}
                     <div className="px-8 py-6 space-y-6">
                         {/* Errors */}
-                        {(payError || joinError) && (
-                            <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
-                                {payError || joinError}
-                            </div>
-                        )}
+                        {/* Removed error div, now using modal */}
 
                         {/* Finalize status after Stripe redirect */}
                         {finalizeStatus === 'loading' && (
@@ -350,6 +352,13 @@ const SessionDetailPage: React.FC = () => {
                     </div>
                 </Card>
             </div>
+            <Modal
+                isOpen={errorModalOpen}
+                onClose={() => setErrorModalOpen(false)}
+                title="Error"
+            >
+                <p>{payError || joinError}</p>
+            </Modal>
         </DashboardLayout>
     );
 };

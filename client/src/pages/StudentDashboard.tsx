@@ -4,6 +4,7 @@ import { Calendar, CheckCircle, BookOpen, ChevronLeft, ChevronRight } from 'luci
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
+import { Modal } from '../components/ui/Modal';
 import api from '../api/axios';
 
 type Lesson = {
@@ -76,6 +77,7 @@ const StudentDashboard: React.FC = () => {
     const [busy, setBusy] = useState(false);
     const [payBusy, setPayBusy] = useState(false);
     const [payError, setPayError] = useState<string>('');
+    const [errorModalOpen, setErrorModalOpen] = useState(false);
     const [joinBusyId, setJoinBusyId] = useState<string | null>(null);
 
     const weekStart = useMemo(() => {
@@ -404,9 +406,11 @@ const StudentDashboard: React.FC = () => {
                                                                             window.open(url, '_blank');
                                                                         } else {
                                                                             setPayError('Meeting link is not available yet.');
+                                                                            setErrorModalOpen(true);
                                                                         }
                                                                     } catch (e: any) {
                                                                         setPayError(e?.response?.data?.error || 'Unable to join session.');
+                                                                        setErrorModalOpen(true);
                                                                     } finally {
                                                                         setJoinBusyId(null);
                                                                     }
@@ -524,9 +528,11 @@ const StudentDashboard: React.FC = () => {
                                             window.location.href = res.data.url;
                                         } else {
                                             setPayError('Failed to start payment – please try again.');
+                                            setErrorModalOpen(true);
                                         }
                                     } catch (e: any) {
                                         setPayError(e?.response?.data?.error || 'No due session payment found.');
+                                        setErrorModalOpen(true);
                                     } finally {
                                         setPayBusy(false);
                                     }
@@ -535,12 +541,6 @@ const StudentDashboard: React.FC = () => {
                                 {payBusy ? '…' : 'Pay next'}
                             </Button>
                         </div>
-
-                        {payError && (
-                            <div className="mb-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-                                {payError}
-                            </div>
-                        )}
 
                         {busy ? (
                             <div className="text-xs text-gray-600">Loading...</div>
@@ -595,6 +595,13 @@ const StudentDashboard: React.FC = () => {
                     </Card>
                 </div>
             </div>
+            <Modal
+                isOpen={errorModalOpen}
+                onClose={() => setErrorModalOpen(false)}
+                title="Error"
+            >
+                <p>{payError}</p>
+            </Modal>
         </DashboardLayout>
     );
 };

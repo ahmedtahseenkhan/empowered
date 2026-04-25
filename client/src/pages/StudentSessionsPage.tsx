@@ -4,6 +4,7 @@ import { Calendar, ExternalLink, CreditCard } from 'lucide-react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
+import { Modal } from '../components/ui/Modal';
 import SessionListCard from '../components/sessions/SessionListCard';
 import api from '../api/axios';
 
@@ -33,6 +34,7 @@ const StudentSessionsPage: React.FC = () => {
     const [tab, setTab] = useState<'upcoming' | 'past'>('upcoming');
     const [joinBusyId, setJoinBusyId] = useState<string | null>(null);
     const [joinError, setJoinError] = useState<string>('');
+    const [errorModalOpen, setErrorModalOpen] = useState(false);
 
     useEffect(() => {
         const fetchLessons = async () => {
@@ -214,11 +216,6 @@ const StudentSessionsPage: React.FC = () => {
                     </Card>
                 ) : (
                     <div className="space-y-5">
-                        {(joinError || payError) && (
-                            <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
-                                {joinError || payError}
-                            </div>
-                        )}
                         {sorted.map((l) => {
                             const mentorName = l.tutor?.username || 'Mentor';
                             return (
@@ -253,9 +250,11 @@ const StudentSessionsPage: React.FC = () => {
                                                                 window.location.href = res.data.url;
                                                             } else {
                                                                 setPayError('Failed to start payment – please try again.');
+                                                                setErrorModalOpen(true);
                                                             }
                                                         } catch (e: any) {
                                                             setPayError(e?.response?.data?.error || 'Unable to process payment.');
+                                                            setErrorModalOpen(true);
                                                         } finally {
                                                             setPayBusyId(null);
                                                         }
@@ -267,7 +266,7 @@ const StudentSessionsPage: React.FC = () => {
                                             ) : (() => {
                                                 const startMs = new Date(l.start_time).getTime();
                                                 const nowMs2 = Date.now();
-                                                const isJoinable = nowMs2 >= startMs - 15 * 60 * 1000 && nowMs2 <= startMs + 50 * 60 * 1000;
+                                                const isJoinable = nowMs2 >= startMs - 15 * 60 * 1000 && nowMs2 <= startMs + 50 * 60 * 1000 && !['COMPLETED', 'CANCELLED', 'MISSED'].includes(l.status.toUpperCase());
                                                 if (!isJoinable) return null;
                                                 return (
                                                     <Button
@@ -283,9 +282,11 @@ const StudentSessionsPage: React.FC = () => {
                                                                     window.open(url, '_blank');
                                                                 } else {
                                                                     setJoinError('Meeting link is not available yet.');
+                                                                    setErrorModalOpen(true);
                                                                 }
                                                             } catch (e: any) {
                                                                 setJoinError(e?.response?.data?.error || 'Unable to join session.');
+                                                                setErrorModalOpen(true);
                                                             } finally {
                                                                 setJoinBusyId(null);
                                                             }
@@ -309,6 +310,13 @@ const StudentSessionsPage: React.FC = () => {
                     </div>
                 )}
             </div>
+            <Modal
+                isOpen={errorModalOpen}
+                onClose={() => setErrorModalOpen(false)}
+                title="Error"
+            >
+                <p>{joinError || payError}</p>
+            </Modal>
         </DashboardLayout>
     );
 };
