@@ -43,6 +43,8 @@ const demoRoutes_1 = __importDefault(require("./routes/demoRoutes"));
 const paymentRoutes_1 = __importDefault(require("./routes/paymentRoutes"));
 const webhookRoutes_1 = __importDefault(require("./routes/webhookRoutes"));
 const supportRoutes_1 = __importDefault(require("./routes/supportRoutes"));
+const betaRoutes_1 = __importDefault(require("./routes/betaRoutes"));
+const aiRoutes_1 = __importDefault(require("./routes/aiRoutes"));
 const emailOutboxProcessor_1 = require("./services/emailOutboxProcessor");
 const emailScheduler_1 = require("./services/emailScheduler");
 // Middleware
@@ -68,6 +70,8 @@ app.use('/api/admin', adminRoutes_1.default);
 app.use('/api/demo', demoRoutes_1.default);
 app.use('/api/payments', paymentRoutes_1.default);
 app.use('/api/support', supportRoutes_1.default);
+app.use('/api/beta', betaRoutes_1.default);
+app.use('/api/ai', aiRoutes_1.default);
 // Health Check
 app.get('/', (req, res) => {
     res.send('Empowered Learnings API v2 is running');

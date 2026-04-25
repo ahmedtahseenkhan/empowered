@@ -264,32 +264,38 @@ const StudentSessionsPage: React.FC = () => {
                                                     <CreditCard className="w-4 h-4" />
                                                     {payBusyId === l.id ? 'Processing…' : 'Pay Now'}
                                                 </Button>
-                                            ) : (
-                                                <Button
-                                                    className="flex items-center gap-2"
-                                                    disabled={joinBusyId === l.id}
-                                                    onClick={async () => {
-                                                        try {
-                                                            setJoinBusyId(l.id);
-                                                            setJoinError('');
-                                                            const res = await api.get(`/lessons/${l.id}/join`);
-                                                            const url = res.data?.meeting_link as string | undefined;
-                                                            if (url) {
-                                                                window.open(url, '_blank');
-                                                            } else {
-                                                                setJoinError('Meeting link is not available yet.');
+                                            ) : (() => {
+                                                const startMs = new Date(l.start_time).getTime();
+                                                const nowMs2 = Date.now();
+                                                const isJoinable = nowMs2 >= startMs - 15 * 60 * 1000 && nowMs2 <= startMs + 50 * 60 * 1000;
+                                                if (!isJoinable) return null;
+                                                return (
+                                                    <Button
+                                                        className="flex items-center gap-2"
+                                                        disabled={joinBusyId === l.id}
+                                                        onClick={async () => {
+                                                            try {
+                                                                setJoinBusyId(l.id);
+                                                                setJoinError('');
+                                                                const res = await api.get(`/lessons/${l.id}/join`);
+                                                                const url = res.data?.meeting_link as string | undefined;
+                                                                if (url) {
+                                                                    window.open(url, '_blank');
+                                                                } else {
+                                                                    setJoinError('Meeting link is not available yet.');
+                                                                }
+                                                            } catch (e: any) {
+                                                                setJoinError(e?.response?.data?.error || 'Unable to join session.');
+                                                            } finally {
+                                                                setJoinBusyId(null);
                                                             }
-                                                        } catch (e: any) {
-                                                            setJoinError(e?.response?.data?.error || 'Unable to join session.');
-                                                        } finally {
-                                                            setJoinBusyId(null);
-                                                        }
-                                                    }}
-                                                >
-                                                    <ExternalLink className="w-4 h-4" />
-                                                    {joinBusyId === l.id ? 'Joining…' : 'Join Session'}
-                                                </Button>
-                                            )}
+                                                        }}
+                                                    >
+                                                        <ExternalLink className="w-4 h-4" />
+                                                        {joinBusyId === l.id ? 'Joining…' : 'Join Session'}
+                                                    </Button>
+                                                );
+                                            })()}
                                             {l.google_calendar_html_link ? (
                                                 <a href={l.google_calendar_html_link} target="_blank" rel="noreferrer">
                                                     <Button variant="outline">Open in Calendar</Button>

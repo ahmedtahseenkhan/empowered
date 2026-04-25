@@ -113,6 +113,12 @@ const SessionDetailPage: React.FC = () => {
 
     const needsPayment = lesson && (lesson.payment_status === 'pending' || lesson.payment_status === 'failed');
     const isUpcoming = lesson && new Date(lesson.start_time).getTime() > Date.now();
+    // Session is joinable from start_time until 50 minutes after it begins
+    const isJoinable = lesson && (() => {
+        const start = new Date(lesson.start_time).getTime();
+        const now = Date.now();
+        return now >= start - 15 * 60 * 1000 && now <= start + 50 * 60 * 1000;
+    })();
 
     const paymentBadge = () => {
         if (!lesson) return null;
@@ -316,7 +322,7 @@ const SessionDetailPage: React.FC = () => {
 
                         {/* Action buttons */}
                         <div className="flex flex-wrap gap-3 pt-2">
-                            {isStudent && !needsPayment && (
+                            {isStudent && !needsPayment && isJoinable && (
                                 <Button
                                     className="flex items-center gap-2"
                                     disabled={joinBusy}

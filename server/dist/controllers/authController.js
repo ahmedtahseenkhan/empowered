@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.resendVerification = exports.verifyEmail = exports.login = exports.me = exports.resetPassword = exports.forgotPassword = exports.changePassword = exports.register = void 0;
+exports.verifyEmailCode = exports.resendVerification = exports.verifyEmail = exports.login = exports.me = exports.resetPassword = exports.forgotPassword = exports.updateDisplayName = exports.changePassword = exports.register = void 0;
 const crypto_1 = __importDefault(require("crypto"));
 const db_1 = __importDefault(require("../config/db"));
 const auth_1 = require("../utils/auth");
@@ -54,25 +54,26 @@ const register = async (req, res) => {
         });
         // Generate Token
         const token = (0, auth_1.generateToken)(result.id, result.role);
-        // Send Verification Email
+        // Send Verification Code Email (6-digit code for inline wizard flow)
         try {
-            const verificationToken = (0, auth_1.generateVerificationToken)(result.id);
-            const baseUrl = getClientBaseUrl();
-            const verificationLink = `${baseUrl}/verify-email?token=${verificationToken}`;
-            await emailService_1.default.sendVerificationEmail({
-                username,
-                email,
-                verificationLink
+            const code = crypto_1.default.randomInt(0, 1000000).toString().padStart(6, '0');
+            const codeHash = await (0, auth_1.hashPassword)(code);
+            const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+            await db_1.default.emailVerificationCode.create({
+                data: {
+                    user_id: result.id,
+                    code_hash: codeHash,
+                    expires_at: expiresAt,
+                },
             });
-            // Also send welcome email (optional, or send after verification)
-            await emailService_1.default.sendWelcomeEmail({
+            await emailService_1.default.sendVerificationCodeEmail({
                 username,
                 email,
-                loginLink: `${baseUrl}/login`,
+                code,
             });
         }
         catch (emailError) {
-            console.error('Failed to send emails:', emailError);
+            console.error('Failed to send verification code email:', emailError);
         }
         res.status(201).json({
             message: 'User registered successfully. Please check your email to verify your account.',
@@ -123,6 +124,42 @@ const changePassword = async (req, res) => {
     }
 };
 exports.changePassword = changePassword;
+const updateDisplayName = async (req, res) => {
+    try {
+        const userId = req.user?.id;
+        if (!userId)
+            return res.status(401).json({ error: 'Unauthorized' });
+        const { username } = req.body;
+        if (!username || typeof username !== 'string' || !username.trim()) {
+            return res.status(400).json({ error: 'username is required' });
+        }
+        const trimmed = username.trim();
+        const user = await db_1.default.user.findUnique({
+            where: { id: userId },
+            select: { id: true, role: true },
+        });
+        if (!user)
+            return res.status(401).json({ error: 'Unauthorized' });
+        if (user.role === 'TUTOR') {
+            await db_1.default.tutorProfile.update({ where: { user_id: userId }, data: { username: trimmed } });
+        }
+        else if (user.role === 'STUDENT') {
+            await db_1.default.studentProfile.update({ where: { user_id: userId }, data: { username: trimmed } });
+        }
+        else if (user.role === 'ADMIN') {
+            await db_1.default.adminProfile.update({ where: { user_id: userId }, data: { username: trimmed } });
+        }
+        else {
+            return res.status(400).json({ error: 'Cannot update name for this role' });
+        }
+        return res.json({ message: 'Name updated successfully', username: trimmed });
+    }
+    catch (error) {
+        console.error('updateDisplayName error:', error);
+        return res.status(500).json({ error: 'Server error' });
+    }
+};
+exports.updateDisplayName = updateDisplayName;
 const forgotPassword = async (req, res) => {
     try {
         const { email } = req.body;
@@ -232,6 +269,7 @@ const me = async (req, res) => {
                 is_suspended: user.is_suspended,
                 username: userProfile?.username,
                 tier: userProfile?.tier,
+                timezone: userProfile?.timezone,
                 profile_photo: userProfile?.profile_photo,
                 department: userProfile?.department
             },
@@ -259,10 +297,11 @@ const login = async (req, res) => {
         const token = (0, auth_1.generateToken)(user.id, user.role);
         const username = user.role === 'STUDENT' ? user.student_profile?.username : user.tutor_profile?.username;
         const tier = user.role === 'TUTOR' ? user.tutor_profile?.tier : undefined;
+        const timezone = user.role === 'TUTOR' ? user.tutor_profile?.timezone : undefined;
         res.json({
             message: 'Login successful',
             token,
-            user: { id: user.id, email: user.email, role: user.role, username, tier }
+            user: { id: user.id, email: user.email, role: user.role, username, tier, timezone }
         });
     }
     catch (error) {
@@ -310,16 +349,23 @@ const resendVerification = async (req, res) => {
             return res.status(404).json({ error: 'User not found' });
         if (user.is_verified)
             return res.status(400).json({ error: 'Email already verified' });
-        const verificationToken = (0, auth_1.generateVerificationToken)(user.id);
-        const baseUrl = getClientBaseUrl();
-        const verificationLink = `${baseUrl}/verify-email?token=${verificationToken}`;
+        const code = crypto_1.default.randomInt(0, 1000000).toString().padStart(6, '0');
+        const codeHash = await (0, auth_1.hashPassword)(code);
+        const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+        await db_1.default.emailVerificationCode.create({
+            data: {
+                user_id: user.id,
+                code_hash: codeHash,
+                expires_at: expiresAt,
+            },
+        });
         const username = user.role === 'STUDENT' ? user.student_profile?.username : user.tutor_profile?.username;
-        await emailService_1.default.sendVerificationEmail({
+        await emailService_1.default.sendVerificationCodeEmail({
             username: username || 'User',
             email: user.email,
-            verificationLink
+            code,
         });
-        return res.json({ message: 'Verification email sent' });
+        return res.json({ message: 'Verification code sent' });
     }
     catch (error) {
         console.error('resendVerification error:', error);
@@ -327,3 +373,52 @@ const resendVerification = async (req, res) => {
     }
 };
 exports.resendVerification = resendVerification;
+const verifyEmailCode = async (req, res) => {
+    try {
+        const { email, code } = req.body;
+        if (!email || !code)
+            return res.status(400).json({ error: 'email and code are required' });
+        const user = await db_1.default.user.findUnique({ where: { email } });
+        if (!user)
+            return res.status(400).json({ error: 'Invalid email or code' });
+        if (user.is_verified) {
+            return res.json({ message: 'Email already verified' });
+        }
+        const latest = await db_1.default.emailVerificationCode.findFirst({
+            where: {
+                user_id: user.id,
+                used_at: null,
+                expires_at: { gt: new Date() },
+            },
+            orderBy: { created_at: 'desc' },
+        });
+        if (!latest)
+            return res.status(400).json({ error: 'Invalid or expired code. Request a new one.' });
+        const ok = await (0, auth_1.comparePassword)(code, latest.code_hash);
+        if (!ok)
+            return res.status(400).json({ error: 'Invalid or expired code.' });
+        await db_1.default.$transaction([
+            db_1.default.user.update({ where: { id: user.id }, data: { is_verified: true } }),
+            db_1.default.emailVerificationCode.update({ where: { id: latest.id }, data: { used_at: new Date() } }),
+        ]);
+        // Send welcome email now that email is confirmed
+        try {
+            const username = user.role === 'STUDENT'
+                ? (await db_1.default.studentProfile.findUnique({ where: { user_id: user.id } }))?.username
+                : (await db_1.default.tutorProfile.findUnique({ where: { user_id: user.id } }))?.username;
+            const baseUrl = getClientBaseUrl();
+            await emailService_1.default.sendWelcomeEmail({
+                username: username || 'User',
+                email: user.email,
+                loginLink: `${baseUrl}/login`,
+            });
+        }
+        catch (_e) { /* non-fatal */ }
+        return res.json({ message: 'Email verified successfully' });
+    }
+    catch (error) {
+        console.error('verifyEmailCode error:', error);
+        return res.status(500).json({ error: 'Server error' });
+    }
+};
+exports.verifyEmailCode = verifyEmailCode;

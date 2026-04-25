@@ -244,6 +244,9 @@ const getPublicTutorById = async (req, res) => {
                     },
                     orderBy: { date: 'desc' }
                 },
+                marketing_video_submission: {
+                    select: { video_url: true }
+                },
                 reviews: {
                     select: {
                         id: true,
@@ -264,7 +267,8 @@ const getPublicTutorById = async (req, res) => {
         });
         if (!mentor)
             return res.status(404).json({ error: 'Tutor not found' });
-        res.json({ mentor });
+        const { marketing_video_submission, ...rest } = mentor;
+        res.json({ mentor: { ...rest, marketing_video_url: marketing_video_submission?.video_url ?? null } });
     }
     catch (error) {
         console.error('Get Public Tutor Error:', error);

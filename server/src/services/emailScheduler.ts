@@ -192,7 +192,7 @@ async function autoCancelUnpaidLessons() {
         const now = new Date();
         const cutoff = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 h from now
 
-        // Find PaymentSchedule rows that are still pending and whose lesson starts within 24 h
+        // Cancel sessions that: haven't started yet, start within 24 h, and payment is still pending
         const overduePayments = await prisma.paymentSchedule.findMany({
             where: {
                 status: 'pending',
@@ -200,7 +200,10 @@ async function autoCancelUnpaidLessons() {
                     lessons: {
                         some: {
                             status: 'BOOKED',
-                            start_time: { lte: cutoff },
+                            start_time: {
+                                gte: now,     // must not have started yet
+                                lte: cutoff,  // must be within 24 h
+                            },
                         },
                     },
                 },
@@ -211,7 +214,10 @@ async function autoCancelUnpaidLessons() {
                         lessons: {
                             where: {
                                 status: 'BOOKED',
-                                start_time: { lte: cutoff },
+                                start_time: {
+                                    gte: now,
+                                    lte: cutoff,
+                                },
                             },
                             include: {
                                 student: { include: { user: { select: { email: true } } } },

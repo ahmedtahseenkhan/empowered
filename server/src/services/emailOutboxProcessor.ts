@@ -228,7 +228,7 @@ async function sendOutboxRow(row: OutboxRow) {
         if (!payment) throw new Error(`Payment not found: ${paymentId}`);
 
         const timeZone = payment.booking.tutor?.timezone || 'UTC';
-        const amountDollars = (payment.amount / 100).toFixed(2);
+        const amountDollars = Number(payment.amount).toFixed(2);
 
         // Find the lesson that matches this payment schedule's due_date (due_date = lesson.start_time - 48h)
         const expectedStart = new Date(payment.due_date.getTime() + 48 * 60 * 60 * 1000);
@@ -271,7 +271,7 @@ async function sendOutboxRow(row: OutboxRow) {
 
         const clientBase = (process.env.CLIENT_URL || process.env.CLIENT_BASE_URL || 'https://emplearnings.com').trim().replace(/\/+$/, '');
         const timeZone = lesson.tutor?.timezone || 'UTC';
-        const amountDollars = ((row.payload?.amount as number || 0) / 100).toFixed(2);
+        const amountDollars = Number(row.payload?.amount || 0).toFixed(2);
 
         await emailService.sendEmail({
             to: row.to_email,

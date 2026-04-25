@@ -236,8 +236,19 @@ export const joinLesson = async (req: AuthRequest, res: Response) => {
             return res.status(403).json({ error: 'Forbidden' });
         }
 
-        // For students: enforce that the corresponding schedule row is paid
+        // For students: enforce payment check only while session is still joinable
         if (role === 'STUDENT') {
+            const now = new Date();
+            const sessionEnd = new Date(lesson.start_time.getTime() + 50 * 60 * 1000); // 50 min window
+
+            // Session already over — allow access without payment check (completed session)
+            if (now > sessionEnd) {
+                return res.json({
+                    meeting_link: lesson.meeting_link,
+                    google_calendar_html_link: lesson.google_calendar_html_link,
+                });
+            }
+
             const dueDate = new Date(lesson.start_time.getTime() - 48 * 60 * 60 * 1000);
             const dueStart = new Date(dueDate.getTime() - 60 * 1000);
             const dueEnd = new Date(dueDate.getTime() + 60 * 1000);
