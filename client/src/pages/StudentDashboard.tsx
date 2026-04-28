@@ -391,7 +391,11 @@ const StudentDashboard: React.FC = () => {
                                                         </div>
                                                     </div>
                                                     <div className="flex gap-1.5 shrink-0">
-                                                        {l.meeting_link && (
+                                                        {l.meeting_link && (() => {
+                                                            const startMs = new Date(l.start_time).getTime();
+                                                            const nowMs = Date.now();
+                                                            return nowMs >= startMs - 15 * 60 * 1000 && nowMs <= startMs + 50 * 60 * 1000;
+                                                        })() && (
                                                             <Button
                                                                 variant="outline"
                                                                 size="xs"
