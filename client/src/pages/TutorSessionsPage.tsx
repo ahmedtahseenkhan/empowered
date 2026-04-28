@@ -203,16 +203,23 @@ const TutorSessionsPage: React.FC = () => {
                                     onCardClick={() => navigate(`/sessions/${l.id}`)}
                                     actions={
                                         <>
-                                            {l.meeting_link && !['COMPLETED', 'CANCELLED', 'MISSED'].includes(l.status.toUpperCase()) ? (
-                                                <a href={l.meeting_link} target="_blank" rel="noreferrer">
-                                                    <Button className="flex items-center gap-2">
-                                                        <ExternalLink className="w-4 h-4" />
-                                                        Join Session
-                                                    </Button>
-                                                </a>
-                                            ) : l.meeting_link ? (
-                                                <Button disabled>Join Session</Button>
-                                            ) : null}
+                                            {(() => {
+                                                const status = l.status.toUpperCase();
+                                                if (['COMPLETED', 'CANCELLED', 'MISSED'].includes(status)) return null;
+                                                if (!l.meeting_link) return null;
+                                                const startMs = new Date(l.start_time).getTime();
+                                                const nowMs = Date.now();
+                                                const isJoinable = nowMs >= startMs - 15 * 60 * 1000 && nowMs <= startMs + 50 * 60 * 1000;
+                                                if (!isJoinable) return null;
+                                                return (
+                                                    <a href={l.meeting_link} target="_blank" rel="noreferrer">
+                                                        <Button className="flex items-center gap-2">
+                                                            <ExternalLink className="w-4 h-4" />
+                                                            Join Session
+                                                        </Button>
+                                                    </a>
+                                                );
+                                            })()}
                                             {l.google_calendar_html_link ? (
                                                 <a href={l.google_calendar_html_link} target="_blank" rel="noreferrer">
                                                     <Button variant="outline">Open in Calendar</Button>

@@ -113,7 +113,9 @@ const SessionDetailPage: React.FC = () => {
         return d.toLocaleString(undefined, { timeZone: tz, year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
     };
 
-    const needsPayment = lesson && (lesson.payment_status === 'pending' || lesson.payment_status === 'failed');
+    const needsPayment = lesson
+        && !['CANCELLED', 'COMPLETED', 'MISSED'].includes(lesson.status.toUpperCase())
+        && (lesson.payment_status === 'pending' || lesson.payment_status === 'failed');
     const isUpcoming = lesson && new Date(lesson.start_time).getTime() > Date.now();
     // Session is joinable from start_time until 50 minutes after it begins
     const isJoinable = lesson && (() => {
@@ -335,7 +337,11 @@ const SessionDetailPage: React.FC = () => {
                                 </Button>
                             )}
 
-                            {!isStudent && lesson.meeting_link && (
+                            {!isStudent && lesson.meeting_link && !['COMPLETED', 'CANCELLED', 'MISSED'].includes(lesson.status.toUpperCase()) && (() => {
+                                const startMs = new Date(lesson.start_time).getTime();
+                                const nowMs = Date.now();
+                                return nowMs >= startMs - 15 * 60 * 1000 && nowMs <= startMs + 50 * 60 * 1000;
+                            })() && (
                                 <a href={lesson.meeting_link} target="_blank" rel="noreferrer">
                                     <Button className="flex items-center gap-2">
                                         <ExternalLink className="w-4 h-4" /> Join
