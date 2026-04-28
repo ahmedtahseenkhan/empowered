@@ -2,88 +2,103 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project Overview
+# Project Overview
+Project: Empowered Learnings V2 - A tutoring/mentoring marketplace platform where students find and book tutors, tutors manage sessions and courses, and admins oversee the platform.
+Stack: React + Vite + TypeScript (client), Express + Prisma + TypeScript + PostgreSQL (server), Stripe (payments), Google Calendar (integration), Nodemailer (emails)
+Platform: Web application
+Status: Active development
 
-Empowered Learnings V2 is a tutoring/mentoring marketplace platform. Students find and book tutors, tutors manage sessions and courses, and admins oversee the platform. The project is split into two separate workspaces: `client/` (React frontend) and `server/` (Node.js backend).
+# Commands
+Dev server:    cd client && npm run dev (client), cd server && npm run dev (server)
+Tests:         No test scripts configured
+Build:         cd client && npm run build, cd server && npm run build
+Lint:          cd client && npm run lint
+DB migrate:    cd server && npx prisma migrate dev --name <migration_name>
+DB seed:       cd server && npm run seed:categories
+Deploy:        Not specified
 
-## Development Commands
+# Architecture
+/client/src
+  /api          → Axios configuration and API calls
+  /components   → Reusable UI components (common, home, how-it-works, reviews, sessions, student, tutor, tutor-profile, ui)
+  /constants    → Constants like mentor search filters
+  /context      → AuthContext for authentication state management
+  /hooks        → Custom React hooks (useImageOptimization)
+  /layouts      → Layout components (DashboardLayout, PageLayout)
+  /pages        → Page components for routing (AccountSettingsPage, AnalyticsPage, BetaPage, BookDemoPage, etc.)
+  /utils        → Utility functions (cn.ts for class merging)
 
-### Client (React + Vite + TypeScript)
-```bash
-cd client
-npm run dev       # Start dev server (Vite, hot reload)
-npm run build     # Type-check + build for production
-npm run lint      # ESLint
-```
+/server/src
+  /controllers  → Route controllers (authController, bookingController, etc.)
+  /middleware   → Authentication middleware (authMiddleware)
+  /routes       → API route definitions (authRoutes, bookingRoutes, etc.)
+  /services     → Business logic services (emailService, paymentService, etc.)
+  /templates    → Email templates (Handlebars)
+  /types        → TypeScript type definitions
+  /utils        → Utility functions
 
-### Server (Express + Prisma + TypeScript)
-```bash
-cd server
-npm run dev       # prisma generate + nodemon src/index.ts
-npm run build     # prisma generate + tsc
-npm start         # Run compiled dist/index.js
-npm run stripe-listen  # Forward Stripe webhooks to localhost:3000
-npm run seed:categories  # Seed category data
-```
+/prisma         → Database schema and migrations
+/uploads        → Static file uploads served at /uploads
 
-### Database (Prisma)
-```bash
-cd server
-npx prisma migrate dev --name <migration_name>   # Create and apply a migration
-npx prisma migrate deploy                         # Apply migrations in production
-npx prisma studio                                 # Open Prisma GUI
-npx prisma generate                               # Regenerate client after schema changes
-```
+# Key patterns
+- Auth via AuthContext (client) and authenticateToken middleware (server)
+- DB access only through Prisma ORM (never direct SQL)
+- API responses via controller pattern (routes → controllers)
+- Email handling through EmailService and EmailOutbox queue
+- Role-based access control (STUDENT, TUTOR, ADMIN)
+- JWT authentication with suspension checks
+- Stripe webhooks require raw body parsing before JSON middleware
+- Google Calendar integration for demo bookings
+- Static file serving for uploads
 
-## Architecture
+# Code style
+Language:   TypeScript
+Naming:     camelCase vars/functions, PascalCase components
+Functions:  Not specified (varies)
+Imports:    Relative imports from file locations
+Exports:    Mixed (default and named exports)
+Comments:   Minimal, JSDoc on complex functions
+Error handling: try/catch blocks, proper error responses
 
-### Client (`client/src/`)
-- **React Router v7** for routing; all routes defined in [App.tsx](client/src/App.tsx)
-- **AuthContext** ([context/AuthContext.tsx](client/src/context/AuthContext.tsx)) is the sole auth state manager — stores JWT + user in `localStorage`, exposes `login()`/`logout()`
-- **`api/axios.ts`** is a pre-configured Axios instance that auto-injects the JWT `Authorization` header and auto-redirects to `/login` on 401
-- **Role-based routing**: `ProtectedRoute` checks auth + subscription status; `DashboardRouter` routes STUDENT vs TUTOR to separate dashboard pages
-- Dual page sets exist for tutor-facing (`TutorXxx`) and student-facing (`StudentXxx`) versions of the same flows (e.g. booking, mentor search)
-- Styling: Tailwind CSS v3 with `tailwind-merge` + `clsx` for conditional classes
-- Animations: Framer Motion
+# Known issues / warnings
+- Stripe webhooks MUST be mounted before express.json() (raw body required)
+- Google Calendar integration requires GOOGLE_DEMO_REFRESH_TOKEN, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
+- JWT validation includes DB lookup to check user suspension
+- Email sending goes through EmailOutbox — never call transporter.sendMail directly
+- Static uploads served from /uploads directory
+- Role-based routing with ProtectedRoute and DashboardRouter
+- Dual page sets for tutor-facing (TutorXxx) and student-facing (StudentXxx) flows
 
-### Server (`server/src/`)
-- **Express 5** REST API on port 3000 (default)
-- **Prisma ORM** with PostgreSQL — schema at [server/prisma/schema.prisma](server/prisma/schema.prisma)
-- Route → Controller pattern: each domain has a `routes/xRoutes.ts` and `controllers/xController.ts`
-- **Auth**: JWT via `authenticateToken` middleware ([middleware/authMiddleware.ts](server/src/middleware/authMiddleware.ts)); every JWT validation also does a DB lookup to check suspension. `optionalAuth` is available for public-but-auth-aware endpoints
-- **Stripe webhooks** must be mounted before `express.json()` (raw body required) — see top of [index.ts](server/src/index.ts)
-- **Email**: `EmailService` ([services/emailService.ts](server/src/services/emailService.ts)) uses Nodemailer + Handlebars templates in `src/templates/`. Emails go through an outbox (`EmailOutbox` model) processed by `emailOutboxProcessor.ts` — never call `transporter.sendMail` directly outside the service
-- **Background services**: `startEmailOutboxProcessor()` and `startEmailScheduler()` are started at boot in `index.ts`
-- **Google Calendar** integration for demo bookings requires `GOOGLE_DEMO_REFRESH_TOKEN`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` — server will refuse to start without them
-- Static file uploads served from `uploads/` directory at `/uploads`
+# Testing
+Framework: Not configured
+Coverage:  Not specified
+Test files: None present
+Mocking:   Not specified
+Run before PR: cd client && npm run lint
 
-### Key Domain Models (Prisma)
-- `User` — base auth record with `Role` (STUDENT | TUTOR | ADMIN)
-- `StudentProfile` / `TutorProfile` / `AdminProfile` — extend `User` 1:1
-- `TutorProfile` has `TutorTier` (STANDARD | PRO | PREMIUM) for subscription gating
-- `Booking` → `Lesson` → `PaymentSchedule` — the booking/session lifecycle
-- `Subscription` — student subscription records
-- `CreditLedger` — credit system for student payments
-- `EmailOutbox` — async email queue (all emails go here first)
-- `DemoBooking` / `AdminDemoAvailability` — demo call booking system separate from tutor booking
-- `BetaApplication` — beta signup flow
+# Claude behavior
+- Be concise. Skip preamble like "Sure!" or "Great question!"
+- Write complete code. No placeholders like "// rest of code here"
+- Don't repeat code I already showed you in this session
+- No explanations unless I ask "explain this"
+- When fixing a bug, show only the changed function, not the whole file
+- If you're unsure, say so. Don't guess silently.
+- Ask ONE clarifying question max if something is ambiguous
 
-### Required Environment Variables (Server)
-```
-DATABASE_URL
-JWT_SECRET
-GOOGLE_DEMO_REFRESH_TOKEN
-GOOGLE_CLIENT_ID
-GOOGLE_CLIENT_SECRET
-SMTP_USER
-SMTP_PASSWORD
-SMTP_FROM_NAME       # optional, defaults to "Empowered Learnings"
-CLIENT_URL           # frontend base URL for email links
-STRIPE_SECRET_KEY
-STRIPE_WEBHOOK_SECRET
-```
+# Current task
+Working on: Session management UI improvements and error handling
+Status: Implemented modal error popups and JOIN button logic for completed sessions
+Next step: Further UI/UX refinements and feature additions
+Blocked by: None
 
-### Client Environment
-```
-VITE_API_URL    # defaults to http://localhost:3000/api
-```
+# Recent decisions
+- Split project into separate client/ and server/ workspaces
+- Use React Router v7 for client-side routing
+- AuthContext for centralized authentication state
+- Prisma ORM with PostgreSQL for database
+- Stripe integration for payment processing
+- Google Calendar API for demo booking integration
+- Email outbox system for reliable email delivery
+- Tailwind CSS with tailwind-merge and clsx for styling
+- Framer Motion for animations
+- Modal component for error popups instead of inline alerts

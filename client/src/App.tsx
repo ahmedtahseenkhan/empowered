@@ -139,8 +139,8 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
     const isActiveOrTrial = status === 'active' || status === 'trialing';
 
-    // Require an active/trialing subscription with a valid end date. Otherwise redirect to subscribe.
-    if (!isActiveOrTrial || !hasValidEnd || expired) {
+    // Redirect if not active/trialing, or if there is an end date and it has already passed.
+    if (!isActiveOrTrial || (hasValidEnd && expired)) {
       return <Navigate to="/subscription-settings" replace />;
     }
   }

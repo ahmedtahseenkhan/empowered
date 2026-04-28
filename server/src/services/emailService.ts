@@ -675,6 +675,41 @@ class EmailService {
             html,
         });
     }
+    async sendBetaEndingReminder(data: { tutorName: string; email: string }): Promise<void> {
+        const firstName = data.tutorName.split(' ')[0];
+        const baseUrl = this.getClientBaseUrl();
+        const continueUrl = `${baseUrl}/pricing`;
+        const bookAdminCallUrl = `${baseUrl}/book-demo`;
+
+        const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="font-family:Arial,sans-serif;color:#222;max-width:600px;margin:0 auto;padding:32px 24px;background:#fff">
+  <p style="margin:0 0 16px 0">Hi ${firstName},</p>
+  <p style="margin:0 0 16px 0">Your 2-month beta access to EmpowerEd Learnings is ending tomorrow.</p>
+  <p style="margin:0 0 16px 0">We hope you've had a chance to set up your profile, explore the platform, and see how it can support your tutoring or coaching business.</p>
+  <p style="margin:0 0 16px 0">To continue using EmpowerEd Learnings without interruption, you can activate your subscription here:</p>
+  <p style="margin:0 0 24px 0">
+    <a href="${continueUrl}" style="display:inline-block;background:#4A148C;color:#fff;text-decoration:none;padding:12px 28px;border-radius:9999px;font-weight:600;font-size:15px">Continue with My Plan</a>
+  </p>
+  <p style="margin:0 0 16px 0">You'll be able to confirm your plan and complete your subscription securely through Stripe.</p>
+  <p style="margin:0 0 16px 0">Your profile, sessions, and setup will remain exactly as they are. No need to start over.</p>
+  <p style="margin:0 0 16px 0">If you have any questions or need help before continuing, feel free to reply to this email or book a quick call.</p>
+  <p style="margin:0 0 32px 0">
+    <a href="${bookAdminCallUrl}" style="display:inline-block;background:#DD5D00;color:#fff;text-decoration:none;padding:12px 28px;border-radius:9999px;font-weight:600;font-size:15px">Book an Admin Call</a>
+  </p>
+  <p style="margin:0 0 32px 0">We'd love to have you continue with us.</p>
+  <p style="margin:0">Team EmpowerEd Learnings</p>
+</body>
+</html>`;
+
+        await this.sendEmail({
+            to: data.email,
+            subject: 'Your beta access ends tomorrow',
+            html,
+        });
+    }
 }
 
 export default new EmailService();

@@ -10,3 +10,4 @@ dist/
 
 # Prisma generated client (if generated outside node_modules)
 /generated/prisma
+CLAUDE.md

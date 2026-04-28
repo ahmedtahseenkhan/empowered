@@ -310,17 +310,69 @@ async function sendOutboxRow(row: OutboxRow) {
 
         await emailService.sendEmail({
             to: row.to_email,
-            subject: 'Session slot freed — student payment not received',
+            subject: 'Session Cancelled — Payment Not Received',
             html: `
 <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 24px;color:#222">
-  <h2 style="color:#b91c1c;margin:0 0 16px 0">Session Slot Freed</h2>
+  <h2 style="color:#b91c1c;margin:0 0 16px 0">Session Cancelled — Payment Not Received</h2>
   <p style="margin:0 0 12px 0">Hi ${lesson.tutor?.username || 'there'},</p>
-  <p style="margin:0 0 12px 0">The session with <strong>${studentName}</strong> scheduled for
-    <strong>${formatDatePart(lesson.start_time, timeZone)} at ${formatTimePart(lesson.start_time, timeZone)}</strong>
-    has been automatically cancelled because the student did not make payment within 24 hours of the session.</p>
-  <p style="margin:0 0 24px 0">That slot is now free and available for other bookings.</p>
-  <p style="margin:0;color:#999;font-size:12px">— EmpowerEd Learnings</p>
+  <p style="margin:0 0 12px 0">Your session with <strong>${studentName}</strong>, scheduled for
+    <strong>${formatDatePart(lesson.start_time, timeZone)} at ${formatTimePart(lesson.start_time, timeZone)} (${timeZone})</strong>,
+    has been automatically cancelled because payment was not received at least 24 hours before the session.</p>
+  <p style="margin:0 0 12px 0">This time slot has now been released and is available for other bookings.</p>
+  <p style="margin:0 0 24px 0">No further action is needed from you. If the student still wants to meet, they will need to book a new session and complete payment before the payment deadline.</p>
+  <p style="margin:0;color:#999;font-size:12px">Team EmpowerEd Learnings</p>
 </div>`,
+        });
+        return;
+    }
+
+    if (row.type === 'SESSION_PAYMENT_CONFIRMED_STUDENT') {
+        const p = row.payload as { tutorName?: string; studentName?: string; lessonStart?: string; amount?: number };
+        const lessonStart = p.lessonStart ? new Date(p.lessonStart) : null;
+        const amountDollars = p.amount ? Number(p.amount).toFixed(2) : '0.00';
+        await emailService.sendEmail({
+            to: row.to_email,
+            subject: 'Payment Confirmed for Upcoming Session',
+            html: `
+<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 24px;color:#222">
+  <h2 style="color:#4A1D96;margin:0 0 16px 0">Payment Confirmed</h2>
+  <p style="margin:0 0 12px 0">Hi ${p.studentName || 'there'},</p>
+  <p style="margin:0 0 12px 0">Your payment of <strong>$${amountDollars}</strong> has been successfully received for your upcoming session with <strong>${p.tutorName || 'your mentor'}</strong>.</p>
+  ${lessonStart ? `<p style="margin:0 0 12px 0">📅 Session: <strong>${formatDatePart(lessonStart)} at ${formatTimePart(lessonStart)}</strong></p>` : ''}
+  <p style="margin:0 0 24px 0">The session is fully confirmed. See you then!</p>
+  <p style="margin:0;color:#999;font-size:12px">Team EmpowerEd Learnings</p>
+</div>`,
+        });
+        return;
+    }
+
+    if (row.type === 'SESSION_PAYMENT_CONFIRMED_TUTOR') {
+        const p = row.payload as { tutorName?: string; studentName?: string; lessonStart?: string; amount?: number; timezone?: string };
+        const lessonStart = p.lessonStart ? new Date(p.lessonStart) : null;
+        const timeZone = p.timezone || 'UTC';
+        const amountDollars = p.amount ? Number(p.amount).toFixed(2) : '0.00';
+        await emailService.sendEmail({
+            to: row.to_email,
+            subject: 'Payment Confirmed for Upcoming Session',
+            html: `
+<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 24px;color:#222">
+  <h2 style="color:#4A1D96;margin:0 0 16px 0">Payment Confirmed for Upcoming Session</h2>
+  <p style="margin:0 0 12px 0">Hi ${p.tutorName || 'there'},</p>
+  <p style="margin:0 0 12px 0">Payment has been successfully received for:</p>
+  <p style="margin:0 0 8px 0">👤 Student: <strong>${p.studentName || 'Student'}</strong></p>
+  ${lessonStart ? `<p style="margin:0 0 8px 0">📅 Session: <strong>${formatDatePart(lessonStart, timeZone)} at ${formatTimePart(lessonStart, timeZone)}</strong></p>` : ''}
+  <p style="margin:0 0 24px 0">The session is fully confirmed.</p>
+  <p style="margin:0;color:#999;font-size:12px">Team EmpowerEd Learnings</p>
+</div>`,
+        });
+        return;
+    }
+
+    if (row.type === 'BETA_ENDING_REMINDER') {
+        const p = row.payload as { tutorName?: string };
+        await emailService.sendBetaEndingReminder({
+            tutorName: p.tutorName || 'there',
+            email: row.to_email,
         });
         return;
     }

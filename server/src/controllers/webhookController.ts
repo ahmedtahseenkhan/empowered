@@ -123,16 +123,70 @@ export async function handleCheckoutSessionCompleted(session: any) {
         }
 
         const amountTotal = session.amount_total as number | null;
-        await prisma.paymentSchedule.update({
+        const updatedSchedule = await prisma.paymentSchedule.update({
             where: { id: paymentScheduleId },
             data: {
                 status: 'paid',
                 stripe_pi_id: session.payment_intent as string,
-                // store the amount paid in whole currency units if Stripe provides it
                 ...(amountTotal && !Number.isNaN(amountTotal) ? { amount: Math.round(amountTotal / 100) } : {}),
+            },
+            include: {
+                booking: {
+                    include: {
+                        student: { include: { user: { select: { email: true } } } },
+                        tutor: { include: { user: { select: { email: true } } } },
+                        lessons: { orderBy: { start_time: 'asc' } },
+                    },
+                },
             },
         });
         console.log(`[Stripe Webhook] Marked PaymentSchedule ${paymentScheduleId} as paid.`);
+
+        // Find the lesson this payment covers (due_date = start_time - 48h)
+        const expectedStart = new Date(updatedSchedule.due_date.getTime() + 48 * 60 * 60 * 1000);
+        const paidLesson = updatedSchedule.booking.lessons.find(
+            (l) => Math.abs(l.start_time.getTime() - expectedStart.getTime()) < 2 * 60 * 60 * 1000
+        );
+        const studentUser = updatedSchedule.booking.student?.user;
+        const tutorUser = updatedSchedule.booking.tutor?.user;
+        const studentName = updatedSchedule.booking.student?.username || 'Student';
+        const tutorName = updatedSchedule.booking.tutor?.username || 'Mentor';
+
+        if (studentUser?.email) {
+            await prisma.emailOutbox.create({
+                data: {
+                    type: 'SESSION_PAYMENT_CONFIRMED_STUDENT',
+                    to_email: studentUser.email,
+                    payload: {
+                        paymentScheduleId,
+                        lessonId: paidLesson?.id,
+                        lessonStart: paidLesson?.start_time?.toISOString(),
+                        tutorName,
+                        studentName,
+                        amount: updatedSchedule.amount,
+                    },
+                    idempotency_key: `session-payment-confirmed-student:${paymentScheduleId}`,
+                },
+            }).catch((e: any) => { if (e.code !== 'P2002') console.error('[Webhook] Failed to queue student payment confirmed email:', e); });
+        }
+        if (tutorUser?.email) {
+            await prisma.emailOutbox.create({
+                data: {
+                    type: 'SESSION_PAYMENT_CONFIRMED_TUTOR',
+                    to_email: tutorUser.email,
+                    payload: {
+                        paymentScheduleId,
+                        lessonId: paidLesson?.id,
+                        lessonStart: paidLesson?.start_time?.toISOString(),
+                        tutorName,
+                        studentName,
+                        amount: updatedSchedule.amount,
+                        timezone: updatedSchedule.booking.tutor?.timezone || 'UTC',
+                    },
+                    idempotency_key: `session-payment-confirmed-tutor:${paymentScheduleId}`,
+                },
+            }).catch((e: any) => { if (e.code !== 'P2002') console.error('[Webhook] Failed to queue tutor payment confirmed email:', e); });
+        }
     } else if (metadata.type === 'student_booking') {
         // Handle Student Booking payment success -> create Booking + Lessons atomically
         const checkoutSessionId = session.id as string | undefined;

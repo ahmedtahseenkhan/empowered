@@ -317,6 +317,47 @@ async function checkPaymentReminders() {
     }
 }
 
+async function checkBetaEndingReminders() {
+    try {
+        const now = new Date();
+        // Window: tutors whose beta (trialing) ends between 20h and 28h from now (catches a single scheduler tick per tutor)
+        const windowStart = new Date(now.getTime() + 20 * 60 * 60 * 1000);
+        const windowEnd = new Date(now.getTime() + 28 * 60 * 60 * 1000);
+
+        const expiringTutors = await prisma.tutorProfile.findMany({
+            where: {
+                subscription_status: 'trialing',
+                subscription_end_date: {
+                    gte: windowStart,
+                    lte: windowEnd,
+                },
+            },
+            include: {
+                user: { select: { email: true } },
+            },
+        });
+
+        for (const tutor of expiringTutors) {
+            if (!tutor.user?.email) continue;
+            try {
+                await prisma.emailOutbox.create({
+                    data: {
+                        type: 'BETA_ENDING_REMINDER',
+                        to_email: tutor.user.email,
+                        payload: { tutorId: tutor.id, tutorName: tutor.username },
+                        idempotency_key: `beta-ending-reminder:${tutor.id}:${tutor.subscription_end_date?.toISOString().slice(0, 10)}`,
+                    },
+                });
+                console.log(`[EmailScheduler] Queued beta ending reminder for tutor ${tutor.id}`);
+            } catch (e: any) {
+                if (e.code !== 'P2002') console.error('[EmailScheduler] Failed to queue beta ending reminder:', e);
+            }
+        }
+    } catch (error) {
+        console.error('[EmailScheduler] Error in checkBetaEndingReminders:', error);
+    }
+}
+
 async function runScheduler() {
     console.log('[EmailScheduler] Running scheduled check...');
     await Promise.all([
@@ -324,6 +365,7 @@ async function runScheduler() {
         checkDemoCallReminders(),
         checkPaymentReminders(),
         autoCancelUnpaidLessons(),
+        checkBetaEndingReminders(),
     ]);
 }
 
