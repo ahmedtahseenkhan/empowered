@@ -169,6 +169,8 @@ model TutorProfile {
   subscription_status    String? // active, past_due, canceled
   subscription_end_date  DateTime? // When their current paid period ends
   has_used_trial         Boolean @default(false) // Whether the tutor has already used their free trial
+  is_beta                Boolean @default(false) // Approved beta applicant
+  is_founding_mentor     Boolean @default(false) // Awarded when beta mentor completes their profile
 
   progress_notes ProgressNote[]
   homework_tasks HomeworkTask[]
@@ -376,6 +378,8 @@ model Booking {
 
   /// Set when booking is created from Stripe Checkout; prevents duplicate processing (webhook + payment_intent + finalize).
   stripe_checkout_session_id String? @unique
+
+  client_timezone String @default("UTC") // Student's IANA timezone at booking time
 
   status     String // pending, active, completed, cancelled
   created_at DateTime @default(now())

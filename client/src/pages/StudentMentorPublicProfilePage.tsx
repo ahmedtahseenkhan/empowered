@@ -5,6 +5,7 @@ import api from '../api/axios';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
+import { Award } from 'lucide-react';
 
 type PublicTutorProfile = {
     id: string;
@@ -19,6 +20,7 @@ type PublicTutorProfile = {
     review_count: number;
     tier: string;
     is_verified: boolean;
+    is_founding_mentor: boolean;
     video_url: string | null;
     key_strengths: string | null;
     certifications: { id: string; name: string; issuer: string; year: number; is_verified: boolean }[];
@@ -400,6 +402,11 @@ const StudentMentorPublicProfilePage: React.FC = () => {
                                             <h1 className="text-2xl md:text-3xl font-extrabold text-white">{mentor.username}</h1>
                                             {mentor.is_verified && (
                                                 <span className="text-[10px] bg-white/20 text-white border border-white/30 px-2 py-0.5 rounded-full">Verified</span>
+                                            )}
+                                            {mentor.is_founding_mentor && (
+                                                <span className="inline-flex items-center gap-1 text-[10px] bg-amber-400/90 text-amber-900 border border-amber-300/60 px-2 py-0.5 rounded-full font-semibold">
+                                                    <Award className="w-3 h-3" /> Founding Mentor
+                                                </span>
                                             )}
                                             <span className="text-[10px] bg-white/15 text-white border border-white/20 px-2 py-0.5 rounded-full">{mentor.tier}</span>
                                         </div>

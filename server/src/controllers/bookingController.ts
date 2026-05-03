@@ -97,6 +97,7 @@ export const createBooking = async (req: AuthRequest, res: Response) => {
                     start_date: bookingStart,
                     end_date: bookingEnd,
                     frequency: bookingFrequency,
+                    client_timezone: clientTimezone || 'UTC',
                     status: 'pending'
                 },
                 include: {
@@ -296,6 +297,7 @@ export const createFreeSessionBooking = async (req: AuthRequest, res: Response) 
                     start_date: start,
                     end_date: end,
                     frequency: 'ONCE',
+                    client_timezone: clientTimezone || 'UTC',
                     status: 'active',
                 },
                 include: {

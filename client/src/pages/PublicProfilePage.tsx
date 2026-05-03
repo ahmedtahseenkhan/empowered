@@ -12,6 +12,7 @@ interface TutorProfile {
     country?: string;
     hourly_rate?: number;
     tier: 'STANDARD' | 'PRO' | 'PREMIUM';
+    is_founding_mentor?: boolean;
     categories?: { category: { name: string } }[];
     education?: any[];
     key_strengths?: string;
@@ -107,6 +108,12 @@ const PublicProfilePage: React.FC = () => {
                                         <div className="flex items-center gap-2 bg-gradient-to-r from-yellow-400 to-yellow-600 text-white px-4 py-2 rounded-full">
                                             <Award size={20} />
                                             <span className="font-semibold">Featured Mentor</span>
+                                        </div>
+                                    )}
+                                    {profile.is_founding_mentor && (
+                                        <div className="flex items-center gap-2 bg-amber-100 text-amber-800 border border-amber-300 px-4 py-2 rounded-full">
+                                            <Award size={18} />
+                                            <span className="font-semibold text-sm">Founding Mentor</span>
                                         </div>
                                     )}
                                 </div>

@@ -9,6 +9,37 @@ interface AuthenticatedRequest extends Request {
     };
 }
 
+// Grants the Founding Mentor badge to a beta mentor whose profile is now complete.
+async function checkAndGrantFoundingMentor(tutorId: string) {
+    const profile = await prisma.tutorProfile.findUnique({
+        where: { id: tutorId },
+        select: {
+            is_beta: true,
+            is_founding_mentor: true,
+            profile_photo: true,
+            tagline: true,
+            about: true,
+            hourly_rate: true,
+            _count: { select: { categories: true } },
+        },
+    });
+    if (!profile || !profile.is_beta || profile.is_founding_mentor) return;
+
+    const complete =
+        !!profile.profile_photo &&
+        !!profile.tagline?.trim() &&
+        !!profile.about?.trim() &&
+        profile.hourly_rate > 0 &&
+        profile._count.categories > 0;
+
+    if (complete) {
+        await prisma.tutorProfile.update({
+            where: { id: tutorId },
+            data: { is_founding_mentor: true },
+        });
+    }
+}
+
 export const listPublicTutors = async (req: Request, res: Response) => {
     try {
         const q = (req.query.q as string | undefined)?.trim();
@@ -181,6 +212,8 @@ export const getPublicTutorById = async (req: Request, res: Response) => {
                 timezone: true,
                 key_strengths: true,
                 is_verified: true,
+                is_beta: true,
+                is_founding_mentor: true,
                 tier: true,
                 rating: true,
                 review_count: true,
@@ -549,6 +582,7 @@ export const updateBio = async (req: AuthenticatedRequest, res: Response) => {
             }
         }
 
+        await checkAndGrantFoundingMentor(updatedProfile.id).catch(() => null);
         res.json(updatedProfile);
     } catch (error) {
         console.error('Update Bio Error:', error);
@@ -738,6 +772,7 @@ export const updateServices = async (req: AuthenticatedRequest, res: Response) =
             })),
         });
 
+        await checkAndGrantFoundingMentor(tutorId).catch(() => null);
         res.json({ message: 'Services updated' });
 
     } catch (error) {
@@ -791,6 +826,7 @@ export const updatePricing = async (req: AuthenticatedRequest, res: Response) =>
             data: { hourly_rate: parseInt(hourly_rate) }
         });
 
+        await checkAndGrantFoundingMentor(updatedProfile.id).catch(() => null);
         res.json(updatedProfile);
     } catch (error) {
         console.error('Update Pricing Error:', error);

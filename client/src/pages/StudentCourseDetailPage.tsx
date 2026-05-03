@@ -252,7 +252,7 @@ const StudentCourseDetailPage: React.FC = () => {
                                 </div>
                             )}
 
-                            {alreadyPurchased ? (
+                            {alreadyPurchased && (
                                 <div className="space-y-3">
                                     <div className="flex items-center gap-2 text-green-700 bg-green-50 rounded-xl p-3 text-sm font-semibold">
                                         <CheckCircle size={18} />
@@ -268,14 +268,6 @@ const StudentCourseDetailPage: React.FC = () => {
                                         Access Course
                                     </a>
                                 </div>
-                            ) : (
-                                <button
-                                    onClick={handleBuyNow}
-                                    disabled={checkoutLoading || checkingPurchase}
-                                    className="w-full bg-[#4A1D96] text-white py-4 rounded-xl font-bold text-lg hover:bg-purple-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                                >
-                                    {checkoutLoading ? 'Redirecting to payment...' : 'Enroll Now'}
-                                </button>
                             )}
 
                             <div className="mt-5 space-y-2 text-xs text-gray-500">

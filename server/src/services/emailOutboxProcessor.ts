@@ -156,19 +156,20 @@ async function sendOutboxRow(row: OutboxRow) {
             include: {
                 student: { select: { username: true } },
                 tutor: { select: { username: true, timezone: true } },
+                booking: { select: { client_timezone: true } },
             },
         });
 
         if (!lesson) throw new Error(`Lesson not found: ${lessonId}`);
 
         const clientBase = (process.env.CLIENT_URL || process.env.CLIENT_BASE_URL || 'https://emplearnings.com').trim().replace(/\/+$/, '');
-        const timeZone = lesson.tutor?.timezone || 'UTC';
+        const studentTimeZone = lesson.booking?.client_timezone || lesson.tutor?.timezone || 'UTC';
         await emailService.sendSessionReminderStudent({
             studentName: lesson.student?.username || 'Student',
             studentEmail: row.to_email,
             mentorName: lesson.tutor?.username || 'Mentor',
-            sessionDate: formatDatePart(lesson.start_time, timeZone),
-            sessionTime: formatTimePart(lesson.start_time, timeZone),
+            sessionDate: formatDatePart(lesson.start_time, studentTimeZone),
+            sessionTime: formatTimePart(lesson.start_time, studentTimeZone),
             meetingLink: lesson.meeting_link || '',
             dashboardUrl: `${clientBase}/student/sessions/${lesson.id}`,
         });
@@ -264,13 +265,14 @@ async function sendOutboxRow(row: OutboxRow) {
             include: {
                 student: { select: { username: true } },
                 tutor: { select: { username: true, timezone: true } },
+                booking: { select: { client_timezone: true } },
             },
         });
 
         if (!lesson) throw new Error(`Lesson not found: ${lessonId}`);
 
         const clientBase = (process.env.CLIENT_URL || process.env.CLIENT_BASE_URL || 'https://emplearnings.com').trim().replace(/\/+$/, '');
-        const timeZone = lesson.tutor?.timezone || 'UTC';
+        const timeZone = lesson.booking?.client_timezone || lesson.tutor?.timezone || 'UTC';
         const amountDollars = Number(row.payload?.amount || 0).toFixed(2);
 
         await emailService.sendEmail({
@@ -327,9 +329,19 @@ async function sendOutboxRow(row: OutboxRow) {
     }
 
     if (row.type === 'SESSION_PAYMENT_CONFIRMED_STUDENT') {
-        const p = row.payload as { tutorName?: string; studentName?: string; lessonStart?: string; amount?: number };
+        const p = row.payload as { tutorName?: string; studentName?: string; lessonStart?: string; lessonId?: string; amount?: number };
         const lessonStart = p.lessonStart ? new Date(p.lessonStart) : null;
         const amountDollars = p.amount ? Number(p.amount).toFixed(2) : '0.00';
+
+        let studentTimeZone = 'UTC';
+        if (p.lessonId) {
+            const lesson = await prisma.lesson.findUnique({
+                where: { id: p.lessonId },
+                select: { booking: { select: { client_timezone: true } } },
+            });
+            studentTimeZone = lesson?.booking?.client_timezone || 'UTC';
+        }
+
         await emailService.sendEmail({
             to: row.to_email,
             subject: 'Payment Confirmed for Upcoming Session',
@@ -338,7 +350,7 @@ async function sendOutboxRow(row: OutboxRow) {
   <h2 style="color:#4A1D96;margin:0 0 16px 0">Payment Confirmed</h2>
   <p style="margin:0 0 12px 0">Hi ${p.studentName || 'there'},</p>
   <p style="margin:0 0 12px 0">Your payment of <strong>$${amountDollars}</strong> has been successfully received for your upcoming session with <strong>${p.tutorName || 'your mentor'}</strong>.</p>
-  ${lessonStart ? `<p style="margin:0 0 12px 0">📅 Session: <strong>${formatDatePart(lessonStart)} at ${formatTimePart(lessonStart)}</strong></p>` : ''}
+  ${lessonStart ? `<p style="margin:0 0 12px 0">📅 Session: <strong>${formatDatePart(lessonStart, studentTimeZone)} at ${formatTimePart(lessonStart, studentTimeZone)}</strong></p>` : ''}
   <p style="margin:0 0 24px 0">The session is fully confirmed. See you then!</p>
   <p style="margin:0;color:#999;font-size:12px">Team EmpowerEd Learnings</p>
 </div>`,

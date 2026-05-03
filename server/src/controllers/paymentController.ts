@@ -207,19 +207,20 @@ export const activateMentorTrial = async (req: Request, res: Response) => {
         }
 
         const trialEnd = new Date();
-        trialEnd.setDate(trialEnd.getDate() + 1); // TODO: Change back to 60 for production (2-month trial)
+        trialEnd.setDate(trialEnd.getDate() + 60); // 2-month free beta trial
 
         await prisma.tutorProfile.update({
             where: { id: tutor.id },
             data: {
-                tier: tier as any,
+                tier: 'PREMIUM' as any, // Beta users always receive the Premium plan
                 subscription_status: 'trialing',
                 subscription_end_date: trialEnd,
-                has_used_trial: true, // Mark trial as used
+                has_used_trial: true,
+                is_beta: true,
             },
         });
 
-        return res.json({ success: true, subscription_status: 'trialing', subscription_end_date: trialEnd });
+        return res.json({ success: true, subscription_status: 'trialing', subscription_end_date: trialEnd, tier: 'PREMIUM' });
     } catch (error: any) {
         if (error instanceof z.ZodError) {
             return res.status(400).json({ error: error.issues });

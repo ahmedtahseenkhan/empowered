@@ -21,6 +21,7 @@ type PublicTutorProfile = {
     review_count: number;
     tier: string;
     is_verified: boolean;
+    is_founding_mentor: boolean;
     video_url: string | null;
     marketing_video_url: string | null;
     profile_photo: string | null;
@@ -344,6 +345,11 @@ const MentorPublicProfilePage: React.FC = () => {
                                         {mentor.is_verified && (
                                             <span className="inline-flex items-center gap-1 text-xs bg-white/20 border border-white/30 px-2.5 py-0.5 rounded-full font-medium">
                                                 <BadgeCheck className="w-3 h-3" /> Verified
+                                            </span>
+                                        )}
+                                        {mentor.is_founding_mentor && (
+                                            <span className="inline-flex items-center gap-1 text-xs bg-amber-400/90 text-amber-900 border border-amber-300/60 px-2.5 py-0.5 rounded-full font-semibold">
+                                                <Award className="w-3 h-3" /> Founding Mentor
                                             </span>
                                         )}
                                         <span className="text-xs bg-white/15 border border-white/20 px-2.5 py-0.5 rounded-full">

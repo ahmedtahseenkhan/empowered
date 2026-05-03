@@ -5,7 +5,7 @@ import { PageLayout } from '../layouts/PageLayout';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
-import { Check, X, Shield, CreditCard, Mail } from 'lucide-react';
+import { Check, X, Shield, CreditCard, Mail, PartyPopper } from 'lucide-react';
 import api from '../api/axios';
 
 const STEPS = [
@@ -35,6 +35,7 @@ const TutorRegisterPage: React.FC = () => {
     const [resendMessage, setResendMessage] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [betaActivated, setBetaActivated] = useState(false);
     const [serverPlans, setServerPlans] = useState<Array<{ id: string; priceId: string; annualAmount: number }>>([]);
 
     const plansBase = [
@@ -221,9 +222,11 @@ const TutorRegisterPage: React.FC = () => {
         setLoading(true);
         setError('');
         try {
-            // Try beta trial first
+            // Try beta trial first — server always grants PREMIUM to approved beta applicants
             await api.put('/tutor/me/tier', { tier: formData.plan });
             await api.post('/payments/mentor/subscription/activate-trial', { tier: formData.plan });
+            setFormData(prev => ({ ...prev, plan: 'PREMIUM' }));
+            setBetaActivated(true);
             setCurrentStep(5);
         } catch (err: any) {
             if (err.response?.status === 403) {
@@ -470,6 +473,43 @@ const TutorRegisterPage: React.FC = () => {
                     </div>
                 );
             case 5:
+                if (betaActivated) {
+                    return (
+                        <div className="text-center space-y-6">
+                            <div className="mx-auto w-20 h-20 bg-green-100 rounded-full flex items-center justify-center">
+                                <PartyPopper className="w-10 h-10 text-green-600" />
+                            </div>
+                            <div>
+                                <h2 className="text-2xl font-bold text-gray-900 mb-3">Congratulations!</h2>
+                                <div className="bg-green-50 border border-green-200 rounded-xl p-5 text-left space-y-3">
+                                    <p className="text-green-800 font-semibold text-base">
+                                        Your free 2-month beta Premium plan has started. No credit card is required.
+                                    </p>
+                                    <p className="text-green-700 text-sm">
+                                        You can start using EmpowerEd Learnings today with full Premium access — including AI-assisted lesson planning, multiple listings, and more.
+                                    </p>
+                                    <p className="text-green-700 text-sm">
+                                        Please <a href="mailto:support@emplearnings.com" className="underline font-medium">contact us</a> if you have any questions.
+                                    </p>
+                                </div>
+                                <div className="mt-4 inline-flex items-center gap-2 bg-purple-100 text-purple-800 text-sm font-semibold px-4 py-2 rounded-full">
+                                    <Check className="w-4 h-4" /> Premium Plan Activated
+                                </div>
+                            </div>
+                            <Button className="w-full" onClick={() => setBetaActivated(false)}>
+                                Continue to Setup Payments
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                className="w-full"
+                                onClick={() => { window.location.href = '/dashboard'; }}
+                            >
+                                Go to Dashboard
+                            </Button>
+                        </div>
+                    );
+                }
                 return (
                     <div className="text-center space-y-6">
                         <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
