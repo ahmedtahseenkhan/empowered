@@ -40,8 +40,6 @@ const StudentCourseDetailPage: React.FC = () => {
     const [course, setCourse] = useState<CourseDetail | null>(null);
     const [loading, setLoading] = useState(true);
     const [alreadyPurchased, setAlreadyPurchased] = useState(false);
-    const [checkingPurchase, setCheckingPurchase] = useState(true);
-    const [checkoutLoading, setCheckoutLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
@@ -54,32 +52,8 @@ const StudentCourseDetailPage: React.FC = () => {
                     setAlreadyPurchased(purchases.some(p => p.course.id === id));
                 })
                 .catch(() => {}),
-        ]).finally(() => {
-            setLoading(false);
-            setCheckingPurchase(false);
-        });
+        ]).finally(() => setLoading(false));
     }, [id]);
-
-    const handleBuyNow = async () => {
-        if (!user) {
-            navigate('/login');
-            return;
-        }
-        if (!course) return;
-        setCheckoutLoading(true);
-        setError(null);
-        try {
-            const baseUrl = window.location.origin;
-            const res = await api.post(`/courses/${course.id}/checkout`, {
-                successUrl: `${baseUrl}/student/my-courses?enrolled=${course.id}`,
-                cancelUrl: `${baseUrl}/student/courses/${course.id}`,
-            });
-            window.location.href = res.data.url;
-        } catch (err: any) {
-            setError(err.response?.data?.error || 'Failed to start checkout. Please try again.');
-            setCheckoutLoading(false);
-        }
-    };
 
     const tutorDisplayName = () => {
         if (!course) return 'Mentor';

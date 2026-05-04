@@ -1,10 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
-import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import {
-    Users, UserCheck, Calendar, ChevronLeft, ChevronRight,
-    AlertCircle, CheckCircle2, Circle, ArrowRight, Zap,
+    ChevronLeft, ChevronRight,
+    CheckCircle2, Circle, ArrowRight, Zap,
     FileText, BookOpen, Upload, CreditCard, ExternalLink
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';

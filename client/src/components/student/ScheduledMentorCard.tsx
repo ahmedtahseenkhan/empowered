@@ -18,14 +18,13 @@ interface ScheduledMentorCardProps {
         nextSessionDate?: string;
     };
     onEmailMentor: (id: string) => void;
-    onStopPayments: (id: string) => void;
+    onStopPayments?: (id: string) => void;
     onReviewMentor: (id: string) => void;
 }
 
 export const ScheduledMentorCard: React.FC<ScheduledMentorCardProps> = ({
     mentor,
     onEmailMentor,
-    onStopPayments,
     onReviewMentor
 }) => {
 
