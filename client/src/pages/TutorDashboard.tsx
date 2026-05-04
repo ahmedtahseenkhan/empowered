@@ -413,21 +413,7 @@ const TutorDashboard: React.FC = () => {
                             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-5 py-4 border-b border-gray-100">
                                 <div>
                                     <h2 className="text-base font-semibold text-gray-900">Calendar & Availability</h2>
-                                    <p className="text-xs text-gray-400 mt-0.5">
-                                        {profile?.google_calendar_connection?.sync_enabled
-                                            ? 'Google Calendar synced — busy times auto-blocked.'
-                                            : 'Drag on the grid below to block time. Connect Google to auto-sync.'}
-                                    </p>
-                                </div>
-                                <div className="flex items-center gap-2 shrink-0">
-                                    {profile?.google_calendar_connection?.sync_enabled ? (
-                                        <Button size="sm" variant="outline" onClick={handleDisconnectGoogleCalendar}>Disconnect</Button>
-                                    ) : (
-                                        <Button size="sm" variant="outline" onClick={handleConnectGoogleCalendar} className="inline-flex items-center gap-1.5">
-                                            <img loading="lazy" decoding="async" src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg" alt="" className="w-3.5 h-3.5" />
-                                            Connect Google
-                                        </Button>
-                                    )}
+                                    <p className="text-xs text-gray-400 mt-0.5">Drag on the week grid to block time.</p>
                                 </div>
                             </div>
 
