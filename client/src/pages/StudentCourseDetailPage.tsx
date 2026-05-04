@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import api from '../api/axios';
-import { useAuth } from '../context/AuthContext';
+
 
 interface CourseDetail {
     id: string;
@@ -35,7 +35,7 @@ interface CourseDetail {
 const StudentCourseDetailPage: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
-    const { user } = useAuth();
+
 
     const [course, setCourse] = useState<CourseDetail | null>(null);
     const [loading, setLoading] = useState(true);
