@@ -173,19 +173,6 @@ const TutorDashboard: React.FC = () => {
 
     useEffect(() => { refreshCalendarData(); }, [refreshCalendarData]);
 
-    const handleConnectGoogleCalendar = async () => {
-        try {
-            const res = await api.get('/google-calendar/connect');
-            if (res.data?.authUrl) window.location.href = res.data.authUrl;
-        } catch (e) { console.error(e); }
-    };
-
-    const handleDisconnectGoogleCalendar = async () => {
-        try {
-            await api.post('/google-calendar/disconnect');
-            const res = await api.get('/tutor/me'); setProfile(res.data);
-        } catch (e) { console.error(e); }
-    };
 
     // ─── Computed values ────────────────────────────────────────────────────────
     const completedCount = Object.values(checklist).filter(Boolean).length;
