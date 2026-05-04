@@ -77,7 +77,7 @@ const TutorDashboard: React.FC = () => {
     const [activityBusy, setActivityBusy] = useState(false);
     const [activityItems, setActivityItems] = useState<Array<{ type: 'NOTE' | 'TASK' | 'SUBMISSION'; created_at: string; data: any }>>([]);
 
-    const [viewMode, setViewMode] = useState<'week' | 'month'>('week');
+    const [viewMode, setViewMode] = useState<'week' | 'month'>('month');
     const [weekStartDate, setWeekStartDate] = useState<Date>(() => {
         const now = new Date(); const day = now.getDay();
         const diff = (day + 6) % 7; const start = new Date(now);
@@ -233,7 +233,7 @@ const TutorDashboard: React.FC = () => {
     })();
 
     // ─── Calendar helpers ───────────────────────────────────────────────────────
-    const startHour = 6; const endHour = 22; const hourHeightPx = 48;
+    const startHour = 6; const endHour = 22; const hourHeightPx = 56;
     const minutesToPx = (m: number) => (m / 60) * hourHeightPx;
     const weekDays = Array.from({ length: 7 }).map((_, i) => {
         const d = new Date(weekStartDate); d.setDate(weekStartDate.getDate() + i); return d;
@@ -505,16 +505,18 @@ const TutorDashboard: React.FC = () => {
                                 </>
                             ) : (
                                 <>
-                                    <div className="grid border-b border-gray-100" style={{ gridTemplateColumns: '64px repeat(7, minmax(0, 1fr))' }}>
-                                        <div className="bg-gray-50/60" />
+                                    {/* Day header row */}
+                                    <div className="grid border-b border-gray-200 bg-white sticky top-0 z-10" style={{ gridTemplateColumns: '72px repeat(7, minmax(0, 1fr))' }}>
+                                        <div className="bg-white border-r border-gray-200" />
                                         {weekDays.map((d, idx) => {
                                             const isToday = d.toDateString() === new Date().toDateString();
                                             return (
-                                                <div key={idx} className={`py-2.5 px-2 text-center border-l border-gray-100 ${isToday ? 'bg-purple-50' : 'bg-gray-50/60'}`}>
-                                                    <div className={`text-[11px] font-semibold uppercase tracking-wide ${isToday ? 'text-purple-700' : 'text-gray-400'}`}>
+                                                <div key={idx} className={`py-3 px-2 text-center border-l border-gray-100 ${isToday ? 'bg-purple-600' : 'bg-white'}`}>
+                                                    <div className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${isToday ? 'text-purple-200' : 'text-gray-400'}`}>
                                                         {d.toLocaleDateString(undefined, { weekday: 'short' })}
                                                     </div>
-                                                    <div className={`text-sm font-bold mt-0.5 ${isToday ? 'text-purple-700' : 'text-gray-700'}`}>
+                                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center mx-auto text-sm font-bold
+                                                        ${isToday ? 'bg-white text-purple-700' : 'text-gray-700'}`}>
                                                         {d.getDate()}
                                                     </div>
                                                 </div>
@@ -522,92 +524,134 @@ const TutorDashboard: React.FC = () => {
                                         })}
                                     </div>
 
-                                    <div className="grid overflow-y-auto" style={{ gridTemplateColumns: '64px repeat(7, minmax(0, 1fr))', maxHeight: 520 }}>
-                                        {/* Hour labels */}
-                                        <div className="border-r border-gray-100">
-                                            {Array.from({ length: endHour - startHour }).map((_, i) => {
-                                                const hour = startHour + i;
-                                                const label = new Date(new Date().setHours(hour, 0, 0, 0)).toLocaleTimeString(undefined, { hour: 'numeric', hour12: true });
-                                                return (
-                                                    <div key={hour} className="h-12 border-b border-gray-50 pr-2 flex items-start justify-end">
-                                                        <span className="text-[10px] text-gray-400 mt-1">{label}</span>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-
-                                        {weekDays.map((_, dayIdx) => (
-                                            <div key={dayIdx} className="relative border-l border-gray-100 select-none"
-                                                style={{ height: (endHour - startHour) * hourHeightPx }}
-                                                onMouseDown={e => {
-                                                    const minute = pointerToMinuteOfDay(e.clientY, e.currentTarget);
-                                                    if (minute === null) return;
-                                                    setIsSelecting(true); setSelectDayIdx(dayIdx);
-                                                    setSelectStartMin(minute); setSelectEndMin(minute);
-                                                }}
-                                                onMouseMove={e => {
-                                                    if (!isSelecting || selectDayIdx !== dayIdx) return;
-                                                    const minute = pointerToMinuteOfDay(e.clientY, e.currentTarget);
-                                                    if (minute !== null) setSelectEndMin(minute);
-                                                }}>
-                                                {Array.from({ length: endHour - startHour }).map((__, i) => (
-                                                    <div key={i} className="h-12 border-b border-gray-50" />
-                                                ))}
-
-                                                {selectionOverlay && selectDayIdx === dayIdx && (
-                                                    <div className="absolute left-0.5 right-0.5 rounded-md bg-purple-100/70 border border-purple-300 pointer-events-none"
-                                                        style={{ top: selectionOverlay.top, height: selectionOverlay.height }} />
-                                                )}
-
-                                                {slotBlocks.filter(s => s.idx === dayIdx).map((s, i) => {
-                                                    const sm = (s.start.getHours() - startHour) * 60 + s.start.getMinutes();
-                                                    const em = (s.end.getHours() - startHour) * 60 + s.end.getMinutes();
-                                                    if (sm < 0 || em > (endHour - startHour) * 60) return null;
+                                    {/* Scrollable grid body */}
+                                    <div className="overflow-y-auto" style={{ maxHeight: 560 }}>
+                                        <div className="grid" style={{ gridTemplateColumns: '72px repeat(7, minmax(0, 1fr))' }}>
+                                            {/* Hour labels column */}
+                                            <div className="border-r border-gray-200">
+                                                {Array.from({ length: endHour - startHour }).map((_, i) => {
+                                                    const hour = startHour + i;
+                                                    const label = new Date(new Date().setHours(hour, 0, 0, 0))
+                                                        .toLocaleTimeString(undefined, { hour: 'numeric', hour12: true });
                                                     return (
-                                                        <div key={`slot-${i}`} className="absolute left-0.5 right-0.5 rounded-md bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 text-[10px] text-emerald-700 font-medium"
-                                                            style={{ top: minutesToPx(sm), height: Math.max(10, minutesToPx(em - sm)) }}>
-                                                            Available
-                                                        </div>
-                                                    );
-                                                })}
-
-                                                {blockedBlocks.filter(b => b.idx === dayIdx).map(b => {
-                                                    const sm = (b.start.getHours() - startHour) * 60 + b.start.getMinutes();
-                                                    const em = (b.end.getHours() - startHour) * 60 + b.end.getMinutes();
-                                                    if (sm < 0 || em > (endHour - startHour) * 60) return null;
-                                                    return (
-                                                        <div key={b.id} className="absolute left-0.5 right-0.5 rounded-md bg-gray-100 border border-gray-200 px-1.5 py-0.5 text-[10px] text-gray-600 cursor-pointer hover:bg-gray-200 transition-colors"
-                                                            style={{ top: minutesToPx(sm), height: Math.max(12, minutesToPx(em - sm)) }}
-                                                            onMouseDown={e => e.stopPropagation()}
-                                                            onClick={e => { e.stopPropagation(); openEditBlock({ id: b.id, start_time: b.start_time, end_time: b.end_time, reason: b.reason }); }}>
-                                                            <div className="font-semibold truncate">Blocked</div>
-                                                            {b.reason && <div className="truncate opacity-70">{b.reason}</div>}
-                                                        </div>
-                                                    );
-                                                })}
-
-                                                {lessonBlocks.filter(l => l.idx === dayIdx).map(l => {
-                                                    const sm = (l.start.getHours() - startHour) * 60 + l.start.getMinutes();
-                                                    const em = (l.end.getHours() - startHour) * 60 + l.end.getMinutes();
-                                                    if (sm < 0 || em > (endHour - startHour) * 60) return null;
-                                                    const isFree = l.billing_type === 'FREE_INTRO';
-                                                    const isPending = l.status === 'PENDING' || l.status === 'BOOKED' || l.billing_type === 'FREE_TRIAL';
-                                                    const blockCls = isFree
-                                                        ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
-                                                        : isPending
-                                                            ? 'bg-amber-50 border-amber-300 text-amber-900'
-                                                            : 'bg-purple-50 border-purple-300 text-purple-900';
-                                                    return (
-                                                        <div key={l.id} className={`absolute left-0.5 right-0.5 rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${blockCls}`}
-                                                            style={{ top: minutesToPx(sm), height: Math.max(12, minutesToPx(em - sm)) }}
-                                                            onMouseDown={e => e.stopPropagation()}>
-                                                            <div className="font-semibold truncate">{l.student?.username || 'Student'}</div>
-                                                            <div className="truncate opacity-70">{isFree ? 'Free intro' : isPending ? 'Pending' : 'Paid'}</div>
+                                                        <div key={hour} className={`h-14 border-b flex items-start justify-end pr-3 pt-1 ${i % 2 === 0 ? 'border-gray-200' : 'border-gray-100'}`}>
+                                                            <span className="text-[10px] font-medium text-gray-400 tabular-nums">{label}</span>
                                                         </div>
                                                     );
                                                 })}
                                             </div>
-                                        ))}
+
+                                            {/* Day columns */}
+                                            {weekDays.map((d, dayIdx) => {
+                                                const isToday = d.toDateString() === new Date().toDateString();
+                                                const nowMinutes = new Date().getHours() * 60 + new Date().getMinutes();
+                                                const showNowLine = isToday && nowMinutes > startHour * 60 && nowMinutes < endHour * 60;
+
+                                                return (
+                                                    <div key={dayIdx}
+                                                        className={`relative border-l border-gray-100 select-none ${isToday ? 'bg-purple-50/30' : ''}`}
+                                                        style={{ height: (endHour - startHour) * 56 }}
+                                                        onMouseDown={e => {
+                                                            const minute = pointerToMinuteOfDay(e.clientY, e.currentTarget);
+                                                            if (minute === null) return;
+                                                            setIsSelecting(true); setSelectDayIdx(dayIdx);
+                                                            setSelectStartMin(minute); setSelectEndMin(minute);
+                                                        }}
+                                                        onMouseMove={e => {
+                                                            if (!isSelecting || selectDayIdx !== dayIdx) return;
+                                                            const minute = pointerToMinuteOfDay(e.clientY, e.currentTarget);
+                                                            if (minute !== null) setSelectEndMin(minute);
+                                                        }}>
+
+                                                        {/* Hour bands */}
+                                                        {Array.from({ length: endHour - startHour }).map((__, i) => (
+                                                            <div key={i} className={`absolute left-0 right-0 border-b ${i % 2 === 0 ? 'border-gray-200' : 'border-gray-100'}`}
+                                                                style={{ top: i * 56, height: 56 }} />
+                                                        ))}
+
+                                                        {/* Current time line */}
+                                                        {showNowLine && (
+                                                            <div className="absolute left-0 right-0 z-20 pointer-events-none flex items-center"
+                                                                style={{ top: (nowMinutes - startHour * 60) / 60 * 56 }}>
+                                                                <div className="w-2 h-2 rounded-full bg-purple-600 -ml-1 shrink-0" />
+                                                                <div className="flex-1 h-px bg-purple-500" />
+                                                            </div>
+                                                        )}
+
+                                                        {/* Drag selection overlay */}
+                                                        {selectionOverlay && selectDayIdx === dayIdx && (
+                                                            <div className="absolute left-1 right-1 rounded-lg bg-purple-200/60 border-2 border-purple-400 border-dashed pointer-events-none z-10"
+                                                                style={{ top: selectionOverlay.top, height: Math.max(14, selectionOverlay.height) }} />
+                                                        )}
+
+                                                        {/* Available slots */}
+                                                        {slotBlocks.filter(s => s.idx === dayIdx).map((s, i) => {
+                                                            const sm = (s.start.getHours() - startHour) * 60 + s.start.getMinutes();
+                                                            const em = (s.end.getHours() - startHour) * 60 + s.end.getMinutes();
+                                                            if (sm < 0 || em > (endHour - startHour) * 60) return null;
+                                                            const top = sm / 60 * 56;
+                                                            const height = Math.max(12, (em - sm) / 60 * 56);
+                                                            return (
+                                                                <div key={`slot-${i}`}
+                                                                    className="absolute left-1 right-1 rounded-lg bg-emerald-100 border border-emerald-300 px-2 py-1 overflow-hidden"
+                                                                    style={{ top, height }}>
+                                                                    <span className="text-[10px] font-semibold text-emerald-700">Available</span>
+                                                                </div>
+                                                            );
+                                                        })}
+
+                                                        {/* Blocked times */}
+                                                        {blockedBlocks.filter(b => b.idx === dayIdx).map(b => {
+                                                            const sm = (b.start.getHours() - startHour) * 60 + b.start.getMinutes();
+                                                            const em = (b.end.getHours() - startHour) * 60 + b.end.getMinutes();
+                                                            if (sm < 0 || em > (endHour - startHour) * 60) return null;
+                                                            const top = sm / 60 * 56;
+                                                            const height = Math.max(14, (em - sm) / 60 * 56);
+                                                            return (
+                                                                <div key={b.id}
+                                                                    className="absolute left-1 right-1 rounded-lg bg-gray-200/80 border border-gray-300 px-2 py-1 cursor-pointer hover:bg-gray-300/80 transition-colors overflow-hidden group"
+                                                                    style={{ top, height }}
+                                                                    onMouseDown={e => e.stopPropagation()}
+                                                                    onClick={e => { e.stopPropagation(); openEditBlock({ id: b.id, start_time: b.start_time, end_time: b.end_time, reason: b.reason }); }}>
+                                                                    <div className="text-[10px] font-bold text-gray-600 truncate">Blocked</div>
+                                                                    {b.reason && <div className="text-[9px] text-gray-500 truncate">{b.reason}</div>}
+                                                                </div>
+                                                            );
+                                                        })}
+
+                                                        {/* Sessions */}
+                                                        {lessonBlocks.filter(l => l.idx === dayIdx).map(l => {
+                                                            const sm = (l.start.getHours() - startHour) * 60 + l.start.getMinutes();
+                                                            const em = (l.end.getHours() - startHour) * 60 + l.end.getMinutes();
+                                                            if (sm < 0 || em > (endHour - startHour) * 60) return null;
+                                                            const top = sm / 60 * 56;
+                                                            const height = Math.max(24, (em - sm) / 60 * 56);
+                                                            const isFree = l.billing_type === 'FREE_INTRO';
+                                                            const isPending = l.status === 'PENDING' || l.status === 'BOOKED' || l.billing_type === 'FREE_TRIAL';
+                                                            const isPaid = !isFree && !isPending;
+
+                                                            const bg = isFree ? 'bg-emerald-500' : isPending ? 'bg-amber-500' : 'bg-purple-600';
+                                                            const pill = isFree ? 'Free intro' : isPending ? 'Pending' : 'Paid';
+                                                            const pillBg = isFree ? 'bg-emerald-400/40' : isPending ? 'bg-amber-400/40' : 'bg-purple-500/40';
+
+                                                            return (
+                                                                <div key={l.id}
+                                                                    className={`absolute left-1 right-1 rounded-lg ${bg} text-white px-2 py-1.5 overflow-hidden shadow-sm cursor-default`}
+                                                                    style={{ top, height }}
+                                                                    onMouseDown={e => e.stopPropagation()}>
+                                                                    <div className="text-[11px] font-bold truncate leading-tight">{l.student?.username || 'Student'}</div>
+                                                                    {height > 32 && (
+                                                                        <div className="flex items-center gap-1 mt-0.5">
+                                                                            <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${pillBg}`}>{pill}</span>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
                                     </div>
                                 </>
                             )}
