@@ -628,7 +628,6 @@ const TutorDashboard: React.FC = () => {
                                                             const height = Math.max(24, (em - sm) / 60 * 56);
                                                             const isFree = l.billing_type === 'FREE_INTRO';
                                                             const isPending = l.status === 'PENDING' || l.status === 'BOOKED' || l.billing_type === 'FREE_TRIAL';
-                                                            const isPaid = !isFree && !isPending;
 
                                                             const bg = isFree ? 'bg-emerald-500' : isPending ? 'bg-amber-500' : 'bg-purple-600';
                                                             const pill = isFree ? 'Free intro' : isPending ? 'Pending' : 'Paid';
