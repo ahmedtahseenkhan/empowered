@@ -97,7 +97,8 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
         setSubStatus(res.data);
       } catch (e) {
         console.error('Failed to fetch subscription status', e);
-        setSubStatus({ subscription_status: null, subscription_end_date: null });
+        // On network/server error, grant access rather than locking the mentor out.
+        setSubStatus({ subscription_status: 'active', subscription_end_date: null });
       } finally {
         setSubLoading(false);
       }
@@ -120,7 +121,9 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   if (!user) return <Navigate to="/login" />;
 
   if (isTutor && !isAllowedWithoutSubscription) {
-    if (subLoading) {
+    // subStatus=null means the fetch hasn't completed yet (or user just changed from null→tutor).
+    // Hold the spinner until we have a real result — prevents a redirect on the first render frame.
+    if (subLoading || subStatus === null) {
       return (
         <div className="min-h-screen flex items-center justify-center">
           <div className="text-center">
