@@ -121,9 +121,6 @@ const StudentCoursesPage: React.FC = () => {
 
                                     <div className="flex items-center justify-between mt-auto pt-3 border-t border-gray-100">
                                         <div>
-                                            <p className="text-xs text-gray-400">Paid</p>
-                                            <p className="font-extrabold text-gray-900">${Number(p.course.price).toFixed(2)}</p>
-                                        </div>
                                         <a
                                             href={p.course.course_url}
                                             target="_blank"

@@ -108,18 +108,6 @@ const StudentCourseMarketplacePage: React.FC = () => {
                         </select>
                         <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                     </div>
-                    <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm font-semibold">Max $</span>
-                        <input
-                            type="number"
-                            placeholder="Any price"
-                            value={maxPrice}
-                            onChange={e => setMaxPrice(e.target.value)}
-                            min="0"
-                            step="1"
-                            className="pl-14 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#4A1D96] w-36"
-                        />
-                    </div>
                     <button
                         type="submit"
                         className="px-6 py-3 bg-[#4A1D96] text-white rounded-xl font-semibold hover:bg-purple-800 transition-colors"
@@ -219,10 +207,7 @@ const StudentCourseMarketplacePage: React.FC = () => {
                                         )}
                                     </div>
 
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-xl font-extrabold text-[#4A1D96]">
-                                            ${Number(course.price).toFixed(2)}
-                                        </span>
+                                    <div className="flex items-center justify-end">
                                         <span className="text-xs bg-purple-600 text-white px-3 py-1.5 rounded-lg font-semibold group-hover:bg-purple-800 transition-colors">
                                             View Course
                                         </span>

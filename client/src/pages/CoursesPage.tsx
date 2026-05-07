@@ -204,11 +204,8 @@ const CoursesPage: React.FC = () => {
                                     </p>
 
                                     <div className="flex items-center justify-between mb-4">
-                                        <span className="text-2xl font-bold text-[#4A1D96]">
-                                            ${Number(course.price).toFixed(2)}
-                                        </span>
                                         <span className="text-sm text-gray-500">
-                                            {course._count?.purchases || 0} sales
+                                            {course._count?.purchases || 0} enrolled
                                         </span>
                                     </div>
 

@@ -213,11 +213,7 @@ const StudentCourseDetailPage: React.FC = () => {
                     {/* ── Right / Purchase card ── */}
                     <div className="lg:col-span-1">
                         <div className="bg-white rounded-2xl shadow-xl p-6 sticky top-8">
-                            {/* Price */}
-                            <p className="text-4xl font-extrabold text-gray-900 mb-1">
-                                ${Number(course.price).toFixed(2)}
-                            </p>
-                            <p className="text-sm text-gray-500 mb-6">One-time payment · Lifetime access</p>
+                            <p className="text-sm text-gray-500 mb-6">Free access · Lifetime access</p>
 
                             {error && (
                                 <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-3 mb-4 text-sm flex items-start gap-2">

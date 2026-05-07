@@ -70,7 +70,7 @@ const CourseCreatePage: React.FC = () => {
         try {
             const payload = {
                 ...formData,
-                price: parseFloat(formData.price),
+                price: 0,
                 preview_url: formData.preview_url || undefined,
                 thumbnail_url: formData.thumbnail_url || undefined,
                 category: formData.category || undefined,
@@ -255,34 +255,13 @@ const CourseCreatePage: React.FC = () => {
                         />
                     </div>
 
-                    {/* Price + Status */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                            <label className="block text-sm font-semibold text-gray-900 mb-2">
-                                Price (USD) <span className="text-red-500">*</span>
-                            </label>
-                            <div className="relative">
-                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-semibold">$</span>
-                                <input
-                                    type="number"
-                                    name="price"
-                                    placeholder="0.00"
-                                    value={formData.price}
-                                    onChange={handleChange}
-                                    required
-                                    min="1"
-                                    step="0.01"
-                                    className={`${inputClass} pl-8`}
-                                />
-                            </div>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-semibold text-gray-900 mb-2">Status</label>
-                            <select name="status" value={formData.status} onChange={handleChange} className={inputClass}>
-                                <option value="DRAFT">Draft — not visible to students</option>
-                                <option value="PUBLISHED">Published — visible & purchasable</option>
-                            </select>
-                        </div>
+                    {/* Status */}
+                    <div>
+                        <label className="block text-sm font-semibold text-gray-900 mb-2">Status</label>
+                        <select name="status" value={formData.status} onChange={handleChange} className={inputClass}>
+                            <option value="DRAFT">Draft — not visible to students</option>
+                            <option value="PUBLISHED">Published — visible to students</option>
+                        </select>
                     </div>
 
                     <div className="flex justify-end pt-2 gap-3">
