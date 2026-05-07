@@ -186,109 +186,109 @@ async function checkDemoCallReminders() {
 }
 
 // Auto-cancel lessons whose payment is still pending 24 h before start time.
-// Runs each scheduler tick. Idempotent — only cancels BOOKED lessons.
+// Queries lessons directly so each lesson is matched to its own PaymentSchedule only.
+// Previous bug: querying via PaymentSchedule→booking incorrectly marked ALL pending payments
+// in a booking as failed when only one lesson was within the 24h window.
 async function autoCancelUnpaidLessons() {
     try {
         const now = new Date();
         const cutoff = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 h from now
 
-        // Cancel sessions that: haven't started yet, start within 24 h, and payment is still pending
-        const overduePayments = await prisma.paymentSchedule.findMany({
+        // Find BOOKED paid lessons that start within the next 24 h
+        const dueLessons = await prisma.lesson.findMany({
             where: {
-                status: 'pending',
-                booking: {
-                    lessons: {
-                        some: {
-                            status: 'BOOKED',
-                            start_time: {
-                                gte: now,     // must not have started yet
-                                lte: cutoff,  // must be within 24 h
-                            },
-                        },
-                    },
+                status: 'BOOKED',
+                billing_type: 'PAID',
+                start_time: {
+                    gte: now,
+                    lte: cutoff,
                 },
             },
             include: {
-                booking: {
-                    include: {
-                        lessons: {
-                            where: {
-                                status: 'BOOKED',
-                                start_time: {
-                                    gte: now,
-                                    lte: cutoff,
-                                },
-                            },
-                            include: {
-                                student: { include: { user: { select: { email: true } } } },
-                                tutor: { include: { user: { select: { email: true } } } },
-                            },
-                        },
-                    },
-                },
+                student: { include: { user: { select: { email: true } } } },
+                tutor: { include: { user: { select: { email: true } } } },
             },
         });
 
-        for (const payment of overduePayments) {
-            for (const lesson of payment.booking.lessons) {
-                // Cancel the lesson
-                await prisma.lesson.update({
-                    where: { id: lesson.id },
-                    data: { status: 'CANCELLED' },
-                });
+        let cancelledCount = 0;
 
-                // Mark the payment as failed
-                await prisma.paymentSchedule.update({
-                    where: { id: payment.id },
-                    data: { status: 'failed' },
-                });
+        for (const lesson of dueLessons) {
+            if (!lesson.booking_id) continue;
 
-                // Notify student
-                if (lesson.student.user.email) {
-                    try {
-                        await prisma.emailOutbox.create({
-                            data: {
-                                type: 'SESSION_CANCELLED_UNPAID_STUDENT',
-                                to_email: lesson.student.user.email,
-                                payload: {
-                                    lessonId: lesson.id,
-                                    lessonStart: lesson.start_time.toISOString(),
-                                    amount: payment.amount,
-                                },
-                                idempotency_key: `session-cancelled-unpaid-student:${lesson.id}`,
+            // Find the PaymentSchedule that belongs to THIS specific lesson.
+            // due_date is set to start_time - 48h with a ±2h tolerance window.
+            const dueDate = new Date(lesson.start_time.getTime() - 48 * 60 * 60 * 1000);
+            const schedule = await prisma.paymentSchedule.findFirst({
+                where: {
+                    booking_id: lesson.booking_id,
+                    status: 'pending',
+                    due_date: {
+                        gte: new Date(dueDate.getTime() - 2 * 60 * 60 * 1000),
+                        lte: new Date(dueDate.getTime() + 2 * 60 * 60 * 1000),
+                    },
+                },
+            });
+
+            if (!schedule) continue; // Already paid or free — skip
+
+            // Cancel only this lesson
+            await prisma.lesson.update({
+                where: { id: lesson.id },
+                data: { status: 'CANCELLED' },
+            });
+
+            // Mark only this lesson's payment as failed
+            await prisma.paymentSchedule.update({
+                where: { id: schedule.id },
+                data: { status: 'failed' },
+            });
+
+            // Notify student
+            if (lesson.student.user.email) {
+                try {
+                    await prisma.emailOutbox.create({
+                        data: {
+                            type: 'SESSION_CANCELLED_UNPAID_STUDENT',
+                            to_email: lesson.student.user.email,
+                            payload: {
+                                lessonId: lesson.id,
+                                lessonStart: lesson.start_time.toISOString(),
+                                amount: schedule.amount,
                             },
-                        });
-                    } catch (e: any) {
-                        if (e.code !== 'P2002') console.error('[EmailScheduler] Failed to queue cancellation email (student):', e);
-                    }
+                            idempotency_key: `session-cancelled-unpaid-student:${lesson.id}`,
+                        },
+                    });
+                } catch (e: any) {
+                    if (e.code !== 'P2002') console.error('[EmailScheduler] Failed to queue cancellation email (student):', e);
                 }
-
-                // Notify tutor
-                if (lesson.tutor.user.email) {
-                    try {
-                        await prisma.emailOutbox.create({
-                            data: {
-                                type: 'SESSION_CANCELLED_UNPAID_TUTOR',
-                                to_email: lesson.tutor.user.email,
-                                payload: {
-                                    lessonId: lesson.id,
-                                    lessonStart: lesson.start_time.toISOString(),
-                                    studentName: lesson.student.username || 'Student',
-                                },
-                                idempotency_key: `session-cancelled-unpaid-tutor:${lesson.id}`,
-                            },
-                        });
-                    } catch (e: any) {
-                        if (e.code !== 'P2002') console.error('[EmailScheduler] Failed to queue cancellation email (tutor):', e);
-                    }
-                }
-
-                console.log(`[EmailScheduler] Auto-cancelled unpaid lesson ${lesson.id} (starts ${lesson.start_time.toISOString()})`);
             }
+
+            // Notify tutor
+            if (lesson.tutor.user.email) {
+                try {
+                    await prisma.emailOutbox.create({
+                        data: {
+                            type: 'SESSION_CANCELLED_UNPAID_TUTOR',
+                            to_email: lesson.tutor.user.email,
+                            payload: {
+                                lessonId: lesson.id,
+                                lessonStart: lesson.start_time.toISOString(),
+                                studentName: lesson.student.username || 'Student',
+                            },
+                            idempotency_key: `session-cancelled-unpaid-tutor:${lesson.id}`,
+                        },
+                    });
+                } catch (e: any) {
+                    if (e.code !== 'P2002') console.error('[EmailScheduler] Failed to queue cancellation email (tutor):', e);
+                }
+            }
+
+            console.log(`[EmailScheduler] Auto-cancelled unpaid lesson ${lesson.id} (starts ${lesson.start_time.toISOString()})`);
+            cancelledCount++;
         }
 
-        if (overduePayments.length > 0) {
-            console.log(`[EmailScheduler] Auto-cancelled lessons for ${overduePayments.length} overdue payments`);
+        if (cancelledCount > 0) {
+            console.log(`[EmailScheduler] Auto-cancelled ${cancelledCount} unpaid lesson(s)`);
         }
     } catch (error) {
         console.error('[EmailScheduler] Error in autoCancelUnpaidLessons:', error);

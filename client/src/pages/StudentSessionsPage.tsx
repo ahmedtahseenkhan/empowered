@@ -178,7 +178,7 @@ const StudentSessionsPage: React.FC = () => {
         const ps = lesson.payment_status;
         const st = (lesson.status || '').toUpperCase();
         if (['CANCELLED', 'COMPLETED', 'MISSED'].includes(st)) return false;
-        return ps === 'pending' || ps === 'failed';
+        return ps === 'pending'; // 'failed' means the payment window closed — no action available
     };
 
     return (
