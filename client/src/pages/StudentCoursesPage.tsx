@@ -133,6 +133,7 @@ const StudentCoursesPage: React.FC = () => {
                                             Enrolled {new Date(p.purchased_at).toLocaleDateString()}
                                         </p>
                                     </div>
+                                </div>
                             </div>
                         ))}
                     </div>
