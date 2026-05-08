@@ -631,7 +631,7 @@ class EmailService {
     }): Promise<void> {
         const firstName = data.full_name.split(' ')[0];
         const baseUrl = this.getClientBaseUrl();
-        const createAccountUrl = `${baseUrl}/register`;
+        const createAccountUrl = `${baseUrl}/tutor-register`;
         const bookDemoUrl = `${baseUrl}/book-demo`;
 
         const perks = [
@@ -658,7 +658,7 @@ class EmailService {
   </ul>
   <p style="margin:0 0 16px 0">To get started, create your account here:</p>
   <p style="margin:0 0 24px 0">
-    <a href="${createAccountUrl}" style="display:inline-block;background:#4A148C;color:#fff;text-decoration:none;padding:12px 28px;border-radius:9999px;font-weight:600;font-size:15px">Create My Account</a>
+    <a href="${createAccountUrl}" style="display:inline-block;background:#4A148C;color:#fff;text-decoration:none;padding:12px 28px;border-radius:9999px;font-weight:600;font-size:15px">Create My Mentor Account</a>
   </p>
   <p style="margin:0 0 16px 0">If you'd prefer a more personalised setup experience, you can also book a quick demo call with our team here:</p>
   <p style="margin:0 0 32px 0">

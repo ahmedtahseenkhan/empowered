@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Crown, Check, X, AlertTriangle, Sparkles, Zap, Shield, RefreshCw } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { DashboardLayout } from '../layouts/DashboardLayout';
+import BetaConfirmationModal from '../components/ui/BetaConfirmationModal';
 import api from '../api/axios';
 
 interface TutorProfile {
@@ -135,6 +136,7 @@ const planRank: Record<string, number> = {
 const SubscriptionSettingsPage: React.FC = () => {
     const [profile, setProfile] = useState<TutorProfile | null>(null);
     const [loading, setLoading] = useState(true);
+    const [showBetaConfirmation, setShowBetaConfirmation] = useState(false);
     const [showCancelModal, setShowCancelModal] = useState(false);
     const [expandedPlan, setExpandedPlan] = useState<string | null>(null);
     const [serverPlans, setServerPlans] = useState<ServerPlan[] | null>(null);
@@ -222,10 +224,10 @@ const SubscriptionSettingsPage: React.FC = () => {
                 await fetchProfile();
                 alert('Subscription updated successfully!');
             } else if (!profile?.has_used_trial) {
-                // First-time user: activate free trial without payment
+                // Beta user: activate free trial and show congratulations popup
                 await api.post('/payments/mentor/subscription/activate-trial', { tier: planId });
                 await fetchProfile();
-                alert('Your free trial has been activated!');
+                setShowBetaConfirmation(true);
             } else {
                 // Trial already used: redirect to Stripe checkout for paid subscription
                 if (!priceId) {
@@ -298,6 +300,13 @@ const SubscriptionSettingsPage: React.FC = () => {
     }
 
     return (
+        <>
+        {showBetaConfirmation && (
+            <BetaConfirmationModal
+                onGoToDashboard={() => { window.location.href = '/dashboard'; }}
+                onSetupPayments={() => { setShowBetaConfirmation(false); window.location.href = '/connect-account'; }}
+            />
+        )}
         <DashboardLayout>
             <div className="w-full max-w-6xl mx-auto">
                 {/* Header */}
@@ -591,6 +600,7 @@ const SubscriptionSettingsPage: React.FC = () => {
                 </div>
             )}
         </DashboardLayout>
+        </>
     );
 };
 
