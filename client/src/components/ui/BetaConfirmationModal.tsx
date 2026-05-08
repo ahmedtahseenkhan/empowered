@@ -16,12 +16,12 @@ interface Props {
 }
 
 const BetaConfirmationModal: React.FC<Props> = ({ onGoToDashboard, onSetupPayments }) => (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    <div className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto"
         style={{ background: 'rgba(15,10,30,0.75)', backdropFilter: 'blur(6px)' }}>
-        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden">
+        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden my-auto" style={{ marginTop: 'max(1rem, 5vh)', marginBottom: 'max(1rem, 5vh)' }}>
 
             {/* Header */}
-            <div className="bg-gradient-to-br from-purple-700 via-purple-600 to-indigo-600 px-8 py-10 text-center relative overflow-hidden">
+            <div className="bg-gradient-to-br from-purple-700 via-purple-600 to-indigo-600 px-8 py-8 text-center relative overflow-hidden">
                 <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-white/5" />
                 <div className="absolute -bottom-6 -left-6 w-28 h-28 rounded-full bg-white/5" />
                 <div className="relative">
@@ -39,7 +39,7 @@ const BetaConfirmationModal: React.FC<Props> = ({ onGoToDashboard, onSetupPaymen
             </div>
 
             {/* Features grid */}
-            <div className="px-8 py-6">
+            <div className="px-8 py-5">
                 <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">What's included in your Premium plan</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {features.map(({ icon: Icon, label, desc }) => (
@@ -60,7 +60,7 @@ const BetaConfirmationModal: React.FC<Props> = ({ onGoToDashboard, onSetupPaymen
             </div>
 
             {/* CTAs */}
-            <div className="px-8 pb-7 flex flex-col sm:flex-row gap-3">
+            <div className="px-8 pb-6 flex flex-col sm:flex-row gap-3">
                 <button onClick={onGoToDashboard}
                     className="flex-1 bg-purple-700 hover:bg-purple-800 text-white font-bold py-3.5 rounded-2xl transition-colors flex items-center justify-center gap-2 text-sm">
                     Go to Dashboard <ArrowRight className="w-4 h-4" />
