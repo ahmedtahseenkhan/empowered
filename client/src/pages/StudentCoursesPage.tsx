@@ -120,7 +120,6 @@ const StudentCoursesPage: React.FC = () => {
                                     )}
 
                                     <div className="flex items-center justify-between mt-auto pt-3 border-t border-gray-100">
-                                        <div>
                                         <a
                                             href={p.course.course_url}
                                             target="_blank"
@@ -130,11 +129,10 @@ const StudentCoursesPage: React.FC = () => {
                                             <ExternalLink size={14} />
                                             Access Course
                                         </a>
+                                        <p className="text-xs text-gray-400">
+                                            Enrolled {new Date(p.purchased_at).toLocaleDateString()}
+                                        </p>
                                     </div>
-                                    <p className="text-xs text-gray-400 mt-2">
-                                        Enrolled {new Date(p.purchased_at).toLocaleDateString()}
-                                    </p>
-                                </div>
                             </div>
                         ))}
                     </div>
