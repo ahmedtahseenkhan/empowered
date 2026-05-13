@@ -2,7 +2,8 @@ import { Response } from 'express';
 import { AuthRequest } from '../middleware/authMiddleware';
 import prisma from '../config/db';
 
-const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
+const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.2:1b';
 
 const SYSTEM_PROMPT = `You are an expert educational AI assistant for tutors and mentors on the Empowered Learnings platform.
 
@@ -46,42 +47,32 @@ export const chat = async (req: AuthRequest, res: Response): Promise<void> => {
         return;
     }
 
-    const apiKey = process.env.DEEPSEEK_API_KEY;
-    if (!apiKey) {
-        res.status(500).json({ error: 'AI service is not configured' });
-        return;
-    }
-
     try {
-        const response = await fetch(DEEPSEEK_API_URL, {
+        const response = await fetch(`${OLLAMA_URL}/api/chat`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`,
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                model: 'deepseek-chat',
+                model: OLLAMA_MODEL,
                 messages: [
                     { role: 'system', content: SYSTEM_PROMPT },
                     ...messages,
                 ],
-                max_tokens: 2048,
-                temperature: 0.7,
+                stream: false,
             }),
         });
 
         if (!response.ok) {
             const errorText = await response.text();
-            console.error('[AI] DeepSeek API error:', response.status, errorText);
+            console.error('[AI] Ollama error:', response.status, errorText);
             res.status(502).json({ error: 'AI service returned an error. Please try again.' });
             return;
         }
 
         const data = await response.json() as {
-            choices: { message: { content: string } }[];
+            message: { content: string };
         };
 
-        const reply = data.choices?.[0]?.message?.content;
+        const reply = data.message?.content;
         if (!reply) {
             res.status(502).json({ error: 'No response from AI service.' });
             return;
