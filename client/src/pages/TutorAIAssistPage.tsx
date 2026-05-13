@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { Send, Bot, User as UserIcon, Sparkles } from 'lucide-react';
 import { Button } from '../components/ui/Button';
-import api from '../api/axios';
 import ReactMarkdown from 'react-markdown';
 
 interface Message {
@@ -68,33 +67,67 @@ const TutorAIAssistPage: React.FC = () => {
         setInputValue('');
         setIsTyping(true);
 
+        const aiMsgId = (Date.now() + 1).toString();
+
+        // Add empty AI message to stream into
+        setMessages((prev) => [
+            ...prev,
+            { id: aiMsgId, text: '', sender: 'ai', timestamp: new Date() },
+        ]);
+
         try {
             const history = buildApiHistory(updatedMessages);
-            const { data } = await api.post<{ reply: string }>('/ai/chat', {
-                messages: history,
+            const token = localStorage.getItem('token');
+
+            const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+            const response = await fetch(`${baseURL}/ai/chat`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
+                body: JSON.stringify({ messages: history }),
             });
 
-            setMessages((prev) => [
-                ...prev,
-                {
-                    id: (Date.now() + 1).toString(),
-                    text: data.reply,
-                    sender: 'ai',
-                    timestamp: new Date(),
-                },
-            ]);
+            if (!response.ok || !response.body) {
+                const err = await response.json().catch(() => ({}));
+                throw new Error(err.error || 'Something went wrong.');
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split('\n').filter((l) => l.startsWith('data: '));
+
+                for (const line of lines) {
+                    const payload = line.slice(6).trim();
+                    if (payload === '[DONE]') break;
+
+                    try {
+                        const { token: tok } = JSON.parse(payload) as { token: string };
+                        setMessages((prev) =>
+                            prev.map((m) =>
+                                m.id === aiMsgId ? { ...m, text: m.text + tok } : m
+                            )
+                        );
+                    } catch {
+                        // skip malformed
+                    }
+                }
+            }
         } catch (err: any) {
-            const errorMsg =
-                err?.response?.data?.error || 'Something went wrong. Please try again.';
-            setMessages((prev) => [
-                ...prev,
-                {
-                    id: (Date.now() + 1).toString(),
-                    text: `⚠️ ${errorMsg}`,
-                    sender: 'ai',
-                    timestamp: new Date(),
-                },
-            ]);
+            setMessages((prev) =>
+                prev.map((m) =>
+                    m.id === aiMsgId
+                        ? { ...m, text: `⚠️ ${err.message || 'Something went wrong. Please try again.'}` }
+                        : m
+                )
+            );
         } finally {
             setIsTyping(false);
         }
@@ -186,7 +219,7 @@ const TutorAIAssistPage: React.FC = () => {
                         </div>
                     ))}
 
-                    {isTyping && (
+                    {isTyping && messages[messages.length - 1]?.text === '' && (
                         <div className="flex justify-start">
                             <div className="bg-white border border-gray-100 p-4 rounded-2xl rounded-tl-none shadow-sm flex items-center gap-2">
                                 <span className="w-2 h-2 bg-gray-300 rounded-full animate-bounce"></span>

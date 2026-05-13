@@ -36,7 +36,6 @@ export const chat = async (req: AuthRequest, res: Response): Promise<void> => {
         return;
     }
 
-    // Verify the requesting tutor is on the PREMIUM tier
     const tutorProfile = await prisma.tutorProfile.findUnique({
         where: { user_id: req.user!.id },
         select: { tier: true },
@@ -48,7 +47,7 @@ export const chat = async (req: AuthRequest, res: Response): Promise<void> => {
     }
 
     try {
-        const response = await fetch(`${OLLAMA_URL}/api/chat`, {
+        const ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -57,30 +56,53 @@ export const chat = async (req: AuthRequest, res: Response): Promise<void> => {
                     { role: 'system', content: SYSTEM_PROMPT },
                     ...messages,
                 ],
-                stream: false,
+                stream: true,
             }),
         });
 
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error('[AI] Ollama error:', response.status, errorText);
+        if (!ollamaRes.ok || !ollamaRes.body) {
+            const errorText = await ollamaRes.text();
+            console.error('[AI] Ollama error:', ollamaRes.status, errorText);
             res.status(502).json({ error: 'AI service returned an error. Please try again.' });
             return;
         }
 
-        const data = await response.json() as {
-            message: { content: string };
-        };
+        // Stream SSE to client
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
 
-        const reply = data.message?.content;
-        if (!reply) {
-            res.status(502).json({ error: 'No response from AI service.' });
-            return;
+        const reader = ollamaRes.body.getReader();
+        const decoder = new TextDecoder();
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const lines = decoder.decode(value, { stream: true }).split('\n').filter(Boolean);
+            for (const line of lines) {
+                try {
+                    const json = JSON.parse(line) as { message?: { content: string }; done: boolean };
+                    if (json.message?.content) {
+                        res.write(`data: ${JSON.stringify({ token: json.message.content })}\n\n`);
+                    }
+                    if (json.done) {
+                        res.write('data: [DONE]\n\n');
+                        res.end();
+                        return;
+                    }
+                } catch {
+                    // skip malformed lines
+                }
+            }
         }
 
-        res.json({ reply });
+        res.write('data: [DONE]\n\n');
+        res.end();
     } catch (err) {
         console.error('[AI] Unexpected error:', err);
-        res.status(500).json({ error: 'Failed to reach AI service. Please try again.' });
+        if (!res.headersSent) {
+            res.status(500).json({ error: 'Failed to reach AI service. Please try again.' });
+        }
     }
 };
