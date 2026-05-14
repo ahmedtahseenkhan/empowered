@@ -82,10 +82,14 @@ export const chat = async (req: AuthRequest, res: Response): Promise<void> => {
 
         res.write('data: [DONE]\n\n');
         res.end();
-    } catch (err) {
+    } catch (err: any) {
         console.error('[AI] Gemini error:', err);
         if (!res.headersSent) {
-            res.status(500).json({ error: 'Failed to reach AI service. Please try again.' });
+            if (err?.status === 429) {
+                res.status(429).json({ error: 'AI service is busy. Please try again in a minute.' });
+            } else {
+                res.status(500).json({ error: 'Failed to reach AI service. Please try again.' });
+            }
         }
     }
 };
