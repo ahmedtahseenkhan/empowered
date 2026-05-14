@@ -1,9 +1,7 @@
 import { Response } from 'express';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { AuthRequest } from '../middleware/authMiddleware';
 import prisma from '../config/db';
-
-const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.2:1b';
 
 const SYSTEM_PROMPT = `You are an expert educational AI assistant for tutors and mentors on the Empowered Learnings platform.
 
@@ -24,7 +22,7 @@ When generating lectures or key points, format your response clearly using:
 Always tailor content to be educationally appropriate and comprehensive.`;
 
 interface ChatMessage {
-    role: 'user' | 'assistant' | 'system';
+    role: 'user' | 'assistant';
     content: string;
 }
 
@@ -46,61 +44,46 @@ export const chat = async (req: AuthRequest, res: Response): Promise<void> => {
         return;
     }
 
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+        res.status(500).json({ error: 'AI service is not configured' });
+        return;
+    }
+
     try {
-        const ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                model: OLLAMA_MODEL,
-                messages: [
-                    { role: 'system', content: SYSTEM_PROMPT },
-                    ...messages,
-                ],
-                stream: true,
-            }),
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({
+            model: 'gemini-1.5-flash',
+            systemInstruction: SYSTEM_PROMPT,
         });
 
-        if (!ollamaRes.ok || !ollamaRes.body) {
-            const errorText = await ollamaRes.text();
-            console.error('[AI] Ollama error:', ollamaRes.status, errorText);
-            res.status(502).json({ error: 'AI service returned an error. Please try again.' });
-            return;
-        }
+        // Convert history (all except last message) to Gemini format
+        const history = messages.slice(0, -1).map((m) => ({
+            role: m.role === 'assistant' ? 'model' : 'user',
+            parts: [{ text: m.content }],
+        }));
 
-        // Stream SSE to client
+        const lastMessage = messages[messages.length - 1].content;
+
+        const chatSession = model.startChat({ history });
+
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Connection', 'keep-alive');
 
-        const reader = ollamaRes.body.getReader();
-        const decoder = new TextDecoder();
+        const result = await chatSession.sendMessageStream(lastMessage);
 
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            const lines = decoder.decode(value, { stream: true }).split('\n').filter(Boolean);
-            for (const line of lines) {
-                try {
-                    const json = JSON.parse(line) as { message?: { content: string }; done: boolean };
-                    if (json.message?.content) {
-                        res.write(`data: ${JSON.stringify({ token: json.message.content })}\n\n`);
-                    }
-                    if (json.done) {
-                        res.write('data: [DONE]\n\n');
-                        res.end();
-                        return;
-                    }
-                } catch {
-                    // skip malformed lines
-                }
+        for await (const chunk of result.stream) {
+            const token = chunk.text();
+            if (token) {
+                res.write(`data: ${JSON.stringify({ token })}\n\n`);
             }
         }
 
         res.write('data: [DONE]\n\n');
         res.end();
     } catch (err) {
-        console.error('[AI] Unexpected error:', err);
+        console.error('[AI] Gemini error:', err);
         if (!res.headersSent) {
             res.status(500).json({ error: 'Failed to reach AI service. Please try again.' });
         }
