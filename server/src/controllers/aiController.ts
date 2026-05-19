@@ -3,6 +3,10 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { AuthRequest } from '../middleware/authMiddleware';
 import prisma from '../config/db';
 
+// gemini-1.5-flash is stable; gemini-2.5-flash is preview and prone to 503s
+const GEMINI_MODEL = 'gemini-1.5-flash';
+const MAX_RETRIES = 2;
+
 const SYSTEM_PROMPT = `You are an expert educational AI assistant for tutors and mentors on the Empowered Learnings platform.
 
 Your primary capabilities:
@@ -25,6 +29,8 @@ interface ChatMessage {
     role: 'user' | 'assistant';
     content: string;
 }
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export const chat = async (req: AuthRequest, res: Response): Promise<void> => {
     const { messages } = req.body as { messages: ChatMessage[] };
@@ -50,46 +56,59 @@ export const chat = async (req: AuthRequest, res: Response): Promise<void> => {
         return;
     }
 
-    try {
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({
-            model: 'gemini-2.5-flash',
-            systemInstruction: SYSTEM_PROMPT,
-        });
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({
+        model: GEMINI_MODEL,
+        systemInstruction: SYSTEM_PROMPT,
+    });
 
-        // Convert history (all except last message) to Gemini format
-        const history = messages.slice(0, -1).map((m) => ({
-            role: m.role === 'assistant' ? 'model' : 'user',
-            parts: [{ text: m.content }],
-        }));
+    const history = messages.slice(0, -1).map((m) => ({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content }],
+    }));
 
-        const lastMessage = messages[messages.length - 1].content;
+    const lastMessage = messages[messages.length - 1].content;
 
-        const chatSession = model.startChat({ history });
+    let attempt = 0;
+    while (attempt <= MAX_RETRIES) {
+        try {
+            const chatSession = model.startChat({ history });
+            const result = await chatSession.sendMessageStream(lastMessage);
 
-        res.setHeader('Content-Type', 'text/event-stream');
-        res.setHeader('Cache-Control', 'no-cache');
-        res.setHeader('Connection', 'keep-alive');
-
-        const result = await chatSession.sendMessageStream(lastMessage);
-
-        for await (const chunk of result.stream) {
-            const token = chunk.text();
-            if (token) {
-                res.write(`data: ${JSON.stringify({ token })}\n\n`);
+            if (!res.headersSent) {
+                res.setHeader('Content-Type', 'text/event-stream');
+                res.setHeader('Cache-Control', 'no-cache');
+                res.setHeader('Connection', 'keep-alive');
             }
-        }
 
-        res.write('data: [DONE]\n\n');
-        res.end();
-    } catch (err: any) {
-        console.error('[AI] Gemini error:', err);
-        if (!res.headersSent) {
-            if (err?.status === 429) {
-                res.status(429).json({ error: 'AI service is busy. Please try again in a minute.' });
-            } else {
-                res.status(500).json({ error: 'Failed to reach AI service. Please try again.' });
+            for await (const chunk of result.stream) {
+                const token = chunk.text();
+                if (token) {
+                    res.write(`data: ${JSON.stringify({ token })}\n\n`);
+                }
             }
+
+            res.write('data: [DONE]\n\n');
+            res.end();
+            return;
+        } catch (err: any) {
+            const isRetryable = err?.status === 503 || err?.status === 429;
+            if (isRetryable && attempt < MAX_RETRIES) {
+                attempt++;
+                console.warn(`[AI] Gemini ${err.status}, retrying (${attempt}/${MAX_RETRIES})...`);
+                await sleep(1500 * attempt);
+                continue;
+            }
+
+            console.error('[AI] Gemini error:', err);
+            if (!res.headersSent) {
+                if (err?.status === 429) {
+                    res.status(429).json({ error: 'AI service is busy. Please try again in a minute.' });
+                } else {
+                    res.status(500).json({ error: 'Failed to reach AI service. Please try again.' });
+                }
+            }
+            return;
         }
     }
 };
