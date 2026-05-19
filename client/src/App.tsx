@@ -58,6 +58,7 @@ import StudentBookMentorPage from './pages/StudentBookMentorPage';
 import StudentBookingConfirmationPage from './pages/StudentBookingConfirmationPage';
 import StudentBookingPaymentReviewPage from './pages/StudentBookingPaymentReviewPage';
 import TutorAIAssistPage from './pages/TutorAIAssistPage';
+import TutorWhiteboardPage from './pages/TutorWhiteboardPage';
 import StudentSessionsPage from './pages/StudentSessionsPage';
 import SessionDetailPage from './pages/SessionDetailPage';
 import ConnectAccountPage from './pages/ConnectAccountPage';
@@ -468,6 +469,14 @@ function App() {
                 <PremiumRoute>
                   <TutorAIAssistPage />
                 </PremiumRoute>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/tutor/whiteboard"
+            element={
+              <ProtectedRoute>
+                <TutorWhiteboardPage />
               </ProtectedRoute>
             }
           />

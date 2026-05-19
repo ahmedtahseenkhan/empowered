@@ -45,6 +45,7 @@ import webhookRoutes from './routes/webhookRoutes';
 import supportRoutes from './routes/supportRoutes';
 import betaRoutes from './routes/betaRoutes';
 import aiRoutes from './routes/aiRoutes';
+import whiteboardRoutes from './routes/whiteboardRoutes';
 import { startEmailOutboxProcessor } from './services/emailOutboxProcessor';
 import { startEmailScheduler } from './services/emailScheduler';
 
@@ -78,6 +79,7 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/support', supportRoutes);
 app.use('/api/beta', betaRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/whiteboards', whiteboardRoutes);
 
 // Health Check
 app.get('/', (req, res) => {

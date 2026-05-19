@@ -176,6 +176,17 @@ model TutorProfile {
   homework_tasks HomeworkTask[]
 
   marketing_video_submission TutorMarketingVideoSubmission?
+  whiteboards Whiteboard[]
+}
+
+model Whiteboard {
+  id         String       @id @default(uuid())
+  tutor_id   String
+  tutor      TutorProfile @relation(fields: [tutor_id], references: [id], onDelete: Cascade)
+  title      String       @default("Untitled Board")
+  scene_data Json
+  created_at DateTime     @default(now())
+  updated_at DateTime     @updatedAt
 }
 
 model AdminProfile {
