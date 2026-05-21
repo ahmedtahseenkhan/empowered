@@ -1,7 +1,13 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Excalidraw } from '@excalidraw/excalidraw';
-import type { ExcalidrawElement } from '@excalidraw/excalidraw/types/element/types';
-import type { AppState, BinaryFiles, ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types/types';
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ExcalidrawElement = any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AppState = any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type BinaryFiles = any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ExcalidrawImperativeAPI = any;
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { PenLine, Plus, Trash2, Save, ChevronLeft } from 'lucide-react';
 import api from '../api/axios';
@@ -155,7 +161,7 @@ const TutorWhiteboardPage: React.FC = () => {
                             </div>
                             <div className="flex-1">
                                 <Excalidraw
-                                    excalidrawAPI={(api) => { excalidrawRef.current = api; }}
+                                    excalidrawAPI={(api: ExcalidrawImperativeAPI) => { excalidrawRef.current = api; }}
                                     initialData={{
                                         elements: activeBoard.scene_data?.elements ?? [],
                                         appState: { ...(activeBoard.scene_data?.appState ?? {}), collaborators: new Map() },
