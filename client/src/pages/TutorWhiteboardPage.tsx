@@ -11,7 +11,6 @@ type ExcalidrawImperativeAPI = any;
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { PenLine, Plus, Trash2, Save, ChevronLeft } from 'lucide-react';
 import api from '../api/axios';
-import '@excalidraw/excalidraw/index.css';
 
 interface BoardMeta {
     id: string;
