@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { Suspense, useEffect, useMemo, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import api from './api/axios';
@@ -58,7 +58,7 @@ import StudentBookMentorPage from './pages/StudentBookMentorPage';
 import StudentBookingConfirmationPage from './pages/StudentBookingConfirmationPage';
 import StudentBookingPaymentReviewPage from './pages/StudentBookingPaymentReviewPage';
 import TutorAIAssistPage from './pages/TutorAIAssistPage';
-import TutorWhiteboardPage from './pages/TutorWhiteboardPage';
+const TutorWhiteboardPage = React.lazy(() => import('./pages/TutorWhiteboardPage'));
 import StudentSessionsPage from './pages/StudentSessionsPage';
 import SessionDetailPage from './pages/SessionDetailPage';
 import ConnectAccountPage from './pages/ConnectAccountPage';
@@ -476,7 +476,9 @@ function App() {
             path="/tutor/whiteboard"
             element={
               <ProtectedRoute>
-                <TutorWhiteboardPage />
+                <Suspense fallback={<div className="flex items-center justify-center h-screen text-gray-400">Loading whiteboard…</div>}>
+                  <TutorWhiteboardPage />
+                </Suspense>
               </ProtectedRoute>
             }
           />
