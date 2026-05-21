@@ -4,7 +4,7 @@ import { AuthRequest } from '../middleware/authMiddleware';
 import prisma from '../config/db';
 
 // gemini-1.5-flash is stable; gemini-2.5-flash is preview and prone to 503s
-const GEMINI_MODEL = 'gemini-1.5-flash';
+const GEMINI_MODEL = 'gemini-2.0-flash';
 const MAX_RETRIES = 2;
 
 const SYSTEM_PROMPT = `You are an expert educational AI assistant for tutors and mentors on the Empowered Learnings platform.
