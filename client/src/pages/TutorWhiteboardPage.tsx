@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect, useLayoutEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
 import { io, Socket } from 'socket.io-client';
 import {
@@ -193,6 +194,97 @@ function makeShape(tool: ToolType, x: number, y: number, strokeColor: string, bg
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
+// Portal-based text editor — renders into document.body so nothing in the
+// canvas tree (transforms, overflow:hidden, z-index stacks) can interfere
+// with focus or visibility.
+interface TextEditorProps {
+  initialText: string;
+  screenX: number;
+  screenY: number;
+  fontSizePx: number;
+  color: string;
+  onFinalize: (text: string) => void;
+}
+
+function TextEditor({ initialText, screenX, screenY, fontSizePx, color, onFinalize }: TextEditorProps) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const finalizedRef = useRef(false);
+
+  const finalize = (text: string) => {
+    if (finalizedRef.current) return;
+    finalizedRef.current = true;
+    onFinalize(text);
+  };
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const focus = () => {
+      el.focus();
+      try { el.setSelectionRange(el.value.length, el.value.length); } catch {}
+    };
+    focus();
+    const t1 = setTimeout(focus, 10);
+    const t2 = setTimeout(() => { if (document.activeElement !== el) el.focus(); }, 100);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, []);
+
+  return createPortal(
+    <textarea
+      ref={ref}
+      defaultValue={initialText}
+      autoFocus
+      placeholder="Type your text…"
+      spellCheck={false}
+      autoComplete="off"
+      autoCorrect="off"
+      autoCapitalize="off"
+      data-gramm="false"
+      data-gramm_editor="false"
+      data-enable-grammarly="false"
+      onBlur={(e) => finalize(e.target.value)}
+      onKeyDown={(e) => {
+        e.stopPropagation();
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          finalize((e.target as HTMLTextAreaElement).value);
+        }
+      }}
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => { e.stopPropagation(); (e.target as HTMLTextAreaElement).focus(); }}
+      onInput={(e) => {
+        const el = e.target as HTMLTextAreaElement;
+        el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px';
+        el.style.width = 'auto'; el.style.width = Math.max(160, el.scrollWidth + 8) + 'px';
+      }}
+      style={{
+        position: 'fixed',
+        left: screenX,
+        top: screenY,
+        fontSize: fontSizePx,
+        lineHeight: 1.4,
+        color,
+        fontFamily: 'ui-sans-serif, system-ui, sans-serif',
+        background: '#ffffff',
+        border: '2px solid #4f90f0',
+        borderRadius: 6,
+        outline: 'none',
+        resize: 'none',
+        padding: '4px 8px',
+        minWidth: 160,
+        minHeight: Math.max(36, fontSizePx * 1.4),
+        whiteSpace: 'pre',
+        overflow: 'hidden',
+        zIndex: 999999,
+        boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+        caretColor: color,
+      }}
+      rows={1}
+    />,
+    document.body,
+  );
+}
+
 export default function TutorWhiteboardPage() {
   useAuth();
 
@@ -233,7 +325,6 @@ export default function TutorWhiteboardPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [saving, setSaving] = useState(false);
   const [textEdit, setTextEdit] = useState<{ id: string; x: number; y: number; text: string; fontSize: number; strokeColor: string } | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // ─── Live (collaborative) mode ─────────────────────────────────────────────
   const [searchParams] = useSearchParams();
@@ -527,31 +618,22 @@ export default function TutorWhiteboardPage() {
     }
   }
 
-  function finalizeText(rawText?: string) {
+  function finalizeText(rawText: string) {
     if (!textEdit) return;
     const te = textEdit;
-    const text = (rawText !== undefined ? rawText : textareaRef.current?.value ?? te.text);
     setTextEdit(null);
-    if (text.trim() === '') {
+    if (rawText.trim() === '') {
       shapesRef.current = shapesRef.current.filter(s => s.id !== te.id);
     } else {
       shapesRef.current = shapesRef.current.map(s =>
-        s.id === te.id ? { ...s, text } : s
+        s.id === te.id ? { ...s, text: rawText } : s
       );
       pushHistory();
     }
     render();
   }
 
-  // Focus the textarea reliably when it appears. useLayoutEffect runs before
-  // paint so focus happens immediately after mount.
-  useLayoutEffect(() => {
-    if (textEdit && textareaRef.current) {
-      const el = textareaRef.current;
-      el.focus();
-      el.select();
-    }
-  }, [textEdit?.id]);
+  // Focus is handled inside the portal TextEditor component itself.
 
   // ─── Apply property changes to selected shape ──────────────────────────────
 
@@ -566,7 +648,12 @@ export default function TutorWhiteboardPage() {
   // ─── Mouse events ──────────────────────────────────────────────────────────
 
   const onMouseDown = useCallback((e: React.MouseEvent) => {
-    if (textEdit) { finalizeText(); return; }
+    if (textEdit) {
+      // Let the portal textarea's onBlur handler save its current value.
+      const active = document.activeElement as HTMLElement | null;
+      if (active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT')) active.blur();
+      return;
+    }
 
     const pt = toCanvas(e);
 
@@ -1003,59 +1090,18 @@ export default function TutorWhiteboardPage() {
               onContextMenu={e => e.preventDefault()}
             />
 
-            {/* Inline text textarea (uncontrolled — we read value on blur) */}
+            {/* Text editor rendered via portal into document.body */}
             {textEdit && canvasRef.current && (() => {
-              const rect = canvasRef.current.getBoundingClientRect();
               const sc = toScreen(textEdit.x, textEdit.y);
-              const px = textEdit.fontSize * tfRef.current.scale;
               return (
-                <textarea
+                <TextEditor
                   key={textEdit.id}
-                  ref={textareaRef}
-                  defaultValue={textEdit.text}
-                  onInput={e => {
-                    const el = e.target as HTMLTextAreaElement;
-                    el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px';
-                    el.style.width = 'auto'; el.style.width = Math.max(120, el.scrollWidth + 4) + 'px';
-                  }}
-                  onKeyDown={e => {
-                    if (e.key === 'Escape') {
-                      e.preventDefault();
-                      finalizeText((e.target as HTMLTextAreaElement).value);
-                    }
-                  }}
-                  onBlur={e => finalizeText(e.target.value)}
-                  onMouseDown={e => e.stopPropagation()}
-                  placeholder="Type here…"
-                  style={{
-                    position: 'absolute',
-                    left: sc.x - rect.left,
-                    top: sc.y - rect.top,
-                    fontSize: px,
-                    lineHeight: 1.4,
-                    color: textEdit.strokeColor,
-                    fontFamily: 'ui-sans-serif, system-ui, sans-serif',
-                    background: '#ffffff',
-                    border: '2px solid #4f90f0',
-                    borderRadius: 4,
-                    outline: 'none',
-                    resize: 'none',
-                    padding: '2px 6px',
-                    minWidth: 120,
-                    minHeight: px * 1.4,
-                    overflow: 'hidden',
-                    whiteSpace: 'pre',
-                    zIndex: 1000,
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                  }}
-                  rows={1}
-                  spellCheck={false}
-                  autoComplete="off"
-                  autoCorrect="off"
-                  autoCapitalize="off"
-                  data-gramm="false"
-                  data-gramm_editor="false"
-                  data-enable-grammarly="false"
+                  initialText={textEdit.text}
+                  screenX={sc.x}
+                  screenY={sc.y}
+                  fontSizePx={textEdit.fontSize * tfRef.current.scale}
+                  color={textEdit.strokeColor}
+                  onFinalize={(text) => finalizeText(text)}
                 />
               );
             })()}
