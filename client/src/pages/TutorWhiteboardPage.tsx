@@ -920,6 +920,13 @@ export default function TutorWhiteboardPage() {
                     backdropFilter: 'blur(2px)',
                   }}
                   rows={1}
+                  spellCheck={false}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  data-gramm="false"
+                  data-gramm_editor="false"
+                  data-enable-grammarly="false"
                 />
               );
             })()}
