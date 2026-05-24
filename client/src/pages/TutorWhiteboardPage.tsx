@@ -443,11 +443,6 @@ export default function TutorWhiteboardPage() {
     return { x: (e.clientX - rect.left - t.x) / t.scale, y: (e.clientY - rect.top - t.y) / t.scale };
   }
 
-  function toScreen(cx: number, cy: number) {
-    const rect = canvasRef.current!.getBoundingClientRect();
-    const t = tfRef.current;
-    return { x: cx * t.scale + t.x + rect.left, y: cy * t.scale + t.y + rect.top };
-  }
 
   // ─── History ───────────────────────────────────────────────────────────────
 
