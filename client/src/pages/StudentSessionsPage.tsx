@@ -271,32 +271,40 @@ const StudentSessionsPage: React.FC = () => {
                                                 const isJoinable = nowMs2 >= startMs - 15 * 60 * 1000 && nowMs2 <= startMs + 50 * 60 * 1000 && !['COMPLETED', 'CANCELLED', 'MISSED'].includes(l.status.toUpperCase());
                                                 if (!isJoinable) return null;
                                                 return (
-                                                    <Button
-                                                        className="flex items-center gap-2"
-                                                        disabled={joinBusyId === l.id}
-                                                        onClick={async () => {
-                                                            try {
-                                                                setJoinBusyId(l.id);
-                                                                setJoinError('');
-                                                                const res = await api.get(`/lessons/${l.id}/join`);
-                                                                const url = res.data?.meeting_link as string | undefined;
-                                                                if (url) {
-                                                                    window.open(url, '_blank');
-                                                                } else {
-                                                                    setJoinError('Meeting link is not available yet.');
+                                                    <>
+                                                        <Button
+                                                            className="flex items-center gap-2"
+                                                            disabled={joinBusyId === l.id}
+                                                            onClick={async () => {
+                                                                try {
+                                                                    setJoinBusyId(l.id);
+                                                                    setJoinError('');
+                                                                    const res = await api.get(`/lessons/${l.id}/join`);
+                                                                    const url = res.data?.meeting_link as string | undefined;
+                                                                    if (url) {
+                                                                        window.open(url, '_blank');
+                                                                    } else {
+                                                                        setJoinError('Meeting link is not available yet.');
+                                                                        setErrorModalOpen(true);
+                                                                    }
+                                                                } catch (e: any) {
+                                                                    setJoinError(e?.response?.data?.error || 'Unable to join session.');
                                                                     setErrorModalOpen(true);
+                                                                } finally {
+                                                                    setJoinBusyId(null);
                                                                 }
-                                                            } catch (e: any) {
-                                                                setJoinError(e?.response?.data?.error || 'Unable to join session.');
-                                                                setErrorModalOpen(true);
-                                                            } finally {
-                                                                setJoinBusyId(null);
-                                                            }
-                                                        }}
-                                                    >
-                                                        <ExternalLink className="w-4 h-4" />
-                                                        {joinBusyId === l.id ? 'Joining…' : 'Join Session'}
-                                                    </Button>
+                                                            }}
+                                                        >
+                                                            <ExternalLink className="w-4 h-4" />
+                                                            {joinBusyId === l.id ? 'Joining…' : 'Join Session'}
+                                                        </Button>
+                                                        <a href={`/student/whiteboard?lesson=${l.id}`} target="_blank" rel="noreferrer">
+                                                            <Button variant="outline" className="flex items-center gap-2">
+                                                                <ExternalLink className="w-4 h-4" />
+                                                                Open Whiteboard
+                                                            </Button>
+                                                        </a>
+                                                    </>
                                                 );
                                             })()}
                                             {l.google_calendar_html_link ? (

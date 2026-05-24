@@ -1,4 +1,5 @@
 import express from 'express';
+import http from 'http';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
@@ -48,6 +49,7 @@ import aiRoutes from './routes/aiRoutes';
 import whiteboardRoutes from './routes/whiteboardRoutes';
 import { startEmailOutboxProcessor } from './services/emailOutboxProcessor';
 import { startEmailScheduler } from './services/emailScheduler';
+import { initWhiteboardSocket } from './services/whiteboardSocket';
 
 // Middleware
 app.use(cors());
@@ -87,7 +89,10 @@ app.get('/', (req, res) => {
 });
 
 // Start Server
-app.listen(PORT, () => {
+const httpServer = http.createServer(app);
+initWhiteboardSocket(httpServer);
+
+httpServer.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     startEmailOutboxProcessor();
     startEmailScheduler();

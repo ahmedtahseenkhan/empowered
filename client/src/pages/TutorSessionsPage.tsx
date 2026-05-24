@@ -212,12 +212,20 @@ const TutorSessionsPage: React.FC = () => {
                                                 const isJoinable = nowMs >= startMs - 15 * 60 * 1000 && nowMs <= startMs + 50 * 60 * 1000;
                                                 if (!isJoinable) return null;
                                                 return (
-                                                    <a href={l.meeting_link} target="_blank" rel="noreferrer">
-                                                        <Button className="flex items-center gap-2">
-                                                            <ExternalLink className="w-4 h-4" />
-                                                            Join Session
-                                                        </Button>
-                                                    </a>
+                                                    <>
+                                                        <a href={l.meeting_link} target="_blank" rel="noreferrer">
+                                                            <Button className="flex items-center gap-2">
+                                                                <ExternalLink className="w-4 h-4" />
+                                                                Join Session
+                                                            </Button>
+                                                        </a>
+                                                        <a href={`/tutor/whiteboard?lesson=${l.id}`} target="_blank" rel="noreferrer">
+                                                            <Button variant="outline" className="flex items-center gap-2">
+                                                                <ExternalLink className="w-4 h-4" />
+                                                                Open Whiteboard
+                                                            </Button>
+                                                        </a>
+                                                    </>
                                                 );
                                             })()}
                                             {l.google_calendar_html_link ? (

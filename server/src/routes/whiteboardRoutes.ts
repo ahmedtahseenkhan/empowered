@@ -6,12 +6,14 @@ import {
     createWhiteboard,
     updateWhiteboard,
     deleteWhiteboard,
+    getOrCreateLessonWhiteboard,
 } from '../controllers/whiteboardController';
 
 const router = Router();
 
 router.use(authenticateToken);
 
+router.get('/lesson/:lessonId', getOrCreateLessonWhiteboard);
 router.get('/', listWhiteboards);
 router.get('/:id', getWhiteboard);
 router.post('/', createWhiteboard);

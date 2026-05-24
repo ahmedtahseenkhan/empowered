@@ -105,6 +105,59 @@ export const updateWhiteboard = async (req: AuthRequest, res: Response): Promise
     res.json(updated);
 };
 
+/**
+ * Get-or-create the whiteboard for a specific lesson. Accessible by either the
+ * lesson's tutor or its student. Used by the live collaborative whiteboard mode.
+ */
+export const getOrCreateLessonWhiteboard = async (req: AuthRequest, res: Response): Promise<void> => {
+    const { lessonId } = req.params;
+    const userId = req.user!.id;
+
+    const lesson = await prisma.lesson.findUnique({
+        where: { id: lessonId },
+        include: {
+            tutor: { select: { id: true, user_id: true, username: true } },
+            student: { select: { id: true, user_id: true, username: true } },
+        },
+    });
+
+    if (!lesson) {
+        res.status(404).json({ error: 'Lesson not found' });
+        return;
+    }
+
+    const isTutor = lesson.tutor.user_id === userId;
+    const isStudent = lesson.student.user_id === userId;
+    if (!isTutor && !isStudent) {
+        res.status(403).json({ error: 'You are not part of this lesson' });
+        return;
+    }
+
+    let board = await prisma.whiteboard.findUnique({ where: { lesson_id: lessonId } });
+    if (!board) {
+        board = await prisma.whiteboard.create({
+            data: {
+                tutor_id: lesson.tutor.id,
+                lesson_id: lessonId,
+                title: `Session with ${lesson.student.username || lesson.tutor.username}`,
+                scene_data: { shapes: [] },
+            },
+        });
+    }
+
+    res.json({
+        board,
+        lesson: {
+            id: lesson.id,
+            tutor_name: lesson.tutor.username,
+            student_name: lesson.student.username,
+            start_time: lesson.start_time,
+            end_time: lesson.end_time,
+        },
+        role: isTutor ? 'tutor' : 'student',
+    });
+};
+
 export const deleteWhiteboard = async (req: AuthRequest, res: Response): Promise<void> => {
     const { id } = req.params;
 

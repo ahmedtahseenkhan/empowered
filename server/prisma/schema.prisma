@@ -3,9 +3,9 @@ generator client {
 }
 
 model TutorTimeBlock {
-  id        String       @id @default(uuid())
-  tutor_id  String
-  tutor     TutorProfile @relation(fields: [tutor_id], references: [id])
+  id       String       @id @default(uuid())
+  tutor_id String
+  tutor    TutorProfile @relation(fields: [tutor_id], references: [id])
 
   start_time DateTime
   end_time   DateTime
@@ -33,17 +33,17 @@ enum TutorTier {
   PREMIUM
 }
 
- enum MarketingVideoSubmissionStatus {
-   DRAFT
-   LINK_SUBMITTED
-   EMAIL_REQUESTED
- }
+enum MarketingVideoSubmissionStatus {
+  DRAFT
+  LINK_SUBMITTED
+  EMAIL_REQUESTED
+}
 
- enum VerificationStatus {
-   PENDING
-   APPROVED
-   REJECTED
- }
+enum VerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
 
 enum LessonStatus {
   PENDING
@@ -55,7 +55,7 @@ enum LessonStatus {
 
 enum LessonBillingType {
   FREE_TRIAL
-  FREE_INTRO  // Standalone free introductory session (25 min)
+  FREE_INTRO // Standalone free introductory session (25 min)
   PAID
 }
 
@@ -81,7 +81,7 @@ model User {
   tutor_profile   TutorProfile?
   admin_profile   AdminProfile?
 
-  password_reset_codes PasswordResetCode[]
+  password_reset_codes     PasswordResetCode[]
   email_verification_codes EmailVerificationCode[]
 
   support_tickets SupportTicket[]
@@ -105,14 +105,14 @@ model StudentProfile {
   mentor_status    StudentTutorStatus[]
   course_purchases CoursePurchase[]
 
-  progress_notes      ProgressNote[]
-  
+  progress_notes ProgressNote[]
+
   // Stripe & Credits
   stripe_customer_id String?
-  credits_balance    Int     @default(0)
+  credits_balance    Int            @default(0)
   credit_history     CreditLedger[]
 
-  homework_tasks      HomeworkTask[]
+  homework_tasks HomeworkTask[]
 
   homework_submissions HomeworkSubmission[]
 }
@@ -126,13 +126,13 @@ model TutorProfile {
   profile_photo    String?
   tagline          String?
   about            String?
-  hourly_rate      Int     @default(0)
-  experience_years Int     @default(0)
+  hourly_rate      Int      @default(0)
+  experience_years Int      @default(0)
   video_url        String?
   country          String?
-  timezone         String  @default("UTC")
+  timezone         String   @default("UTC")
   key_strengths    String? // Stored as comma-separated or JSON string
-  is_verified      Boolean @default(false) // Admin verification
+  is_verified      Boolean  @default(false) // Admin verification
   student_levels   String[] @default([]) // ELEMENTARY_SCHOOL, MIDDLE_SCHOOL, HIGH_SCHOOL, COLLEGE_ADULT
 
   tier TutorTier @default(STANDARD) // Subscription plan
@@ -143,24 +143,24 @@ model TutorProfile {
   total_students Int   @default(0)
 
   // Relationships
-  education        TutorEducation[]
-  experience       TutorExperience[]
-  certifications   TutorCertification[]
-  languages        TutorLanguage[]
-  categories       TutorCategory[]
-  availabilities           Availability[]
+  education                   TutorEducation[]
+  experience                  TutorExperience[]
+  certifications              TutorCertification[]
+  languages                   TutorLanguage[]
+  categories                  TutorCategory[]
+  availabilities              Availability[]
   free_session_availabilities FreeSessionAvailability[]
-  free_session_enabled     Boolean @default(false)
-  time_blocks      TutorTimeBlock[]
-  lessons          Lesson[]
-  bookings         Booking[]
-  google_calendar_connection GoogleCalendarConnection?
-  oauth_states     OAuthState[]
-  courses          Course[]
-  reviews          Review[]
-  subscriptions    Subscription[]
-  student_status   StudentTutorStatus[]
-  external_reviews TutorExternalReview[]
+  free_session_enabled        Boolean                   @default(false)
+  time_blocks                 TutorTimeBlock[]
+  lessons                     Lesson[]
+  bookings                    Booking[]
+  google_calendar_connection  GoogleCalendarConnection?
+  oauth_states                OAuthState[]
+  courses                     Course[]
+  reviews                     Review[]
+  subscriptions               Subscription[]
+  student_status              StudentTutorStatus[]
+  external_reviews            TutorExternalReview[]
 
   // Stripe Connect & Subscription
   stripe_account_id      String? // Connect Account ID (for payouts)
@@ -168,21 +168,23 @@ model TutorProfile {
   stripe_subscription_id String? // ID of their subscription to the platform (Standard/Pro/Premium)
   subscription_status    String? // active, past_due, canceled
   subscription_end_date  DateTime? // When their current paid period ends
-  has_used_trial         Boolean @default(false) // Whether the tutor has already used their free trial
-  is_beta                Boolean @default(false) // Approved beta applicant
-  is_founding_mentor     Boolean @default(false) // Awarded when beta mentor completes their profile
+  has_used_trial         Boolean   @default(false) // Whether the tutor has already used their free trial
+  is_beta                Boolean   @default(false) // Approved beta applicant
+  is_founding_mentor     Boolean   @default(false) // Awarded when beta mentor completes their profile
 
   progress_notes ProgressNote[]
   homework_tasks HomeworkTask[]
 
   marketing_video_submission TutorMarketingVideoSubmission?
-  whiteboards Whiteboard[]
+  whiteboards                Whiteboard[]
 }
 
 model Whiteboard {
   id         String       @id @default(uuid())
   tutor_id   String
   tutor      TutorProfile @relation(fields: [tutor_id], references: [id], onDelete: Cascade)
+  lesson_id  String?      @unique
+  lesson     Lesson?      @relation(fields: [lesson_id], references: [id], onDelete: SetNull)
   title      String       @default("Untitled Board")
   scene_data Json
   created_at DateTime     @default(now())
@@ -190,39 +192,39 @@ model Whiteboard {
 }
 
 model AdminProfile {
-  id            String   @id @default(uuid())
-  user_id       String   @unique
-  user          User     @relation(fields: [user_id], references: [id])
+  id            String  @id @default(uuid())
+  user_id       String  @unique
+  user          User    @relation(fields: [user_id], references: [id])
   username      String
   profile_photo String?
   department    String?
 }
 
- model TutorMarketingVideoSubmission {
-   id          String   @id @default(uuid())
-   tutor_id    String   @unique
-   tutor       TutorProfile @relation(fields: [tutor_id], references: [id], onDelete: Cascade)
+model TutorMarketingVideoSubmission {
+  id       String       @id @default(uuid())
+  tutor_id String       @unique
+  tutor    TutorProfile @relation(fields: [tutor_id], references: [id], onDelete: Cascade)
 
-   video_url    String?
-   instructions String? @db.Text
+  video_url    String?
+  instructions String? @db.Text
 
-   status MarketingVideoSubmissionStatus @default(DRAFT)
+  status MarketingVideoSubmissionStatus @default(DRAFT)
 
-   link_submitted_at   DateTime?
-   email_requested_at  DateTime?
+  link_submitted_at  DateTime?
+  email_requested_at DateTime?
 
-   created_at DateTime @default(now())
-   updated_at DateTime @updatedAt
- }
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+}
 
 model GoogleCalendarConnection {
-  id              String      @id @default(uuid())
-  tutor_id        String      @unique
-  tutor           TutorProfile @relation(fields: [tutor_id], references: [id])
+  id       String       @id @default(uuid())
+  tutor_id String       @unique
+  tutor    TutorProfile @relation(fields: [tutor_id], references: [id])
 
-  calendar_id      String      @default("primary")
-  timezone         String      @default("UTC")
-  sync_enabled     Boolean     @default(true)
+  calendar_id  String  @default("primary")
+  timezone     String  @default("UTC")
+  sync_enabled Boolean @default(true)
 
   access_token_enc  String?
   refresh_token_enc String?
@@ -235,13 +237,13 @@ model GoogleCalendarConnection {
 }
 
 model PasswordResetCode {
-  id        String   @id @default(uuid())
-  user_id   String
-  user      User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  id      String @id @default(uuid())
+  user_id String
+  user    User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
-  code_hash String
+  code_hash  String
   expires_at DateTime
-  used_at   DateTime?
+  used_at    DateTime?
 
   created_at DateTime @default(now())
 
@@ -250,9 +252,9 @@ model PasswordResetCode {
 }
 
 model EmailVerificationCode {
-  id         String    @id @default(uuid())
-  user_id    String
-  user       User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  id      String @id @default(uuid())
+  user_id String
+  user    User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   code_hash  String
   expires_at DateTime
@@ -265,38 +267,38 @@ model EmailVerificationCode {
 }
 
 model OAuthState {
-  state      String   @id
+  state      String       @id
   tutor_id   String
   tutor      TutorProfile @relation(fields: [tutor_id], references: [id])
   expires_at DateTime
-  created_at DateTime @default(now())
+  created_at DateTime     @default(now())
 }
 
 model EmailOutbox {
-  id              String   @id @default(uuid())
+  id              String    @id @default(uuid())
   type            String
   to_email        String
   payload         Json
-  status          String   @default("PENDING")
-  attempts        Int      @default(0)
+  status          String    @default("PENDING")
+  attempts        Int       @default(0)
   last_error      String?
   next_retry_at   DateTime?
-  idempotency_key String?  @unique
-  created_at      DateTime @default(now())
+  idempotency_key String?   @unique
+  created_at      DateTime  @default(now())
   sent_at         DateTime?
 }
 
 model TutorExternalReview {
-  id          String       @id @default(uuid())
-  tutor_id    String
-  tutor       TutorProfile @relation(fields: [tutor_id], references: [id])
-  platform    String // Google, Facebook, LinkedId, etc.
-  reviewer    String
-  rating      Int
-  comment     String?
+  id           String       @id @default(uuid())
+  tutor_id     String
+  tutor        TutorProfile @relation(fields: [tutor_id], references: [id])
+  platform     String // Google, Facebook, LinkedId, etc.
+  reviewer     String
+  rating       Int
+  comment      String?
   external_url String?
-  date        DateTime?
-  is_verified Boolean      @default(false)
+  date         DateTime?
+  is_verified  Boolean      @default(false)
 
   verification_status VerificationStatus @default(PENDING)
   rejection_reason    String?
@@ -408,15 +410,15 @@ model Lesson {
   booking_id String?
   booking    Booking?       @relation(fields: [booking_id], references: [id])
 
-  start_time   DateTime
-  end_time     DateTime
-  duration     Int // in minutes
-  status       LessonStatus @default(PENDING)
-  billing_type LessonBillingType @default(PAID)
-  meeting_link String?
-  google_calendar_event_id String? @unique
+  start_time                DateTime
+  end_time                  DateTime
+  duration                  Int // in minutes
+  status                    LessonStatus      @default(PENDING)
+  billing_type              LessonBillingType @default(PAID)
+  meeting_link              String?
+  google_calendar_event_id  String?           @unique
   google_calendar_html_link String?
-  category     String?
+  category                  String?
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -424,6 +426,7 @@ model Lesson {
   review Review?
 
   progress_notes ProgressNote[]
+  whiteboard     Whiteboard?
 }
 
 model PaymentSchedule {
@@ -575,19 +578,19 @@ enum HomeworkStatus {
 }
 
 model ProgressNote {
-  id          String         @id @default(uuid())
-  tutor_id    String
-  tutor       TutorProfile   @relation(fields: [tutor_id], references: [id])
-  student_id  String
-  student     StudentProfile @relation(fields: [student_id], references: [id])
-  lesson_id   String?
-  lesson      Lesson?        @relation(fields: [lesson_id], references: [id])
+  id         String         @id @default(uuid())
+  tutor_id   String
+  tutor      TutorProfile   @relation(fields: [tutor_id], references: [id])
+  student_id String
+  student    StudentProfile @relation(fields: [student_id], references: [id])
+  lesson_id  String?
+  lesson     Lesson?        @relation(fields: [lesson_id], references: [id])
 
   author_role NoteAuthorRole
   visibility  NoteVisibility @default(SHARED_WITH_STUDENT)
   body        String         @db.Text
 
-  attachments Attachment[]   @relation("NoteAttachments")
+  attachments Attachment[] @relation("NoteAttachments")
 
   created_at DateTime @default(now())
 
@@ -595,18 +598,18 @@ model ProgressNote {
 }
 
 model HomeworkTask {
-  id           String         @id @default(uuid())
-  tutor_id     String
-  tutor        TutorProfile   @relation(fields: [tutor_id], references: [id])
-  student_id   String
-  student      StudentProfile @relation(fields: [student_id], references: [id])
+  id         String         @id @default(uuid())
+  tutor_id   String
+  tutor      TutorProfile   @relation(fields: [tutor_id], references: [id])
+  student_id String
+  student    StudentProfile @relation(fields: [student_id], references: [id])
 
   title        String
-  instructions String @db.Text
+  instructions String         @db.Text
   due_at       DateTime?
   status       HomeworkStatus @default(ASSIGNED)
 
-  attachments Attachment[]      @relation("TaskAttachments")
+  attachments Attachment[]         @relation("TaskAttachments")
   submissions HomeworkSubmission[]
 
   created_at DateTime @default(now())
@@ -622,7 +625,7 @@ model HomeworkSubmission {
   student_id String
   student    StudentProfile @relation(fields: [student_id], references: [id])
 
-  message     String? @db.Text
+  message     String?      @db.Text
   attachments Attachment[] @relation("SubmissionAttachments")
 
   created_at DateTime @default(now())
@@ -631,12 +634,12 @@ model HomeworkSubmission {
 }
 
 model Attachment {
-  id            String @id @default(uuid())
+  id String @id @default(uuid())
 
   note_id       String?
-  note          ProgressNote? @relation("NoteAttachments", fields: [note_id], references: [id], onDelete: Cascade)
+  note          ProgressNote?       @relation("NoteAttachments", fields: [note_id], references: [id], onDelete: Cascade)
   task_id       String?
-  task          HomeworkTask? @relation("TaskAttachments", fields: [task_id], references: [id], onDelete: Cascade)
+  task          HomeworkTask?       @relation("TaskAttachments", fields: [task_id], references: [id], onDelete: Cascade)
   submission_id String?
   submission    HomeworkSubmission? @relation("SubmissionAttachments", fields: [submission_id], references: [id], onDelete: Cascade)
 
@@ -667,34 +670,32 @@ enum TicketPriority {
 }
 
 model SupportTicket {
-  id               String         @id @default(uuid())
-  user_id          String?
-  user             User?          @relation(fields: [user_id], references: [id])
-  submitter_name   String?
-  submitter_email  String?
+  id              String  @id @default(uuid())
+  user_id         String?
+  user            User?   @relation(fields: [user_id], references: [id])
+  submitter_name  String?
+  submitter_email String?
 
-  subject     String
-  message     String         @db.Text
-  status      TicketStatus   @default(OPEN)
-  priority    TicketPriority @default(MEDIUM)
+  subject  String
+  message  String         @db.Text
+  status   TicketStatus   @default(OPEN)
+  priority TicketPriority @default(MEDIUM)
 
-  admin_notes String?        @db.Text
+  admin_notes String? @db.Text
 
-  created_at  DateTime       @default(now())
-  updated_at  DateTime       @updatedAt
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 
   admin_replies AdminReply[]
 }
 
-
-
 model AdminReply {
-  id        String   @id @default(uuid())
+  id        String        @id @default(uuid())
   ticket_id String
   ticket    SupportTicket @relation(fields: [ticket_id], references: [id])
-  
-  message   String   @db.Text
-  sent_at   DateTime @default(now())
+
+  message String   @db.Text
+  sent_at DateTime @default(now())
 }
 
 enum CreditTransactionType {
@@ -705,26 +706,26 @@ enum CreditTransactionType {
 }
 
 model CreditLedger {
-  id          String   @id @default(uuid())
-  student_id  String
-  student     StudentProfile @relation(fields: [student_id], references: [id])
-  
-  amount      Int      // Positive for credit added, negative for used
+  id         String         @id @default(uuid())
+  student_id String
+  student    StudentProfile @relation(fields: [student_id], references: [id])
+
+  amount      Int // Positive for credit added, negative for used
   type        CreditTransactionType
   description String?
-  metadata    Json?    // Store booking_id, stripe_charge_id etc
-  
-  created_at  DateTime @default(now())
+  metadata    Json? // Store booking_id, stripe_charge_id etc
+
+  created_at DateTime @default(now())
 
   @@index([student_id])
 }
 
 model StripeEvent {
-  id          String   @id
-  type        String
-  data        Json
-  processed   Boolean  @default(false)
-  created_at  DateTime @default(now())
+  id         String   @id
+  type       String
+  data       Json
+  processed  Boolean  @default(false)
+  created_at DateTime @default(now())
 }
 
 model DemoBooking {
@@ -732,14 +733,14 @@ model DemoBooking {
   full_name          String
   email              String
   phone              String?
-  category_alignment  String   // Academic Tutoring | Life Coaching | Skill Development | All of the above
-  experience_years   String   // Just getting started | Less than 1 year | 1–3 years | 3+ years
-  income_status      String   // Yes recurring | Yes fluctuates | Not yet building | Planning to start soon
+  category_alignment String // Academic Tutoring | Life Coaching | Skill Development | All of the above
+  experience_years   String // Just getting started | Less than 1 year | 1–3 years | 3+ years
+  income_status      String // Yes recurring | Yes fluctuates | Not yet building | Planning to start soon
   looking_for        String   @db.Text // JSON array or comma-separated
   slot_start_time    DateTime
   slot_end_time      DateTime
   timezone           String   @default("America/Chicago")
-  meeting_link       String?  // Google Meet link (set for new bookings; optional for backwards compatibility so admin list works)
+  meeting_link       String? // Google Meet link (set for new bookings; optional for backwards compatibility so admin list works)
   created_at         DateTime @default(now())
 
   @@index([slot_start_time])
@@ -748,7 +749,7 @@ model DemoBooking {
 // Admin demo availability: configurable windows per day (e.g. Monday 9–11, 3–5). If empty, fallback to 9–17.
 model AdminDemoAvailability {
   id          String @id @default(uuid())
-  day_of_week Int    // 0=Sunday, 1=Monday, ... 6=Saturday
+  day_of_week Int // 0=Sunday, 1=Monday, ... 6=Saturday
   start_time  String // "09:00"
   end_time    String // "11:00"
 }
@@ -771,20 +772,20 @@ enum BetaApplicationStatus {
 }
 
 model BetaApplication {
-  id                   String                @id @default(uuid())
-  full_name            String
-  email                String
-  phone_number         String
-  service_description  String                @db.Text
-  category             String
-  category_other       String?
-  session_management   String[]
-  has_active_clients   Boolean
-  biggest_challenge    String                @db.Text
-  profile_link         String?
-  status               BetaApplicationStatus @default(PENDING)
-  actioned_at          DateTime?
-  created_at           DateTime              @default(now())
+  id                  String                @id @default(uuid())
+  full_name           String
+  email               String
+  phone_number        String
+  service_description String                @db.Text
+  category            String
+  category_other      String?
+  session_management  String[]
+  has_active_clients  Boolean
+  biggest_challenge   String                @db.Text
+  profile_link        String?
+  status              BetaApplicationStatus @default(PENDING)
+  actioned_at         DateTime?
+  created_at          DateTime              @default(now())
 
   @@index([email])
   @@index([status])

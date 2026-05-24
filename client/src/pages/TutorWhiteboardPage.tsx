@@ -1,9 +1,11 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { io, Socket } from 'socket.io-client';
 import {
   MousePointer2, Square, Diamond, Circle, Minus, MoveRight,
   Pencil, Type, Eraser, Undo2, Redo2, Trash2, Plus,
   ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Save,
-  PenLine, RotateCcw,
+  PenLine, RotateCcw, Users, Radio,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { DashboardLayout } from '../layouts/DashboardLayout';
@@ -233,6 +235,16 @@ export default function TutorWhiteboardPage() {
   const [textEdit, setTextEdit] = useState<{ id: string; x: number; y: number; text: string; fontSize: number; strokeColor: string } | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // ─── Live (collaborative) mode ─────────────────────────────────────────────
+  const [searchParams] = useSearchParams();
+  const liveLessonId = searchParams.get('lesson');
+  const isLive = !!liveLessonId;
+  const socketRef = useRef<Socket | null>(null);
+  const suppressBroadcast = useRef(false);
+  const [livePeers, setLivePeers] = useState(0);
+  const [liveRole, setLiveRole] = useState<'tutor' | 'student' | null>(null);
+  const [liveStatus, setLiveStatus] = useState<'connecting' | 'live' | 'disconnected'>('connecting');
+
   // Keep selId ref in sync
   useEffect(() => { selId.current = selectedId; }, [selectedId]);
 
@@ -336,20 +348,27 @@ export default function TutorWhiteboardPage() {
     historyRef.current = historyRef.current.slice(0, histIdx.current + 1);
     historyRef.current.push(JSON.parse(JSON.stringify(shapesRef.current)));
     histIdx.current = historyRef.current.length - 1;
+    broadcastSnapshot();
+  }
+
+  function broadcastSnapshot() {
+    if (!isLive || suppressBroadcast.current) return;
+    const s = socketRef.current;
+    if (s && s.connected) s.emit('scene:snapshot', { shapes: shapesRef.current });
   }
 
   function undo() {
     if (histIdx.current <= 0) return;
     histIdx.current--;
     shapesRef.current = JSON.parse(JSON.stringify(historyRef.current[histIdx.current]));
-    setSelectedId(null); render();
+    setSelectedId(null); render(); broadcastSnapshot();
   }
 
   function redo() {
     if (histIdx.current >= historyRef.current.length - 1) return;
     histIdx.current++;
     shapesRef.current = JSON.parse(JSON.stringify(historyRef.current[histIdx.current]));
-    setSelectedId(null); render();
+    setSelectedId(null); render(); broadcastSnapshot();
   }
 
   // ─── Boards API ────────────────────────────────────────────────────────────
@@ -408,13 +427,81 @@ export default function TutorWhiteboardPage() {
     } catch {}
   }
 
-  useEffect(() => { loadBoards(); }, []);
+  useEffect(() => { if (!isLive) loadBoards(); }, [isLive]);
 
-  // Auto-save
+  // Auto-save (only in non-live mode; live mode persists via socket snapshot)
   useEffect(() => {
+    if (isLive) return;
     const t = setInterval(() => { if (currentBoardId) saveBoard(); }, 30000);
     return () => clearInterval(t);
-  }, [currentBoardId, boardTitle]);
+  }, [currentBoardId, boardTitle, isLive]);
+
+  // ─── Live mode: connect + sync ─────────────────────────────────────────────
+  useEffect(() => {
+    if (!isLive || !liveLessonId) return;
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    let cancelled = false;
+    setLiveStatus('connecting');
+
+    (async () => {
+      try {
+        const res = await api.get(`/whiteboards/lesson/${liveLessonId}`);
+        if (cancelled) return;
+        const { board, lesson, role } = res.data;
+        shapesRef.current = board.scene_data?.shapes || [];
+        historyRef.current = [JSON.parse(JSON.stringify(shapesRef.current))];
+        histIdx.current = 0;
+        setCurrentBoardId(board.id);
+        setBoardTitle(`${lesson.student_name} ↔ ${lesson.tutor_name}`);
+        setLiveRole(role);
+        setSelectedId(null);
+        setTextEdit(null);
+        render();
+
+        const apiBase = (api.defaults.baseURL || '').replace(/\/api\/?$/, '');
+        const socket = io(`${apiBase}/whiteboard`, {
+          auth: { token },
+          path: '/socket.io',
+          transports: ['websocket', 'polling'],
+        });
+        socketRef.current = socket;
+
+        socket.on('connect', () => {
+          socket.emit('join', { lessonId: liveLessonId });
+        });
+        socket.on('joined', ({ peers }: { peers: any[] }) => {
+          setLivePeers((peers?.length || 0) + 1);
+          setLiveStatus('live');
+        });
+        socket.on('peer:join', () => setLivePeers((c) => c + 1));
+        socket.on('peer:leave', () => setLivePeers((c) => Math.max(1, c - 1)));
+        socket.on('scene:snapshot', ({ shapes }: { shapes: any[] }) => {
+          suppressBroadcast.current = true;
+          shapesRef.current = shapes || [];
+          render();
+          setTimeout(() => { suppressBroadcast.current = false; }, 50);
+        });
+        socket.on('disconnect', () => {
+          setLiveStatus('disconnected');
+        });
+        socket.on('connect_error', (err) => {
+          console.error('[Whiteboard socket] connect_error:', err.message);
+          setLiveStatus('disconnected');
+        });
+      } catch (err) {
+        console.error('[Whiteboard] Failed to load lesson board:', err);
+        setLiveStatus('disconnected');
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      socketRef.current?.disconnect();
+      socketRef.current = null;
+    };
+  }, [isLive, liveLessonId, render]);
 
   // ─── Text editing ──────────────────────────────────────────────────────────
 
@@ -701,8 +788,8 @@ export default function TutorWhiteboardPage() {
     <DashboardLayout>
     <div className="flex overflow-hidden select-none rounded-xl border border-gray-200 shadow-sm" style={{ background: '#f0f2f5', height: 'calc(100vh - 7rem)' }}>
 
-      {/* Sidebar */}
-      <div
+      {/* Sidebar (hidden in live mode) */}
+      {!isLive && <div
         className="relative flex-shrink-0 bg-white border-r border-gray-200 flex flex-col transition-all duration-300 overflow-hidden"
         style={{ width: sidebarOpen ? 220 : 0 }}
       >
@@ -732,29 +819,45 @@ export default function TutorWhiteboardPage() {
           ))}
           {boards.length === 0 && <p className="text-xs text-gray-400 px-3 py-2">No boards yet</p>}
         </div>
-      </div>
+      </div>}
 
-      {/* Sidebar toggle */}
-      <button
+      {/* Sidebar toggle (hidden in live mode) */}
+      {!isLive && <button
         onClick={() => setSidebarOpen(o => !o)}
         className="absolute z-30 top-1/2 -translate-y-1/2 bg-white border border-gray-200 rounded-r-lg p-1 shadow-sm hover:bg-gray-50 transition-all"
         style={{ left: sidebarOpen ? 220 : 0 }}
       >
         {sidebarOpen ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
-      </button>
+      </button>}
 
       {/* Main */}
       <div className="flex-1 flex flex-col overflow-hidden relative">
 
         {/* Top bar */}
         <div className="flex items-center gap-2 px-4 py-2 bg-white border-b border-gray-200 shadow-sm z-10 flex-shrink-0">
-          {/* Title */}
-          <input
-            value={boardTitle}
-            onChange={e => setBoardTitle(e.target.value)}
-            disabled={!currentBoardId}
-            className="text-sm font-medium text-gray-700 bg-transparent border-none outline-none hover:bg-gray-50 focus:bg-gray-50 px-2 py-1 rounded w-36 disabled:opacity-40"
-          />
+          {/* Title / Live status */}
+          {isLive ? (
+            <div className="flex items-center gap-3 min-w-[280px]">
+              <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-semibold ${liveStatus === 'live' ? 'bg-green-100 text-green-700' : liveStatus === 'connecting' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
+                <Radio size={11} className={liveStatus === 'live' ? 'animate-pulse' : ''} />
+                {liveStatus === 'live' ? 'LIVE' : liveStatus === 'connecting' ? 'Connecting…' : 'Disconnected'}
+              </div>
+              <div className="text-sm font-medium text-gray-700 truncate">{boardTitle}</div>
+              <div className="flex items-center gap-1 text-xs text-gray-500">
+                <Users size={12} /> {livePeers || 1}
+              </div>
+              {liveRole && (
+                <span className="text-[10px] uppercase tracking-wide text-gray-400">You: {liveRole}</span>
+              )}
+            </div>
+          ) : (
+            <input
+              value={boardTitle}
+              onChange={e => setBoardTitle(e.target.value)}
+              disabled={!currentBoardId}
+              className="text-sm font-medium text-gray-700 bg-transparent border-none outline-none hover:bg-gray-50 focus:bg-gray-50 px-2 py-1 rounded w-36 disabled:opacity-40"
+            />
+          )}
 
           {/* Tools */}
           <div className="flex items-center gap-0.5 bg-gray-100 rounded-xl px-1 py-1 mx-auto">
@@ -780,14 +883,16 @@ export default function TutorWhiteboardPage() {
             </button>
           </div>
 
-          <button
-            onClick={saveBoard}
-            disabled={!currentBoardId || saving}
-            className="flex items-center gap-1.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 text-white text-sm px-3 py-1.5 rounded-lg transition-colors"
-          >
-            <Save size={14} />
-            {saving ? 'Saving…' : 'Save'}
-          </button>
+          {!isLive && (
+            <button
+              onClick={saveBoard}
+              disabled={!currentBoardId || saving}
+              className="flex items-center gap-1.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 text-white text-sm px-3 py-1.5 rounded-lg transition-colors"
+            >
+              <Save size={14} />
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+          )}
         </div>
 
         {/* Properties bar */}

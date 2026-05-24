@@ -481,6 +481,14 @@ function App() {
             }
           />
           <Route
+            path="/student/whiteboard"
+            element={
+              <ProtectedRoute>
+                <TutorWhiteboardPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/connect-account"
             element={
               <ProtectedRoute>
