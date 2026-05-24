@@ -194,93 +194,101 @@ function makeShape(tool: ToolType, x: number, y: number, strokeColor: string, bg
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-// Portal-based text editor — renders into document.body so nothing in the
-// canvas tree (transforms, overflow:hidden, z-index stacks) can interfere
-// with focus or visibility.
+// Modal text editor — guaranteed visible & interactive regardless of any
+// browser/extension/CSS quirks. Renders into document.body via portal.
 interface TextEditorProps {
   initialText: string;
-  screenX: number;
-  screenY: number;
-  fontSizePx: number;
   color: string;
-  onFinalize: (text: string) => void;
+  onSave: (text: string) => void;
+  onCancel: () => void;
 }
 
-function TextEditor({ initialText, screenX, screenY, fontSizePx, color, onFinalize }: TextEditorProps) {
+function TextEditor({ initialText, color, onSave, onCancel }: TextEditorProps) {
   const ref = useRef<HTMLTextAreaElement>(null);
-  const finalizedRef = useRef(false);
+  const settledRef = useRef(false);
 
-  const finalize = (text: string) => {
-    if (finalizedRef.current) return;
-    finalizedRef.current = true;
-    onFinalize(text);
+  const save = () => {
+    if (settledRef.current) return;
+    settledRef.current = true;
+    onSave(ref.current?.value ?? initialText);
+  };
+  const cancel = () => {
+    if (settledRef.current) return;
+    settledRef.current = true;
+    onCancel();
   };
 
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const focus = () => {
-      el.focus();
-      try { el.setSelectionRange(el.value.length, el.value.length); } catch {}
-    };
-    focus();
-    const t1 = setTimeout(focus, 10);
-    const t2 = setTimeout(() => { if (document.activeElement !== el) el.focus(); }, 100);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
+    el.focus();
+    try { el.setSelectionRange(el.value.length, el.value.length); } catch {}
+    const t = setTimeout(() => { if (document.activeElement !== el) el.focus(); }, 50);
+    return () => clearTimeout(t);
   }, []);
 
   return createPortal(
-    <textarea
-      ref={ref}
-      defaultValue={initialText}
-      autoFocus
-      placeholder="Type your text…"
-      spellCheck={false}
-      autoComplete="off"
-      autoCorrect="off"
-      autoCapitalize="off"
-      data-gramm="false"
-      data-gramm_editor="false"
-      data-enable-grammarly="false"
-      onBlur={(e) => finalize(e.target.value)}
-      onKeyDown={(e) => {
-        e.stopPropagation();
-        if (e.key === 'Escape') {
-          e.preventDefault();
-          finalize((e.target as HTMLTextAreaElement).value);
-        }
-      }}
-      onMouseDown={(e) => e.stopPropagation()}
-      onClick={(e) => { e.stopPropagation(); (e.target as HTMLTextAreaElement).focus(); }}
-      onInput={(e) => {
-        const el = e.target as HTMLTextAreaElement;
-        el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px';
-        el.style.width = 'auto'; el.style.width = Math.max(160, el.scrollWidth + 8) + 'px';
-      }}
+    <div
+      onMouseDown={cancel}
       style={{
-        position: 'fixed',
-        left: screenX,
-        top: screenY,
-        fontSize: fontSizePx,
-        lineHeight: 1.4,
-        color,
-        fontFamily: 'ui-sans-serif, system-ui, sans-serif',
-        background: '#ffffff',
-        border: '2px solid #4f90f0',
-        borderRadius: 6,
-        outline: 'none',
-        resize: 'none',
-        padding: '4px 8px',
-        minWidth: 160,
-        minHeight: Math.max(36, fontSizePx * 1.4),
-        whiteSpace: 'pre',
-        overflow: 'hidden',
+        position: 'fixed', inset: 0,
+        background: 'rgba(15, 23, 42, 0.45)',
         zIndex: 999999,
-        boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
-        caretColor: color,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 16,
       }}
-      rows={1}
-    />,
+    >
+      <div
+        onMouseDown={(e) => e.stopPropagation()}
+        style={{
+          background: 'white', padding: 20, borderRadius: 12,
+          minWidth: 380, maxWidth: 640, width: '100%',
+          boxShadow: '0 25px 60px rgba(0,0,0,0.35)',
+        }}
+      >
+        <div style={{ marginBottom: 12, fontSize: 15, fontWeight: 600, color: '#1f2937' }}>
+          Add text to whiteboard
+        </div>
+        <textarea
+          ref={ref}
+          autoFocus
+          defaultValue={initialText}
+          placeholder="Type your text here…"
+          spellCheck={false}
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          data-gramm="false"
+          data-gramm_editor="false"
+          data-enable-grammarly="false"
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); save(); }
+          }}
+          style={{
+            width: '100%', boxSizing: 'border-box',
+            minHeight: 120, padding: 12, fontSize: 16,
+            color, fontFamily: 'ui-sans-serif, system-ui, sans-serif',
+            border: '2px solid #4f90f0', borderRadius: 8, outline: 'none',
+            resize: 'vertical', lineHeight: 1.5,
+          }}
+        />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 14 }}>
+          <span style={{ fontSize: 12, color: '#6b7280' }}>⌘/Ctrl+Enter to add · Esc to cancel</span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={cancel}
+              style={{ padding: '8px 14px', borderRadius: 6, border: '1px solid #e5e7eb', background: 'white', cursor: 'pointer', fontSize: 14, color: '#374151' }}
+            >Cancel</button>
+            <button
+              onClick={save}
+              style={{ padding: '8px 16px', borderRadius: 6, border: 'none', background: '#7c3aed', color: 'white', cursor: 'pointer', fontSize: 14, fontWeight: 600 }}
+            >Add Text</button>
+          </div>
+        </div>
+      </div>
+    </div>,
     document.body,
   );
 }
@@ -648,12 +656,7 @@ export default function TutorWhiteboardPage() {
   // ─── Mouse events ──────────────────────────────────────────────────────────
 
   const onMouseDown = useCallback((e: React.MouseEvent) => {
-    if (textEdit) {
-      // Let the portal textarea's onBlur handler save its current value.
-      const active = document.activeElement as HTMLElement | null;
-      if (active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT')) active.blur();
-      return;
-    }
+    if (textEdit) return; // modal is open; ignore canvas clicks until it closes
 
     const pt = toCanvas(e);
 
@@ -1090,21 +1093,16 @@ export default function TutorWhiteboardPage() {
               onContextMenu={e => e.preventDefault()}
             />
 
-            {/* Text editor rendered via portal into document.body */}
-            {textEdit && canvasRef.current && (() => {
-              const sc = toScreen(textEdit.x, textEdit.y);
-              return (
-                <TextEditor
-                  key={textEdit.id}
-                  initialText={textEdit.text}
-                  screenX={sc.x}
-                  screenY={sc.y}
-                  fontSizePx={textEdit.fontSize * tfRef.current.scale}
-                  color={textEdit.strokeColor}
-                  onFinalize={(text) => finalizeText(text)}
-                />
-              );
-            })()}
+            {/* Text editor modal — rendered via portal into document.body */}
+            {textEdit && (
+              <TextEditor
+                key={textEdit.id}
+                initialText={textEdit.text}
+                color={textEdit.strokeColor}
+                onSave={(text) => finalizeText(text)}
+                onCancel={() => finalizeText('')}
+              />
+            )}
 
             {/* Zoom controls */}
             <div className="absolute bottom-4 right-4 flex items-center gap-1 bg-white rounded-xl shadow border border-gray-200 p-1 z-10">
