@@ -389,6 +389,75 @@ async function sendOutboxRow(row: OutboxRow) {
         return;
     }
 
+    if (row.type === 'SUBSCRIPTION_ACTIVATED') {
+        const p = row.payload as { mentorName?: string; planName?: string; amount?: string; nextBillingDate?: string; dashboardUrl?: string };
+        await emailService.sendEmail({
+            to: row.to_email,
+            subject: `Your ${p.planName || 'Subscription'} Plan is Now Active`,
+            html: `
+<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 24px;color:#222">
+  <h2 style="color:#7c3aed;margin:0 0 16px 0">🎉 Your ${p.planName || 'Subscription'} Plan is Active</h2>
+  <p style="margin:0 0 12px 0">Hi <strong>${p.mentorName || 'there'}</strong>,</p>
+  <p style="margin:0 0 12px 0">Your <strong>${p.planName || 'subscription'}</strong> is now active.</p>
+  <div style="background:#f5f3ff;border-radius:8px;padding:16px;margin:0 0 20px 0">
+    <p style="margin:0 0 8px 0;font-size:14px;color:#4c1d95">💳 <strong>Plan:</strong> ${p.planName || '—'}</p>
+    <p style="margin:0 0 8px 0;font-size:14px;color:#4c1d95">💰 <strong>Amount Paid:</strong> ${p.amount || '—'}</p>
+    <p style="margin:0;font-size:14px;color:#4c1d95">📅 <strong>Next Billing Date:</strong> ${p.nextBillingDate || '—'}</p>
+  </div>
+  <p style="margin:0 0 24px 0">You now have full access to all <strong>${p.planName || 'plan'}</strong> features. Log in to your dashboard to get started.</p>
+  <p style="margin:0;color:#999;font-size:12px">Team EmpowerEd Learnings</p>
+</div>`,
+        });
+        return;
+    }
+
+    if (row.type === 'SUBSCRIPTION_RENEWED') {
+        const p = row.payload as { mentorName?: string; planName?: string; amount?: string; periodStart?: string; periodEnd?: string; dashboardUrl?: string };
+        await emailService.sendEmail({
+            to: row.to_email,
+            subject: `Your ${p.planName || 'Subscription'} Has Been Renewed`,
+            html: `
+<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 24px;color:#222">
+  <h2 style="color:#059669;margin:0 0 16px 0">✅ Subscription Renewed</h2>
+  <p style="margin:0 0 12px 0">Hi <strong>${p.mentorName || 'there'}</strong>,</p>
+  <p style="margin:0 0 12px 0">Your <strong>${p.planName || 'subscription'}</strong> has been successfully renewed.</p>
+  <div style="background:#f0fdf4;border-radius:8px;padding:16px;margin:0 0 20px 0">
+    <p style="margin:0 0 8px 0;font-size:14px;color:#166534">💳 <strong>Plan:</strong> ${p.planName || '—'}</p>
+    <p style="margin:0 0 8px 0;font-size:14px;color:#166534">💰 <strong>Amount Charged:</strong> ${p.amount || '—'}</p>
+    <p style="margin:0 0 8px 0;font-size:14px;color:#166534">📅 <strong>Period:</strong> ${p.periodStart || '—'} – ${p.periodEnd || '—'}</p>
+    <p style="margin:0;font-size:14px;color:#166534">🔄 <strong>Next Renewal:</strong> ${p.periodEnd || '—'}</p>
+  </div>
+  <p style="margin:0 0 24px 0">Your access continues uninterrupted. Thank you for staying with EmpowerEd Learnings!</p>
+  <p style="margin:0;color:#999;font-size:12px">Team EmpowerEd Learnings</p>
+</div>`,
+        });
+        return;
+    }
+
+    if (row.type === 'STUDENT_PAYMENT_RECEIPT') {
+        const p = row.payload as { studentName?: string; tutorName?: string; sessionDate?: string; sessionTime?: string; amount?: string; paymentDate?: string; dashboardUrl?: string };
+        await emailService.sendEmail({
+            to: row.to_email,
+            subject: 'Payment Receipt — EmpowerEd Learnings',
+            html: `
+<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 24px;color:#222">
+  <h2 style="color:#7c3aed;margin:0 0 16px 0">🧾 Payment Receipt</h2>
+  <p style="margin:0 0 12px 0">Hi <strong>${p.studentName || 'there'}</strong>,</p>
+  <p style="margin:0 0 12px 0">Thank you for your payment. Here's your receipt:</p>
+  <div style="background:#f5f3ff;border-radius:8px;padding:16px;margin:0 0 20px 0">
+    <p style="margin:0 0 8px 0;font-size:14px;color:#4c1d95">🧑‍🏫 <strong>Mentor:</strong> ${p.tutorName || '—'}</p>
+    <p style="margin:0 0 8px 0;font-size:14px;color:#4c1d95">📅 <strong>Session Date:</strong> ${p.sessionDate || '—'}</p>
+    <p style="margin:0 0 8px 0;font-size:14px;color:#4c1d95">🕐 <strong>Session Time:</strong> ${p.sessionTime || '—'}</p>
+    <p style="margin:0 0 8px 0;font-size:14px;color:#4c1d95">💰 <strong>Amount Paid:</strong> ${p.amount || '—'}</p>
+    <p style="margin:0;font-size:14px;color:#4c1d95">🗓️ <strong>Payment Date:</strong> ${p.paymentDate || '—'}</p>
+  </div>
+  <p style="margin:0 0 24px 0">Your session is confirmed. We'll send you a reminder before it starts. See you soon!</p>
+  <p style="margin:0;color:#999;font-size:12px">Please keep this email as your receipt. Team EmpowerEd Learnings</p>
+</div>`,
+        });
+        return;
+    }
+
     if (row.type === 'DEMO_BOOKING_CONFIRMATION') {
         const p = row.payload as { fullName?: string; email?: string; callDate?: string; callTime?: string; meetingLink?: string; addToCalendarUrl?: string };
         // Mentor-style demo confirmation with meeting link (per System Generated Emails doc)

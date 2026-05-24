@@ -115,6 +115,31 @@ export async function handleCheckoutSessionCompleted(session: any) {
             }
         });
         console.log(`[Stripe Webhook] Successfully updated TutorProfile ${tutorId} for subscription.`);
+
+        // Send subscription activated email
+        const tutorWithUser = await prisma.tutorProfile.findUnique({
+            where: { id: tutorId },
+            include: { user: { select: { email: true } } },
+        });
+        if (tutorWithUser?.user?.email) {
+            const planName = tier === 'PRO' ? 'Pro' : tier === 'PREMIUM' ? 'Premium' : 'Standard';
+            const nextBilling = endEpoch ? new Date(endEpoch * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
+            const amountPaid = session.amount_total ? `£${(session.amount_total / 100).toFixed(2)}` : '—';
+            await prisma.emailOutbox.create({
+                data: {
+                    type: 'SUBSCRIPTION_ACTIVATED',
+                    to_email: tutorWithUser.user.email,
+                    payload: {
+                        mentorName: tutorWithUser.username,
+                        planName,
+                        amount: amountPaid,
+                        nextBillingDate: nextBilling,
+                        dashboardUrl: `${process.env.CLIENT_URL || 'https://empoweredlearnings.com'}/dashboard`,
+                    },
+                    idempotency_key: `subscription-activated:${subscriptionId}`,
+                },
+            }).catch((e: any) => { if (e.code !== 'P2002') console.error('[Webhook] Failed to queue subscription activated email:', e); });
+        }
     } else if (metadata.type === 'student_booking_payment') {
         const paymentScheduleId = metadata.paymentScheduleId as string | undefined;
         if (!paymentScheduleId) {
@@ -168,6 +193,30 @@ export async function handleCheckoutSessionCompleted(session: any) {
                     idempotency_key: `session-payment-confirmed-student:${paymentScheduleId}`,
                 },
             }).catch((e: any) => { if (e.code !== 'P2002') console.error('[Webhook] Failed to queue student payment confirmed email:', e); });
+
+            // Payment receipt for student
+            const sessionDate = paidLesson?.start_time
+                ? new Date(paidLesson.start_time).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+                : '—';
+            const sessionTime = paidLesson?.start_time
+                ? new Date(paidLesson.start_time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+                : '—';
+            await prisma.emailOutbox.create({
+                data: {
+                    type: 'STUDENT_PAYMENT_RECEIPT',
+                    to_email: studentUser.email,
+                    payload: {
+                        studentName,
+                        tutorName,
+                        sessionDate,
+                        sessionTime,
+                        amount: `£${Number(updatedSchedule.amount).toFixed(2)}`,
+                        paymentDate: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
+                        dashboardUrl: `${process.env.CLIENT_URL || 'https://empoweredlearnings.com'}/sessions`,
+                    },
+                    idempotency_key: `student-payment-receipt:${paymentScheduleId}`,
+                },
+            }).catch((e: any) => { if (e.code !== 'P2002') console.error('[Webhook] Failed to queue student payment receipt:', e); });
         }
         if (tutorUser?.email) {
             await prisma.emailOutbox.create({
@@ -467,6 +516,7 @@ async function handleInvoicePaid(invoice: any) {
     const tutor = await prisma.tutorProfile.findFirst({ where: { stripe_subscription_id: subscriptionId } });
     if (tutor) {
         const linePeriodEnd = invoice?.lines?.data?.[0]?.period?.end as number | undefined;
+        const linePeriodStart = invoice?.lines?.data?.[0]?.period?.start as number | undefined;
         await prisma.tutorProfile.update({
             where: { id: tutor.id },
             data: {
@@ -475,6 +525,33 @@ async function handleInvoicePaid(invoice: any) {
             }
         });
         console.log(`[Stripe Webhook] Updated subscription for Tutor ${tutor.id}`);
+
+        // Send subscription renewed email
+        const tutorWithUser = await prisma.tutorProfile.findUnique({
+            where: { id: tutor.id },
+            include: { user: { select: { email: true } } },
+        });
+        if (tutorWithUser?.user?.email) {
+            const planName = tutor.tier === 'PRO' ? 'Pro' : tutor.tier === 'PREMIUM' ? 'Premium' : 'Standard';
+            const amountPaid = invoice.amount_paid ? `£${(invoice.amount_paid / 100).toFixed(2)}` : '—';
+            const periodStart = linePeriodStart ? new Date(linePeriodStart * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
+            const periodEnd = linePeriodEnd ? new Date(linePeriodEnd * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
+            await prisma.emailOutbox.create({
+                data: {
+                    type: 'SUBSCRIPTION_RENEWED',
+                    to_email: tutorWithUser.user.email,
+                    payload: {
+                        mentorName: tutor.username,
+                        planName,
+                        amount: amountPaid,
+                        periodStart,
+                        periodEnd,
+                        dashboardUrl: `${process.env.CLIENT_URL || 'https://empoweredlearnings.com'}/dashboard`,
+                    },
+                    idempotency_key: `subscription-renewed:${subscriptionId}:${linePeriodEnd}`,
+                },
+            }).catch((e: any) => { if (e.code !== 'P2002') console.error('[Webhook] Failed to queue subscription renewed email:', e); });
+        }
     } else {
         // If checkout.session.completed didn't run (or ran late), reconcile from Subscription metadata.
         try {
