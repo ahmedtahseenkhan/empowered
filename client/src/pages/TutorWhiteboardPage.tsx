@@ -314,19 +314,27 @@ export default function TutorWhiteboardPage() {
     ctx.restore();
   }, []);
 
-  // Resize canvas on mount & window resize
+  // Resize canvas to match its CSS box. Must re-run when canvas mounts (only
+  // happens after a board is selected) and on container/window resize.
   useEffect(() => {
+    const c = canvasRef.current;
+    if (!c) return;
     const resize = () => {
-      const c = canvasRef.current;
-      if (!c) return;
-      c.width = c.offsetWidth;
-      c.height = c.offsetHeight;
+      const w = c.offsetWidth, h = c.offsetHeight;
+      if (w === 0 || h === 0) return;
+      c.width = w;
+      c.height = h;
       render();
     };
     resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(c);
     window.addEventListener('resize', resize);
-    return () => window.removeEventListener('resize', resize);
-  }, [render]);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', resize);
+    };
+  }, [render, currentBoardId]);
 
   // ─── Coordinate conversion ─────────────────────────────────────────────────
 
