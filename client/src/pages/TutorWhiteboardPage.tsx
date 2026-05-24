@@ -6,6 +6,7 @@ import {
   PenLine, RotateCcw,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { DashboardLayout } from '../layouts/DashboardLayout';
 import api from '../api/axios';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -691,7 +692,8 @@ export default function TutorWhiteboardPage() {
   ];
 
   return (
-    <div className="flex h-screen overflow-hidden select-none" style={{ background: '#f0f2f5' }}>
+    <DashboardLayout>
+    <div className="flex overflow-hidden select-none rounded-xl border border-gray-200 shadow-sm" style={{ background: '#f0f2f5', height: 'calc(100vh - 7rem)' }}>
 
       {/* Sidebar */}
       <div
@@ -940,5 +942,6 @@ export default function TutorWhiteboardPage() {
         )}
       </div>
     </div>
+    </DashboardLayout>
   );
 }
