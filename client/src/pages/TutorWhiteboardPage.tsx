@@ -258,7 +258,7 @@ export default function TutorWhiteboardPage() {
         )}
 
         {/* Tldraw canvas area */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden" style={{ minHeight: 0 }}>
           {/* Top status bar */}
           <div className="flex items-center gap-3 px-4 py-2 bg-white border-b border-gray-200 z-10 flex-shrink-0">
             {isLive ? (
@@ -302,9 +302,11 @@ export default function TutorWhiteboardPage() {
             )}
           </div>
 
-          {/* Tldraw fills the rest */}
-          <div className="flex-1 relative">
-            <Tldraw onMount={onMount} />
+          {/* Tldraw fills the rest — inner absolute div lets tldraw resolve height: 100% */}
+          <div className="flex-1 relative" style={{ minHeight: 0 }}>
+            <div style={{ position: 'absolute', inset: 0 }}>
+              <Tldraw onMount={onMount} />
+            </div>
           </div>
         </div>
       </div>
