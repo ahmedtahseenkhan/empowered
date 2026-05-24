@@ -3,9 +3,10 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { AuthRequest } from '../middleware/authMiddleware';
 import prisma from '../config/db';
 
-// Primary model + fallback used when the primary is rate-limited (429)
-const PRIMARY_MODEL = 'gemini-2.0-flash';
-const FALLBACK_MODEL = 'gemini-1.5-flash';
+// Primary model + fallback used when the primary is rate-limited (429).
+// gemini-1.5-* models were removed from v1beta in May 2026 — stay on 2.x.
+const PRIMARY_MODEL = 'gemini-2.5-flash';
+const FALLBACK_MODEL = 'gemini-2.0-flash';
 const MAX_RETRIES = 3;
 const MAX_RETRY_DELAY_MS = 10_000;
 
