@@ -126,7 +126,7 @@ const TutorWhiteboardPage: React.FC = () => {
                             <div className="flex-1">
                                 <Tldraw
                                     key={activeBoard.id}
-                                    onMount={(editor) => handleMount(editor.store as any)}
+                                    onMount={(editor: any) => handleMount(editor.store)}
                                 />
                             </div>
                         </>
