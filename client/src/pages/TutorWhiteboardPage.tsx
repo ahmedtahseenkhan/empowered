@@ -633,17 +633,23 @@ export default function TutorWhiteboardPage() {
     }
   }, [tool]);
 
-  const onWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault();
-    const rect = canvasRef.current!.getBoundingClientRect();
-    const t = tfRef.current;
-    const cx = e.clientX - rect.left, cy = e.clientY - rect.top;
-    const factor = e.deltaY < 0 ? 1.1 : 0.9;
-    const newScale = Math.max(0.05, Math.min(20, t.scale * factor));
-    tfRef.current = { scale: newScale, x: cx - (cx - t.x) * (newScale / t.scale), y: cy - (cy - t.y) * (newScale / t.scale) };
-    setZoom(Math.round(newScale * 100));
-    render();
-  }, [render]);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const handler = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const t = tfRef.current;
+      const cx = e.clientX - rect.left, cy = e.clientY - rect.top;
+      const factor = e.deltaY < 0 ? 1.1 : 0.9;
+      const newScale = Math.max(0.05, Math.min(20, t.scale * factor));
+      tfRef.current = { scale: newScale, x: cx - (cx - t.x) * (newScale / t.scale), y: cy - (cy - t.y) * (newScale / t.scale) };
+      setZoom(Math.round(newScale * 100));
+      render();
+    };
+    canvas.addEventListener('wheel', handler, { passive: false });
+    return () => canvas.removeEventListener('wheel', handler);
+  }, [render, currentBoardId]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -879,7 +885,6 @@ export default function TutorWhiteboardPage() {
               onMouseUp={onMouseUp}
               onMouseLeave={onMouseUp}
               onDoubleClick={onDblClick}
-              onWheel={onWheel}
               onContextMenu={e => e.preventDefault()}
             />
 
