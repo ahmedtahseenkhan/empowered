@@ -13,7 +13,7 @@ interface AuthedSocket extends Socket {
 const saveTimers = new Map<string, NodeJS.Timeout>();
 const SAVE_DEBOUNCE_MS = 1500;
 
-function debouncedSave(lessonId: string, snapshot: any) {
+function debouncedSave(lessonId: string, elements: any[]) {
     const existing = saveTimers.get(lessonId);
     if (existing) clearTimeout(existing);
     saveTimers.set(
@@ -22,7 +22,7 @@ function debouncedSave(lessonId: string, snapshot: any) {
             try {
                 await prisma.whiteboard.updateMany({
                     where: { lesson_id: lessonId },
-                    data: { scene_data: { snapshot } },
+                    data: { scene_data: { elements } },
                 });
             } catch (err) {
                 console.error('[WhiteboardSocket] Save failed:', err);
@@ -106,12 +106,12 @@ export function initWhiteboardSocket(httpServer: HttpServer) {
             });
         });
 
-        // Full tldraw snapshot — broadcast to peers AND persist (debounced)
-        socket.on('scene:snapshot', ({ snapshot }: { snapshot: any }) => {
+        // Full Excalidraw elements array — broadcast to peers AND persist (debounced)
+        socket.on('scene:snapshot', ({ elements }: { elements: any[] }) => {
             const lessonId = socket.data.lessonId;
-            if (!lessonId || !snapshot) return;
-            socket.to(`lesson:${lessonId}`).emit('scene:snapshot', { snapshot, from: socket.id });
-            debouncedSave(lessonId, snapshot);
+            if (!lessonId || !Array.isArray(elements)) return;
+            socket.to(`lesson:${lessonId}`).emit('scene:snapshot', { elements, from: socket.id });
+            debouncedSave(lessonId, elements);
         });
 
         socket.on('disconnect', () => {

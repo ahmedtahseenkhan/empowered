@@ -1,7 +1,8 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Tldraw, Editor, loadSnapshot } from 'tldraw';
-import 'tldraw/tldraw.css';
+import { Excalidraw } from '@excalidraw/excalidraw';
+import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
+import '@excalidraw/excalidraw/index.css';
 import { io, Socket } from 'socket.io-client';
 import {
   Plus, Trash2, PenLine, ChevronLeft, ChevronRight,
@@ -13,25 +14,6 @@ import api from '../api/axios';
 
 type Board = { id: string; title: string; scene_data: any; created_at: string };
 
-// Clears all shapes on the current page without disturbing camera/selection state.
-function clearCanvas(editor: Editor) {
-  const ids = Array.from(editor.getCurrentPageShapeIds());
-  if (ids.length) editor.deleteShapes(ids);
-}
-
-// Applies a tldraw snapshot as REMOTE changes, so our 'user'-source listener
-// won't fire and echo it back over the socket.
-function applyRemoteSnapshot(editor: Editor, snapshot: any) {
-  if (!snapshot) return;
-  try {
-    editor.store.mergeRemoteChanges(() => {
-      loadSnapshot(editor.store, snapshot);
-    });
-  } catch (e) {
-    console.warn('[Whiteboard] Snapshot incompatible — starting fresh:', e);
-  }
-}
-
 export default function TutorWhiteboardPage() {
   useAuth();
 
@@ -39,8 +21,12 @@ export default function TutorWhiteboardPage() {
   const liveLessonId = searchParams.get('lesson');
   const isLive = !!liveLessonId;
 
-  const editorRef = useRef<Editor | null>(null);
+  const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
   const socketRef = useRef<Socket | null>(null);
+  // True while applying a remote scene — prevents onChange from echoing it back.
+  const suppressBroadcast = useRef(false);
+  // Debounce timer for outgoing broadcasts.
+  const broadcastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [boards, setBoards] = useState<Board[]>([]);
   const [currentBoardId, setCurrentBoardId] = useState<string | null>(null);
@@ -51,11 +37,26 @@ export default function TutorWhiteboardPage() {
   const [livePeers, setLivePeers] = useState(1);
   const [liveRole, setLiveRole] = useState<string | null>(null);
 
-  // Refs so async timers/callbacks always see latest values
   const currentBoardIdRef = useRef<string | null>(null);
   const boardTitleRef = useRef('Untitled Board');
   useEffect(() => { currentBoardIdRef.current = currentBoardId; }, [currentBoardId]);
   useEffect(() => { boardTitleRef.current = boardTitle; }, [boardTitle]);
+
+  // ─── Helpers ──────────────────────────────────────────────────────────────
+
+  function applyRemoteElements(elements: readonly any[] | null | undefined) {
+    const api = apiRef.current;
+    if (!api || !Array.isArray(elements)) return;
+    suppressBroadcast.current = true;
+    try {
+      api.updateScene({ elements });
+    } catch (e) {
+      console.warn('[Whiteboard] updateScene failed:', e);
+    } finally {
+      // Release on next tick so the onChange triggered by updateScene is ignored.
+      setTimeout(() => { suppressBroadcast.current = false; }, 0);
+    }
+  }
 
   // ─── Board API helpers (non-live mode) ────────────────────────────────────
 
@@ -72,11 +73,7 @@ export default function TutorWhiteboardPage() {
     try {
       const res = await api.get(`/whiteboards/${id}`);
       const board = res.data.board || res.data;
-      const editor = editorRef.current;
-      if (editor) {
-        clearCanvas(editor);
-        applyRemoteSnapshot(editor, board.scene_data?.snapshot);
-      }
+      applyRemoteElements(board.scene_data?.elements ?? []);
       setCurrentBoardId(id);
       setBoardTitle(board.title || 'Untitled Board');
     } catch (e) {
@@ -86,14 +83,14 @@ export default function TutorWhiteboardPage() {
 
   async function saveBoard() {
     const id = currentBoardIdRef.current;
-    const editor = editorRef.current;
-    if (!id || !editor) return;
+    const excApi = apiRef.current;
+    if (!id || !excApi) return;
     setSaving(true);
     try {
-      const snapshot = editor.store.getStoreSnapshot();
+      const elements = excApi.getSceneElements();
       await api.put(`/whiteboards/${id}`, {
         title: boardTitleRef.current,
-        scene_data: { snapshot },
+        scene_data: { elements },
       });
       await loadBoards();
     } catch (e) {
@@ -120,7 +117,7 @@ export default function TutorWhiteboardPage() {
       if (currentBoardIdRef.current === id) {
         setCurrentBoardId(null);
         setBoardTitle('Untitled Board');
-        if (editorRef.current) clearCanvas(editorRef.current);
+        applyRemoteElements([]);
       }
       await loadBoards();
     } catch (e) {
@@ -128,7 +125,6 @@ export default function TutorWhiteboardPage() {
     }
   }
 
-  // Load board list on mount (non-live)
   useEffect(() => { if (!isLive) loadBoards(); }, [isLive]);
 
   // Periodic auto-save (non-live)
@@ -138,19 +134,13 @@ export default function TutorWhiteboardPage() {
     return () => clearInterval(t);
   }, [isLive]);
 
-  // ─── Tldraw onMount: wire up live sync if applicable ──────────────────────
+  // ─── Live mode: load board + connect socket ───────────────────────────────
 
-  const onMount = useCallback((editor: Editor) => {
-    editorRef.current = editor;
-
-    if (!isLive || !liveLessonId) {
-      return () => { editorRef.current = null; };
-    }
+  useEffect(() => {
+    if (!isLive || !liveLessonId) return;
 
     let cancelled = false;
-    let broadcastTimer: ReturnType<typeof setTimeout> | null = null;
-    let unsubStore: (() => void) | null = null;
-    let socket: Socket | null = null;
+    setLiveStatus('connecting');
 
     (async () => {
       try {
@@ -158,7 +148,15 @@ export default function TutorWhiteboardPage() {
         if (cancelled) return;
 
         const { board, lesson, role } = res.data;
-        applyRemoteSnapshot(editor, board.scene_data?.snapshot);
+        // apiRef may not be set yet if Excalidraw hasn't mounted — retry briefly.
+        const tryApply = (retries = 20) => {
+          if (apiRef.current) {
+            applyRemoteElements(board.scene_data?.elements ?? []);
+          } else if (retries > 0) {
+            setTimeout(() => tryApply(retries - 1), 50);
+          }
+        };
+        tryApply();
 
         setCurrentBoardId(board.id);
         setBoardTitle(`${lesson.student_name} ↔ ${lesson.tutor_name}`);
@@ -166,46 +164,28 @@ export default function TutorWhiteboardPage() {
 
         const token = localStorage.getItem('token');
         const apiBase = (api.defaults.baseURL || '').replace(/\/api\/?$/, '');
-        socket = io(`${apiBase}/whiteboard`, {
+        const socket = io(`${apiBase}/whiteboard`, {
           auth: { token },
           path: '/socket.io',
           transports: ['websocket', 'polling'],
         });
         socketRef.current = socket;
 
-        socket.on('connect', () => socket!.emit('join', { lessonId: liveLessonId }));
+        socket.on('connect', () => socket.emit('join', { lessonId: liveLessonId }));
         socket.on('joined', ({ peers }: { peers: any[] }) => {
           setLivePeers((peers?.length || 0) + 1);
           setLiveStatus('live');
         });
         socket.on('peer:join', () => setLivePeers(c => c + 1));
         socket.on('peer:leave', () => setLivePeers(c => Math.max(1, c - 1)));
-        socket.on('scene:snapshot', ({ snapshot: remote }: { snapshot: any }) => {
-          applyRemoteSnapshot(editor, remote);
+        socket.on('scene:snapshot', ({ elements }: { elements: any[] }) => {
+          applyRemoteElements(elements);
         });
         socket.on('disconnect', () => setLiveStatus('disconnected'));
         socket.on('connect_error', (err) => {
           console.warn('[Whiteboard] socket error:', err.message);
           setLiveStatus('disconnected');
         });
-
-        // Listen for LOCAL document changes only (skip session/presence + remote echoes)
-        unsubStore = editor.store.listen(
-          () => {
-            if (!socket?.connected) return;
-            if (broadcastTimer) clearTimeout(broadcastTimer);
-            broadcastTimer = setTimeout(() => {
-              if (!socket?.connected) return;
-              try {
-                const snapshot = editor.store.getStoreSnapshot();
-                socket.emit('scene:snapshot', { snapshot });
-              } catch (e) {
-                console.warn('[Whiteboard] emit snapshot failed:', e);
-              }
-            }, 400);
-          },
-          { source: 'user', scope: 'document' },
-        );
       } catch (err) {
         console.error('[Whiteboard] Live mode init failed:', err);
         if (!cancelled) setLiveStatus('disconnected');
@@ -214,13 +194,29 @@ export default function TutorWhiteboardPage() {
 
     return () => {
       cancelled = true;
-      if (broadcastTimer) clearTimeout(broadcastTimer);
-      unsubStore?.();
-      socket?.disconnect();
+      if (broadcastTimer.current) clearTimeout(broadcastTimer.current);
+      socketRef.current?.disconnect();
       socketRef.current = null;
-      editorRef.current = null;
     };
   }, [isLive, liveLessonId]);
+
+  // ─── Excalidraw onChange — broadcast to peers (debounced) ─────────────────
+
+  const onChange = useCallback((elements: readonly any[]) => {
+    if (!isLive) return;
+    if (suppressBroadcast.current) return;
+    const socket = socketRef.current;
+    if (!socket?.connected) return;
+    if (broadcastTimer.current) clearTimeout(broadcastTimer.current);
+    broadcastTimer.current = setTimeout(() => {
+      if (!socket.connected) return;
+      try {
+        socket.emit('scene:snapshot', { elements });
+      } catch (e) {
+        console.warn('[Whiteboard] emit failed:', e);
+      }
+    }, 300);
+  }, [isLive]);
 
   // ─── JSX ──────────────────────────────────────────────────────────────────
 
@@ -287,7 +283,7 @@ export default function TutorWhiteboardPage() {
           </button>
         )}
 
-        {/* Tldraw canvas area */}
+        {/* Excalidraw canvas area */}
         <div className="flex-1 flex flex-col overflow-hidden" style={{ minHeight: 0 }}>
           {/* Top status bar */}
           <div className="flex items-center gap-3 px-4 py-2 bg-white border-b border-gray-200 z-10 flex-shrink-0">
@@ -332,10 +328,14 @@ export default function TutorWhiteboardPage() {
             )}
           </div>
 
-          {/* Tldraw — inner absolute div lets tldraw's height:100% resolve correctly */}
+          {/* Excalidraw fills the rest */}
           <div className="flex-1 relative" style={{ minHeight: 0 }}>
             <div style={{ position: 'absolute', inset: 0 }}>
-              <Tldraw onMount={onMount} />
+              <Excalidraw
+                excalidrawAPI={(api) => { apiRef.current = api; }}
+                onChange={onChange}
+                initialData={{ elements: [], appState: { viewBackgroundColor: '#ffffff' } }}
+              />
             </div>
           </div>
         </div>
