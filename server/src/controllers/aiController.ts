@@ -3,9 +3,23 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { AuthRequest } from '../middleware/authMiddleware';
 import prisma from '../config/db';
 
-// gemini-1.5-flash is stable; gemini-2.5-flash is preview and prone to 503s
-const GEMINI_MODEL = 'gemini-2.0-flash';
-const MAX_RETRIES = 2;
+// Primary model + fallback used when the primary is rate-limited (429)
+const PRIMARY_MODEL = 'gemini-2.0-flash';
+const FALLBACK_MODEL = 'gemini-1.5-flash';
+const MAX_RETRIES = 3;
+const MAX_RETRY_DELAY_MS = 10_000;
+
+const parseRetryDelay = (err: any): number | null => {
+    const details: any[] = err?.errorDetails || [];
+    const retryInfo = details.find(
+        (d) => d['@type'] === 'type.googleapis.com/google.rpc.RetryInfo',
+    );
+    const raw: string | undefined = retryInfo?.retryDelay;
+    if (!raw) return null;
+    const match = /^(\d+(?:\.\d+)?)s$/.exec(raw);
+    if (!match) return null;
+    return Math.min(Math.ceil(parseFloat(match[1]) * 1000) + 250, MAX_RETRY_DELAY_MS);
+};
 
 const SYSTEM_PROMPT = `You are an expert educational AI assistant for tutors and mentors on the Empowered Learnings platform.
 
@@ -57,10 +71,6 @@ export const chat = async (req: AuthRequest, res: Response): Promise<void> => {
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
-        model: GEMINI_MODEL,
-        systemInstruction: SYSTEM_PROMPT,
-    });
 
     const history = messages.slice(0, -1).map((m) => ({
         role: m.role === 'assistant' ? 'model' : 'user',
@@ -69,9 +79,17 @@ export const chat = async (req: AuthRequest, res: Response): Promise<void> => {
 
     const lastMessage = messages[messages.length - 1].content;
 
+    const modelChain = [PRIMARY_MODEL, FALLBACK_MODEL];
+    let modelIndex = 0;
     let attempt = 0;
-    while (attempt <= MAX_RETRIES) {
+
+    while (true) {
+        const modelName = modelChain[modelIndex];
         try {
+            const model = genAI.getGenerativeModel({
+                model: modelName,
+                systemInstruction: SYSTEM_PROMPT,
+            });
             const chatSession = model.startChat({ history });
             const result = await chatSession.sendMessageStream(lastMessage);
 
@@ -92,17 +110,27 @@ export const chat = async (req: AuthRequest, res: Response): Promise<void> => {
             res.end();
             return;
         } catch (err: any) {
-            const isRetryable = err?.status === 503 || err?.status === 429;
+            const status = err?.status;
+            const isRetryable = status === 503 || status === 429;
+
+            if (status === 429 && modelIndex < modelChain.length - 1) {
+                console.warn(`[AI] ${modelName} quota exhausted, falling back to ${modelChain[modelIndex + 1]}`);
+                modelIndex++;
+                attempt = 0;
+                continue;
+            }
+
             if (isRetryable && attempt < MAX_RETRIES) {
                 attempt++;
-                console.warn(`[AI] Gemini ${err.status}, retrying (${attempt}/${MAX_RETRIES})...`);
-                await sleep(1500 * attempt);
+                const delay = parseRetryDelay(err) ?? Math.min(1500 * attempt, MAX_RETRY_DELAY_MS);
+                console.warn(`[AI] Gemini ${status} on ${modelName}, retrying in ${delay}ms (${attempt}/${MAX_RETRIES})...`);
+                await sleep(delay);
                 continue;
             }
 
             console.error('[AI] Gemini error:', err);
             if (!res.headersSent) {
-                if (err?.status === 429) {
+                if (status === 429) {
                     res.status(429).json({ error: 'AI service is busy. Please try again in a minute.' });
                 } else {
                     res.status(500).json({ error: 'Failed to reach AI service. Please try again.' });

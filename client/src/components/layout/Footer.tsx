@@ -1,5 +1,24 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { FaFacebookF, FaInstagram, FaLinkedinIn } from 'react-icons/fa';
+
+const socialLinks = [
+    {
+        name: 'Facebook',
+        href: 'https://www.facebook.com/share/1BaqhHXBtK/?mibextid=wwXIfr',
+        icon: FaFacebookF,
+    },
+    {
+        name: 'Instagram',
+        href: 'https://www.instagram.com/emplearnings?igsh=M25lYmgzNHNhYzlj&utm_source=qr',
+        icon: FaInstagram,
+    },
+    {
+        name: 'LinkedIn',
+        href: 'https://www.linkedin.com/company/emplearnings/',
+        icon: FaLinkedinIn,
+    },
+];
 
 export const Footer: React.FC = () => {
     return (
@@ -15,6 +34,20 @@ export const Footer: React.FC = () => {
                             Learn Anything, Succeed Everywhere! Connect with experts in academic tutoring,
                             skill development, and life or career coaching.
                         </p>
+                        <div className="flex items-center space-x-3">
+                            {socialLinks.map(({ name, href, icon: Icon }) => (
+                                <a
+                                    key={name}
+                                    href={href}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    aria-label={name}
+                                    className="w-9 h-9 flex items-center justify-center rounded-full bg-white border border-gray-200 text-empowered-gray hover:bg-empowered-orange hover:text-white hover:border-empowered-orange transition-colors"
+                                >
+                                    <Icon className="w-4 h-4" />
+                                </a>
+                            ))}
+                        </div>
                     </div>
 
                     {/* Quick Links */}
