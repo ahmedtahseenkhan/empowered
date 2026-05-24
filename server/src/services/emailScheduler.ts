@@ -144,6 +144,70 @@ async function queuePaymentRemindersForWindow(hoursAhead: number, idempotencyPre
     return upcomingPayments.length;
 }
 
+async function check4HourSessionReminders() {
+    try {
+        const now = new Date();
+        const reminderTime = new Date(now.getTime() + 4 * 60 * 60 * 1000);
+        const windowEnd = new Date(reminderTime.getTime() + 60 * 60 * 1000); // 1-hour window
+
+        const upcomingLessons = await prisma.lesson.findMany({
+            where: {
+                status: 'BOOKED',
+                start_time: {
+                    gte: reminderTime,
+                    lte: windowEnd,
+                },
+            },
+            include: {
+                student: { include: { user: { select: { email: true } } } },
+                tutor: { include: { user: { select: { email: true } } } },
+            },
+        });
+
+        for (const lesson of upcomingLessons) {
+            // Student 4h reminder
+            if (lesson.student.user.email) {
+                try {
+                    await prisma.emailOutbox.create({
+                        data: {
+                            type: 'SESSION_REMINDER_STUDENT',
+                            to_email: lesson.student.user.email,
+                            payload: { lessonId: lesson.id },
+                            idempotency_key: `session-reminder-4h-student:${lesson.id}`,
+                        },
+                    });
+                    console.log(`[EmailScheduler] Queued 4h session reminder for student: ${lesson.student.user.email}`);
+                } catch (e: any) {
+                    if (e.code !== 'P2002') console.error(`[EmailScheduler] Failed to queue 4h student reminder:`, e);
+                }
+            }
+
+            // Tutor 4h reminder
+            if (lesson.tutor.user.email) {
+                try {
+                    await prisma.emailOutbox.create({
+                        data: {
+                            type: 'SESSION_REMINDER_TUTOR',
+                            to_email: lesson.tutor.user.email,
+                            payload: { lessonId: lesson.id },
+                            idempotency_key: `session-reminder-4h-tutor:${lesson.id}`,
+                        },
+                    });
+                    console.log(`[EmailScheduler] Queued 4h session reminder for tutor: ${lesson.tutor.user.email}`);
+                } catch (e: any) {
+                    if (e.code !== 'P2002') console.error(`[EmailScheduler] Failed to queue 4h tutor reminder:`, e);
+                }
+            }
+        }
+
+        if (upcomingLessons.length > 0) {
+            console.log(`[EmailScheduler] Processed ${upcomingLessons.length} 4h session reminders`);
+        }
+    } catch (error) {
+        console.error('[EmailScheduler] Error checking 4h session reminders:', error);
+    }
+}
+
 async function checkDemoCallReminders() {
     try {
         const now = new Date();
@@ -362,6 +426,7 @@ async function runScheduler() {
     console.log('[EmailScheduler] Running scheduled check...');
     await Promise.all([
         checkSessionReminders(),
+        check4HourSessionReminders(),
         checkDemoCallReminders(),
         checkPaymentReminders(),
         autoCancelUnpaidLessons(),
