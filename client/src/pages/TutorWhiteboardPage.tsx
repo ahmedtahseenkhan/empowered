@@ -194,104 +194,98 @@ function makeShape(tool: ToolType, x: number, y: number, strokeColor: string, bg
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-// Modal text editor — guaranteed visible & interactive regardless of any
-// browser/extension/CSS quirks. Renders into document.body via portal.
-interface TextEditorProps {
-  initialText: string;
+// Excalidraw-style inline text editor — appears at the click position on the
+// canvas. Rendered via portal into document.body using position:fixed so no
+// parent stacking-context or overflow:hidden can clip or hide it.
+interface InlineTextProps {
+  screenX: number;
+  screenY: number;
+  fontSizePx: number;
   color: string;
+  initialText: string;
   onSave: (text: string) => void;
-  onCancel: () => void;
 }
 
-function TextEditor({ initialText, color, onSave, onCancel }: TextEditorProps) {
+const InlineText = React.memo(function InlineText({ screenX, screenY, fontSizePx, color, initialText, onSave }: InlineTextProps) {
   const ref = useRef<HTMLTextAreaElement>(null);
-  const settledRef = useRef(false);
+  const settled = useRef(false);
 
-  const save = () => {
-    if (settledRef.current) return;
-    settledRef.current = true;
-    onSave(ref.current?.value ?? initialText);
-  };
-  const cancel = () => {
-    if (settledRef.current) return;
-    settledRef.current = true;
-    onCancel();
+  const commit = () => {
+    if (settled.current) return;
+    settled.current = true;
+    onSave(ref.current?.value ?? '');
   };
 
+  // Multi-stage focus — at least one of these will land focus reliably.
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    el.focus();
-    try { el.setSelectionRange(el.value.length, el.value.length); } catch {}
-    const t = setTimeout(() => { if (document.activeElement !== el) el.focus(); }, 50);
-    return () => clearTimeout(t);
+    const grab = () => {
+      el.focus();
+      try { el.setSelectionRange(el.value.length, el.value.length); } catch {}
+    };
+    grab();
+    const t1 = setTimeout(grab, 0);
+    const t2 = setTimeout(() => { if (document.activeElement !== el) grab(); }, 80);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
   }, []);
 
+  const autoSize = (el: HTMLTextAreaElement) => {
+    el.style.height = 'auto';
+    el.style.height = el.scrollHeight + 'px';
+    el.style.width = 'auto';
+    el.style.width = Math.max(140, el.scrollWidth + 4) + 'px';
+  };
+
   return createPortal(
-    <div
-      onMouseDown={cancel}
-      style={{
-        position: 'fixed', inset: 0,
-        background: 'rgba(15, 23, 42, 0.45)',
-        zIndex: 999999,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: 16,
+    <textarea
+      ref={ref}
+      defaultValue={initialText}
+      autoFocus
+      placeholder="Type…"
+      spellCheck={false}
+      autoComplete="off"
+      autoCorrect="off"
+      autoCapitalize="off"
+      data-gramm="false"
+      data-gramm_editor="false"
+      data-enable-grammarly="false"
+      onBlur={commit}
+      onKeyDown={(e) => {
+        e.stopPropagation();
+        if (e.key === 'Escape') { e.preventDefault(); commit(); }
       }}
-    >
-      <div
-        onMouseDown={(e) => e.stopPropagation()}
-        style={{
-          background: 'white', padding: 20, borderRadius: 12,
-          minWidth: 380, maxWidth: 640, width: '100%',
-          boxShadow: '0 25px 60px rgba(0,0,0,0.35)',
-        }}
-      >
-        <div style={{ marginBottom: 12, fontSize: 15, fontWeight: 600, color: '#1f2937' }}>
-          Add text to whiteboard
-        </div>
-        <textarea
-          ref={ref}
-          autoFocus
-          defaultValue={initialText}
-          placeholder="Type your text here…"
-          spellCheck={false}
-          autoComplete="off"
-          autoCorrect="off"
-          autoCapitalize="off"
-          data-gramm="false"
-          data-gramm_editor="false"
-          data-enable-grammarly="false"
-          onKeyDown={(e) => {
-            e.stopPropagation();
-            if (e.key === 'Escape') { e.preventDefault(); cancel(); }
-            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); save(); }
-          }}
-          style={{
-            width: '100%', boxSizing: 'border-box',
-            minHeight: 120, padding: 12, fontSize: 16,
-            color, fontFamily: 'ui-sans-serif, system-ui, sans-serif',
-            border: '2px solid #4f90f0', borderRadius: 8, outline: 'none',
-            resize: 'vertical', lineHeight: 1.5,
-          }}
-        />
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 14 }}>
-          <span style={{ fontSize: 12, color: '#6b7280' }}>⌘/Ctrl+Enter to add · Esc to cancel</span>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              onClick={cancel}
-              style={{ padding: '8px 14px', borderRadius: 6, border: '1px solid #e5e7eb', background: 'white', cursor: 'pointer', fontSize: 14, color: '#374151' }}
-            >Cancel</button>
-            <button
-              onClick={save}
-              style={{ padding: '8px 16px', borderRadius: 6, border: 'none', background: '#7c3aed', color: 'white', cursor: 'pointer', fontSize: 14, fontWeight: 600 }}
-            >Add Text</button>
-          </div>
-        </div>
-      </div>
-    </div>,
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => { e.stopPropagation(); (e.target as HTMLTextAreaElement).focus(); }}
+      onInput={(e) => autoSize(e.target as HTMLTextAreaElement)}
+      style={{
+        position: 'fixed',
+        left: screenX,
+        top: screenY,
+        fontSize: fontSizePx,
+        lineHeight: 1.4,
+        color,
+        caretColor: color,
+        fontFamily: 'ui-sans-serif, system-ui, sans-serif',
+        background: 'transparent',
+        border: '1px dashed #4f90f0',
+        borderRadius: 3,
+        outline: 'none',
+        resize: 'none',
+        padding: '2px 4px',
+        margin: 0,
+        minWidth: 140,
+        minHeight: Math.max(28, fontSizePx * 1.4),
+        whiteSpace: 'pre',
+        overflow: 'hidden',
+        zIndex: 999999,
+        boxShadow: '0 0 0 4px rgba(79, 144, 240, 0.1)',
+      }}
+      rows={1}
+    />,
     document.body,
   );
-}
+});
 
 export default function TutorWhiteboardPage() {
   useAuth();
@@ -441,6 +435,12 @@ export default function TutorWhiteboardPage() {
     const rect = canvasRef.current!.getBoundingClientRect();
     const t = tfRef.current;
     return { x: (e.clientX - rect.left - t.x) / t.scale, y: (e.clientY - rect.top - t.y) / t.scale };
+  }
+
+  function toScreen(cx: number, cy: number) {
+    const rect = canvasRef.current!.getBoundingClientRect();
+    const t = tfRef.current;
+    return { x: cx * t.scale + t.x + rect.left, y: cy * t.scale + t.y + rect.top };
   }
 
 
@@ -651,7 +651,12 @@ export default function TutorWhiteboardPage() {
   // ─── Mouse events ──────────────────────────────────────────────────────────
 
   const onMouseDown = useCallback((e: React.MouseEvent) => {
-    if (textEdit) return; // modal is open; ignore canvas clicks until it closes
+    if (textEdit) {
+      // Click outside the text editor: blur it so onBlur saves the value.
+      const active = document.activeElement as HTMLElement | null;
+      if (active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT')) active.blur();
+      return;
+    }
 
     const pt = toCanvas(e);
 
@@ -1088,16 +1093,21 @@ export default function TutorWhiteboardPage() {
               onContextMenu={e => e.preventDefault()}
             />
 
-            {/* Text editor modal — rendered via portal into document.body */}
-            {textEdit && (
-              <TextEditor
-                key={textEdit.id}
-                initialText={textEdit.text}
-                color={textEdit.strokeColor}
-                onSave={(text) => finalizeText(text)}
-                onCancel={() => finalizeText('')}
-              />
-            )}
+            {/* Excalidraw-style inline text editor */}
+            {textEdit && canvasRef.current && (() => {
+              const sc = toScreen(textEdit.x, textEdit.y);
+              return (
+                <InlineText
+                  key={textEdit.id}
+                  screenX={sc.x}
+                  screenY={sc.y}
+                  fontSizePx={textEdit.fontSize * tfRef.current.scale}
+                  color={textEdit.strokeColor}
+                  initialText={textEdit.text}
+                  onSave={finalizeText}
+                />
+              );
+            })()}
 
             {/* Zoom controls */}
             <div className="absolute bottom-4 right-4 flex items-center gap-1 bg-white rounded-xl shadow border border-gray-200 p-1 z-10">
