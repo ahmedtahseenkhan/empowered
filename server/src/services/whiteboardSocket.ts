@@ -13,7 +13,7 @@ interface AuthedSocket extends Socket {
 const saveTimers = new Map<string, NodeJS.Timeout>();
 const SAVE_DEBOUNCE_MS = 1500;
 
-function debouncedSave(lessonId: string, shapes: any[]) {
+function debouncedSave(lessonId: string, snapshot: any) {
     const existing = saveTimers.get(lessonId);
     if (existing) clearTimeout(existing);
     saveTimers.set(
@@ -22,7 +22,7 @@ function debouncedSave(lessonId: string, shapes: any[]) {
             try {
                 await prisma.whiteboard.updateMany({
                     where: { lesson_id: lessonId },
-                    data: { scene_data: { shapes } },
+                    data: { scene_data: { snapshot } },
                 });
             } catch (err) {
                 console.error('[WhiteboardSocket] Save failed:', err);
@@ -106,37 +106,12 @@ export function initWhiteboardSocket(httpServer: HttpServer) {
             });
         });
 
-        socket.on('shape:add', ({ shape }: { shape: any }) => {
+        // Full tldraw snapshot — broadcast to peers AND persist (debounced)
+        socket.on('scene:snapshot', ({ snapshot }: { snapshot: any }) => {
             const lessonId = socket.data.lessonId;
-            if (!lessonId || !shape) return;
-            socket.to(`lesson:${lessonId}`).emit('shape:add', { shape, from: socket.id });
-        });
-
-        socket.on('shape:update', ({ shape }: { shape: any }) => {
-            const lessonId = socket.data.lessonId;
-            if (!lessonId || !shape) return;
-            socket.to(`lesson:${lessonId}`).emit('shape:update', { shape, from: socket.id });
-        });
-
-        socket.on('shape:delete', ({ id }: { id: string }) => {
-            const lessonId = socket.data.lessonId;
-            if (!lessonId || !id) return;
-            socket.to(`lesson:${lessonId}`).emit('shape:delete', { id, from: socket.id });
-        });
-
-        // Snapshot of the full scene — broadcast to peers AND persist (debounced)
-        socket.on('scene:snapshot', ({ shapes }: { shapes: any[] }) => {
-            const lessonId = socket.data.lessonId;
-            if (!lessonId || !Array.isArray(shapes)) return;
-            socket.to(`lesson:${lessonId}`).emit('scene:snapshot', { shapes, from: socket.id });
-            debouncedSave(lessonId, shapes);
-        });
-
-        socket.on('clear', () => {
-            const lessonId = socket.data.lessonId;
-            if (!lessonId) return;
-            socket.to(`lesson:${lessonId}`).emit('clear', { from: socket.id });
-            debouncedSave(lessonId, []);
+            if (!lessonId || !snapshot) return;
+            socket.to(`lesson:${lessonId}`).emit('scene:snapshot', { snapshot, from: socket.id });
+            debouncedSave(lessonId, snapshot);
         });
 
         socket.on('disconnect', () => {
