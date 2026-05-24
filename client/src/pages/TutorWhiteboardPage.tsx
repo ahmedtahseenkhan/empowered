@@ -1,5 +1,4 @@
-import React, { useRef, useState, useEffect, useLayoutEffect, useCallback } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { io, Socket } from 'socket.io-client';
 import {
@@ -194,98 +193,87 @@ function makeShape(tool: ToolType, x: number, y: number, strokeColor: string, bg
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-// Excalidraw-style inline text editor — appears at the click position on the
-// canvas. Rendered via portal into document.body using position:fixed so no
-// parent stacking-context or overflow:hidden can clip or hide it.
-interface InlineTextProps {
+// Excalidraw-style text editor: creates a real DOM textarea directly (not via
+// React) and focuses it SYNCHRONOUSLY in the same tick as the user's click.
+// This preserves the browser's "user gesture" context so focus() succeeds
+// reliably across all browsers/extensions.
+function openInlineTextEditor(opts: {
   screenX: number;
   screenY: number;
   fontSizePx: number;
   color: string;
   initialText: string;
-  onSave: (text: string) => void;
-}
+  onCommit: (text: string) => void;
+}) {
+  const { screenX, screenY, fontSizePx, color, initialText, onCommit } = opts;
 
-const InlineText = React.memo(function InlineText({ screenX, screenY, fontSizePx, color, initialText, onSave }: InlineTextProps) {
-  const ref = useRef<HTMLTextAreaElement>(null);
-  const settled = useRef(false);
+  const ta = document.createElement('textarea');
+  ta.value = initialText;
+  ta.placeholder = 'Type…';
+  ta.rows = 1;
+  ta.spellcheck = false;
+  ta.autocomplete = 'off';
+  ta.setAttribute('autocorrect', 'off');
+  ta.setAttribute('autocapitalize', 'off');
+  ta.setAttribute('data-gramm', 'false');
+  ta.setAttribute('data-gramm_editor', 'false');
+  ta.setAttribute('data-enable-grammarly', 'false');
 
+  Object.assign(ta.style, {
+    position: 'fixed',
+    left: `${screenX}px`,
+    top: `${screenY}px`,
+    fontSize: `${fontSizePx}px`,
+    lineHeight: '1.4',
+    color: color,
+    caretColor: color,
+    fontFamily: 'ui-sans-serif, system-ui, sans-serif',
+    background: 'transparent',
+    border: '1px dashed #4f90f0',
+    borderRadius: '3px',
+    outline: 'none',
+    resize: 'none',
+    padding: '2px 4px',
+    margin: '0',
+    minWidth: '140px',
+    minHeight: `${Math.max(28, fontSizePx * 1.4)}px`,
+    whiteSpace: 'pre',
+    overflow: 'hidden',
+    zIndex: '999999',
+    boxShadow: '0 0 0 4px rgba(79, 144, 240, 0.1)',
+  } as CSSStyleDeclaration);
+
+  let settled = false;
   const commit = () => {
-    if (settled.current) return;
-    settled.current = true;
-    onSave(ref.current?.value ?? '');
+    if (settled) return;
+    settled = true;
+    const value = ta.value;
+    ta.removeEventListener('blur', commit);
+    ta.remove();
+    onCommit(value);
   };
 
-  // Multi-stage focus — at least one of these will land focus reliably.
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const grab = () => {
-      el.focus();
-      try { el.setSelectionRange(el.value.length, el.value.length); } catch {}
-    };
-    grab();
-    const t1 = setTimeout(grab, 0);
-    const t2 = setTimeout(() => { if (document.activeElement !== el) grab(); }, 80);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
-  }, []);
+  ta.addEventListener('blur', commit);
+  ta.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      commit();
+    }
+  });
+  ta.addEventListener('input', () => {
+    ta.style.height = 'auto';
+    ta.style.height = ta.scrollHeight + 'px';
+    ta.style.width = 'auto';
+    ta.style.width = Math.max(140, ta.scrollWidth + 4) + 'px';
+  });
+  ta.addEventListener('mousedown', (e) => e.stopPropagation());
 
-  const autoSize = (el: HTMLTextAreaElement) => {
-    el.style.height = 'auto';
-    el.style.height = el.scrollHeight + 'px';
-    el.style.width = 'auto';
-    el.style.width = Math.max(140, el.scrollWidth + 4) + 'px';
-  };
-
-  return createPortal(
-    <textarea
-      ref={ref}
-      defaultValue={initialText}
-      autoFocus
-      placeholder="Type…"
-      spellCheck={false}
-      autoComplete="off"
-      autoCorrect="off"
-      autoCapitalize="off"
-      data-gramm="false"
-      data-gramm_editor="false"
-      data-enable-grammarly="false"
-      onBlur={commit}
-      onKeyDown={(e) => {
-        e.stopPropagation();
-        if (e.key === 'Escape') { e.preventDefault(); commit(); }
-      }}
-      onMouseDown={(e) => e.stopPropagation()}
-      onClick={(e) => { e.stopPropagation(); (e.target as HTMLTextAreaElement).focus(); }}
-      onInput={(e) => autoSize(e.target as HTMLTextAreaElement)}
-      style={{
-        position: 'fixed',
-        left: screenX,
-        top: screenY,
-        fontSize: fontSizePx,
-        lineHeight: 1.4,
-        color,
-        caretColor: color,
-        fontFamily: 'ui-sans-serif, system-ui, sans-serif',
-        background: 'transparent',
-        border: '1px dashed #4f90f0',
-        borderRadius: 3,
-        outline: 'none',
-        resize: 'none',
-        padding: '2px 4px',
-        margin: 0,
-        minWidth: 140,
-        minHeight: Math.max(28, fontSizePx * 1.4),
-        whiteSpace: 'pre',
-        overflow: 'hidden',
-        zIndex: 999999,
-        boxShadow: '0 0 0 4px rgba(79, 144, 240, 0.1)',
-      }}
-      rows={1}
-    />,
-    document.body,
-  );
-});
+  document.body.appendChild(ta);
+  // Focus synchronously — still inside the user-gesture context.
+  ta.focus();
+  try { ta.setSelectionRange(ta.value.length, ta.value.length); } catch {}
+}
 
 export default function TutorWhiteboardPage() {
   useAuth();
@@ -607,36 +595,54 @@ export default function TutorWhiteboardPage() {
 
   // ─── Text editing ──────────────────────────────────────────────────────────
 
+  // MUST be called synchronously from a user-gesture event handler (mousedown,
+  // dblclick) so that the textarea.focus() lands in the gesture context.
   function startTextEdit(x: number, y: number, existingId?: string) {
-    const existing = existingId ? (shapesRef.current.find(s => s.id === existingId)) : undefined;
-    if (!existingId) {
+    let shapeId: string;
+    let initialText = '';
+    let posX = x, posY = y;
+    let editFontSize = fontSize;
+    let editColor = strokeColor;
+
+    if (existingId) {
+      const existing = shapesRef.current.find(s => s.id === existingId);
+      if (!existing || existing.type !== 'text') return;
+      shapeId = existing.id;
+      initialText = existing.text;
+      posX = existing.x; posY = existing.y;
+      editFontSize = existing.fontSize;
+      editColor = existing.strokeColor;
+    } else {
       const newS = makeShape('text', x, y, strokeColor, bgColor, fillStyle, strokeWidth, fontSize);
       pushHistory();
       shapesRef.current = [...shapesRef.current, newS];
-      setSelectedId(newS.id);
-      setTextEdit({ id: newS.id, x, y, text: '', fontSize, strokeColor });
-    } else if (existing && existing.type === 'text') {
-      setSelectedId(existing.id);
-      setTextEdit({ id: existing.id, x: existing.x, y: existing.y, text: existing.text, fontSize: existing.fontSize, strokeColor: existing.strokeColor });
+      shapeId = newS.id;
     }
-  }
 
-  function finalizeText(rawText: string) {
-    if (!textEdit) return;
-    const te = textEdit;
-    setTextEdit(null);
-    if (rawText.trim() === '') {
-      shapesRef.current = shapesRef.current.filter(s => s.id !== te.id);
-    } else {
-      shapesRef.current = shapesRef.current.map(s =>
-        s.id === te.id ? { ...s, text: rawText } : s
-      );
-      pushHistory();
-    }
-    render();
-  }
+    setSelectedId(shapeId);
+    setTextEdit({ id: shapeId, x: posX, y: posY, text: initialText, fontSize: editFontSize, strokeColor: editColor });
 
-  // Focus is handled inside the portal TextEditor component itself.
+    const screen = toScreen(posX, posY);
+    openInlineTextEditor({
+      screenX: screen.x,
+      screenY: screen.y,
+      fontSizePx: editFontSize * tfRef.current.scale,
+      color: editColor,
+      initialText,
+      onCommit: (text) => {
+        setTextEdit(null);
+        if (text.trim() === '') {
+          shapesRef.current = shapesRef.current.filter(s => s.id !== shapeId);
+        } else {
+          shapesRef.current = shapesRef.current.map(s =>
+            s.id === shapeId ? { ...s, text } : s,
+          );
+          pushHistory();
+        }
+        render();
+      },
+    });
+  }
 
   // ─── Apply property changes to selected shape ──────────────────────────────
 
@@ -1093,21 +1099,8 @@ export default function TutorWhiteboardPage() {
               onContextMenu={e => e.preventDefault()}
             />
 
-            {/* Excalidraw-style inline text editor */}
-            {textEdit && canvasRef.current && (() => {
-              const sc = toScreen(textEdit.x, textEdit.y);
-              return (
-                <InlineText
-                  key={textEdit.id}
-                  screenX={sc.x}
-                  screenY={sc.y}
-                  fontSizePx={textEdit.fontSize * tfRef.current.scale}
-                  color={textEdit.strokeColor}
-                  initialText={textEdit.text}
-                  onSave={finalizeText}
-                />
-              );
-            })()}
+            {/* Inline text editor lives in the DOM (managed imperatively by
+                openInlineTextEditor) so React renders nothing here. */}
 
             {/* Zoom controls */}
             <div className="absolute bottom-4 right-4 flex items-center gap-1 bg-white rounded-xl shadow border border-gray-200 p-1 z-10">
