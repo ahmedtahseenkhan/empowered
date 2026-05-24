@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useLayoutEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { io, Socket } from 'socket.io-client';
 import {
@@ -527,29 +527,31 @@ export default function TutorWhiteboardPage() {
     }
   }
 
-  function finalizeText() {
+  function finalizeText(rawText?: string) {
     if (!textEdit) return;
     const te = textEdit;
+    const text = (rawText !== undefined ? rawText : textareaRef.current?.value ?? te.text);
     setTextEdit(null);
-    if (te.text.trim() === '') {
+    if (text.trim() === '') {
       shapesRef.current = shapesRef.current.filter(s => s.id !== te.id);
     } else {
       shapesRef.current = shapesRef.current.map(s =>
-        s.id === te.id ? { ...s, text: te.text } : s
+        s.id === te.id ? { ...s, text } : s
       );
       pushHistory();
     }
     render();
   }
 
-  useEffect(() => {
+  // Focus the textarea reliably when it appears. useLayoutEffect runs before
+  // paint so focus happens immediately after mount.
+  useLayoutEffect(() => {
     if (textEdit && textareaRef.current) {
-      textareaRef.current.focus();
       const el = textareaRef.current;
-      el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px';
-      el.style.width = 'auto'; el.style.width = Math.max(80, el.scrollWidth) + 'px';
+      el.focus();
+      el.select();
     }
-  }, [textEdit]);
+  }, [textEdit?.id]);
 
   // ─── Apply property changes to selected shape ──────────────────────────────
 
@@ -1001,41 +1003,50 @@ export default function TutorWhiteboardPage() {
               onContextMenu={e => e.preventDefault()}
             />
 
-            {/* Inline text textarea */}
+            {/* Inline text textarea (uncontrolled — we read value on blur) */}
             {textEdit && canvasRef.current && (() => {
               const rect = canvasRef.current.getBoundingClientRect();
               const sc = toScreen(textEdit.x, textEdit.y);
+              const px = textEdit.fontSize * tfRef.current.scale;
               return (
                 <textarea
+                  key={textEdit.id}
                   ref={textareaRef}
-                  value={textEdit.text}
-                  onChange={e => {
-                    setTextEdit(prev => prev ? { ...prev, text: e.target.value } : null);
+                  defaultValue={textEdit.text}
+                  onInput={e => {
                     const el = e.target as HTMLTextAreaElement;
                     el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px';
-                    el.style.width = 'auto'; el.style.width = Math.max(80, el.scrollWidth) + 'px';
+                    el.style.width = 'auto'; el.style.width = Math.max(120, el.scrollWidth + 4) + 'px';
                   }}
-                  onKeyDown={e => { if (e.key === 'Escape') finalizeText(); }}
-                  onBlur={finalizeText}
+                  onKeyDown={e => {
+                    if (e.key === 'Escape') {
+                      e.preventDefault();
+                      finalizeText((e.target as HTMLTextAreaElement).value);
+                    }
+                  }}
+                  onBlur={e => finalizeText(e.target.value)}
+                  onMouseDown={e => e.stopPropagation()}
+                  placeholder="Type here…"
                   style={{
                     position: 'absolute',
                     left: sc.x - rect.left,
                     top: sc.y - rect.top,
-                    fontSize: textEdit.fontSize * tfRef.current.scale,
+                    fontSize: px,
+                    lineHeight: 1.4,
                     color: textEdit.strokeColor,
                     fontFamily: 'ui-sans-serif, system-ui, sans-serif',
-                    lineHeight: 1.4,
-                    background: 'rgba(255,255,255,0.15)',
-                    border: '1.5px dashed #4f90f0',
+                    background: '#ffffff',
+                    border: '2px solid #4f90f0',
                     borderRadius: 4,
                     outline: 'none',
                     resize: 'none',
-                    padding: '2px 4px',
-                    minWidth: 80,
+                    padding: '2px 6px',
+                    minWidth: 120,
+                    minHeight: px * 1.4,
                     overflow: 'hidden',
                     whiteSpace: 'pre',
-                    zIndex: 20,
-                    backdropFilter: 'blur(2px)',
+                    zIndex: 1000,
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
                   }}
                   rows={1}
                   spellCheck={false}
