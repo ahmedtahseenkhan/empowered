@@ -1,6 +1,6 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Tldraw, Editor, getSnapshot, loadSnapshot } from 'tldraw';
+import { Tldraw, Editor, loadSnapshot } from 'tldraw';
 import 'tldraw/tldraw.css';
 import { io, Socket } from 'socket.io-client';
 import {
@@ -12,6 +12,25 @@ import { DashboardLayout } from '../layouts/DashboardLayout';
 import api from '../api/axios';
 
 type Board = { id: string; title: string; scene_data: any; created_at: string };
+
+// Clears all shapes on the current page without disturbing camera/selection state.
+function clearCanvas(editor: Editor) {
+  const ids = Array.from(editor.getCurrentPageShapeIds());
+  if (ids.length) editor.deleteShapes(ids);
+}
+
+// Applies a tldraw snapshot as REMOTE changes, so our 'user'-source listener
+// won't fire and echo it back over the socket.
+function applyRemoteSnapshot(editor: Editor, snapshot: any) {
+  if (!snapshot) return;
+  try {
+    editor.store.mergeRemoteChanges(() => {
+      loadSnapshot(editor.store, snapshot);
+    });
+  } catch (e) {
+    console.warn('[Whiteboard] Snapshot incompatible — starting fresh:', e);
+  }
+}
 
 export default function TutorWhiteboardPage() {
   useAuth();
@@ -32,19 +51,21 @@ export default function TutorWhiteboardPage() {
   const [livePeers, setLivePeers] = useState(1);
   const [liveRole, setLiveRole] = useState<string | null>(null);
 
-  // Refs so async callbacks always see latest values
+  // Refs so async timers/callbacks always see latest values
   const currentBoardIdRef = useRef<string | null>(null);
   const boardTitleRef = useRef('Untitled Board');
   useEffect(() => { currentBoardIdRef.current = currentBoardId; }, [currentBoardId]);
   useEffect(() => { boardTitleRef.current = boardTitle; }, [boardTitle]);
 
-  // ─── Board API helpers ────────────────────────────────────────────────────
+  // ─── Board API helpers (non-live mode) ────────────────────────────────────
 
   async function loadBoards() {
     try {
       const res = await api.get('/whiteboards');
       setBoards(res.data.boards || res.data || []);
-    } catch {}
+    } catch (e) {
+      console.warn('[Whiteboard] loadBoards failed:', e);
+    }
   }
 
   async function loadBoardById(id: string) {
@@ -53,16 +74,14 @@ export default function TutorWhiteboardPage() {
       const board = res.data.board || res.data;
       const editor = editorRef.current;
       if (editor) {
-        const snap = board.scene_data?.snapshot;
-        if (snap) {
-          try { loadSnapshot(editor.store, snap); } catch { editor.selectAll().deleteShapes(editor.getSelectedShapeIds()); }
-        } else {
-          editor.selectAll().deleteShapes(editor.getSelectedShapeIds());
-        }
+        clearCanvas(editor);
+        applyRemoteSnapshot(editor, board.scene_data?.snapshot);
       }
       setCurrentBoardId(id);
       setBoardTitle(board.title || 'Untitled Board');
-    } catch {}
+    } catch (e) {
+      console.warn('[Whiteboard] loadBoardById failed:', e);
+    }
   }
 
   async function saveBoard() {
@@ -71,13 +90,17 @@ export default function TutorWhiteboardPage() {
     if (!id || !editor) return;
     setSaving(true);
     try {
-      const snap = getSnapshot(editor.store);
+      const snapshot = editor.store.getStoreSnapshot();
       await api.put(`/whiteboards/${id}`, {
         title: boardTitleRef.current,
-        scene_data: { snapshot: snap },
+        scene_data: { snapshot },
       });
       await loadBoards();
-    } catch {} finally { setSaving(false); }
+    } catch (e) {
+      console.warn('[Whiteboard] save failed:', e);
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function createBoard() {
@@ -86,7 +109,9 @@ export default function TutorWhiteboardPage() {
       const board = res.data.board || res.data;
       await loadBoards();
       await loadBoardById(board.id);
-    } catch {}
+    } catch (e) {
+      console.warn('[Whiteboard] create failed:', e);
+    }
   }
 
   async function deleteBoard(id: string) {
@@ -95,37 +120,37 @@ export default function TutorWhiteboardPage() {
       if (currentBoardIdRef.current === id) {
         setCurrentBoardId(null);
         setBoardTitle('Untitled Board');
-        editorRef.current?.selectAll().deleteShapes(editorRef.current.getSelectedShapeIds());
+        if (editorRef.current) clearCanvas(editorRef.current);
       }
       await loadBoards();
-    } catch {}
+    } catch (e) {
+      console.warn('[Whiteboard] delete failed:', e);
+    }
   }
 
-  // ─── Load boards on mount (non-live) ─────────────────────────────────────
+  // Load board list on mount (non-live)
+  useEffect(() => { if (!isLive) loadBoards(); }, [isLive]);
 
-  useEffect(() => {
-    if (!isLive) loadBoards();
-  }, [isLive]);
-
-  // ─── Auto-save timer (non-live) ───────────────────────────────────────────
-
+  // Periodic auto-save (non-live)
   useEffect(() => {
     if (isLive) return;
     const t = setInterval(() => { if (currentBoardIdRef.current) saveBoard(); }, 30000);
     return () => clearInterval(t);
   }, [isLive]);
 
-  // ─── Tldraw onMount ───────────────────────────────────────────────────────
+  // ─── Tldraw onMount: wire up live sync if applicable ──────────────────────
 
   const onMount = useCallback((editor: Editor) => {
     editorRef.current = editor;
 
-    if (!isLive || !liveLessonId) return;
+    if (!isLive || !liveLessonId) {
+      return () => { editorRef.current = null; };
+    }
 
-    // Live mode: load lesson board + connect socket
     let cancelled = false;
-    let broadcastTimer: ReturnType<typeof setTimeout>;
-    const suppressSync = { current: false };
+    let broadcastTimer: ReturnType<typeof setTimeout> | null = null;
+    let unsubStore: (() => void) | null = null;
+    let socket: Socket | null = null;
 
     (async () => {
       try {
@@ -133,10 +158,7 @@ export default function TutorWhiteboardPage() {
         if (cancelled) return;
 
         const { board, lesson, role } = res.data;
-        const snap = board.scene_data?.snapshot;
-        if (snap) {
-          try { loadSnapshot(editor.store, snap); } catch {}
-        }
+        applyRemoteSnapshot(editor, board.scene_data?.snapshot);
 
         setCurrentBoardId(board.id);
         setBoardTitle(`${lesson.student_name} ↔ ${lesson.tutor_name}`);
@@ -144,14 +166,14 @@ export default function TutorWhiteboardPage() {
 
         const token = localStorage.getItem('token');
         const apiBase = (api.defaults.baseURL || '').replace(/\/api\/?$/, '');
-        const socket = io(`${apiBase}/whiteboard`, {
+        socket = io(`${apiBase}/whiteboard`, {
           auth: { token },
           path: '/socket.io',
           transports: ['websocket', 'polling'],
         });
         socketRef.current = socket;
 
-        socket.on('connect', () => socket.emit('join', { lessonId: liveLessonId }));
+        socket.on('connect', () => socket!.emit('join', { lessonId: liveLessonId }));
         socket.on('joined', ({ peers }: { peers: any[] }) => {
           setLivePeers((peers?.length || 0) + 1);
           setLiveStatus('live');
@@ -159,27 +181,31 @@ export default function TutorWhiteboardPage() {
         socket.on('peer:join', () => setLivePeers(c => c + 1));
         socket.on('peer:leave', () => setLivePeers(c => Math.max(1, c - 1)));
         socket.on('scene:snapshot', ({ snapshot: remote }: { snapshot: any }) => {
-          if (!remote) return;
-          suppressSync.current = true;
-          try { loadSnapshot(editor.store, remote); } catch {}
-          setTimeout(() => { suppressSync.current = false; }, 100);
+          applyRemoteSnapshot(editor, remote);
         });
         socket.on('disconnect', () => setLiveStatus('disconnected'));
-        socket.on('connect_error', () => setLiveStatus('disconnected'));
+        socket.on('connect_error', (err) => {
+          console.warn('[Whiteboard] socket error:', err.message);
+          setLiveStatus('disconnected');
+        });
 
-        // Listen for local changes and broadcast (debounced 400ms)
-        editor.store.listen(() => {
-          if (suppressSync.current || !socket.connected) return;
-          clearTimeout(broadcastTimer);
-          broadcastTimer = setTimeout(() => {
-            if (!socket.connected) return;
-            try {
-              const snap = getSnapshot(editor.store);
-              socket.emit('scene:snapshot', { snapshot: snap });
-            } catch {}
-          }, 400);
-        }, { source: 'user' });
-
+        // Listen for LOCAL document changes only (skip session/presence + remote echoes)
+        unsubStore = editor.store.listen(
+          () => {
+            if (!socket?.connected) return;
+            if (broadcastTimer) clearTimeout(broadcastTimer);
+            broadcastTimer = setTimeout(() => {
+              if (!socket?.connected) return;
+              try {
+                const snapshot = editor.store.getStoreSnapshot();
+                socket.emit('scene:snapshot', { snapshot });
+              } catch (e) {
+                console.warn('[Whiteboard] emit snapshot failed:', e);
+              }
+            }, 400);
+          },
+          { source: 'user', scope: 'document' },
+        );
       } catch (err) {
         console.error('[Whiteboard] Live mode init failed:', err);
         if (!cancelled) setLiveStatus('disconnected');
@@ -188,9 +214,11 @@ export default function TutorWhiteboardPage() {
 
     return () => {
       cancelled = true;
-      clearTimeout(broadcastTimer);
-      socketRef.current?.disconnect();
+      if (broadcastTimer) clearTimeout(broadcastTimer);
+      unsubStore?.();
+      socket?.disconnect();
       socketRef.current = null;
+      editorRef.current = null;
     };
   }, [isLive, liveLessonId]);
 
@@ -215,6 +243,7 @@ export default function TutorWhiteboardPage() {
               <button
                 onClick={createBoard}
                 className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-100 text-gray-500"
+                title="New board"
               >
                 <Plus size={14} />
               </button>
@@ -234,6 +263,7 @@ export default function TutorWhiteboardPage() {
                   <button
                     onClick={e => { e.stopPropagation(); deleteBoard(b.id); }}
                     className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 flex-shrink-0 ml-1"
+                    title="Delete board"
                   >
                     <Trash2 size={12} />
                   </button>
@@ -265,8 +295,8 @@ export default function TutorWhiteboardPage() {
               <>
                 <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-semibold ${
                   liveStatus === 'live' ? 'bg-green-100 text-green-700'
-                  : liveStatus === 'connecting' ? 'bg-amber-100 text-amber-700'
-                  : 'bg-red-100 text-red-700'
+                    : liveStatus === 'connecting' ? 'bg-amber-100 text-amber-700'
+                      : 'bg-red-100 text-red-700'
                 }`}>
                   <Radio size={11} className={liveStatus === 'live' ? 'animate-pulse' : ''} />
                   {liveStatus === 'live' ? 'LIVE' : liveStatus === 'connecting' ? 'Connecting…' : 'Disconnected'}
@@ -302,7 +332,7 @@ export default function TutorWhiteboardPage() {
             )}
           </div>
 
-          {/* Tldraw fills the rest — inner absolute div lets tldraw resolve height: 100% */}
+          {/* Tldraw — inner absolute div lets tldraw's height:100% resolve correctly */}
           <div className="flex-1 relative" style={{ minHeight: 0 }}>
             <div style={{ position: 'absolute', inset: 0 }}>
               <Tldraw onMount={onMount} />
