@@ -1,9 +1,14 @@
-import { useRef, useState, useEffect, useCallback } from 'react';
+import { useRef, useState, useEffect, useCallback, type ComponentProps } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Excalidraw } from '@excalidraw/excalidraw';
-import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 import '@excalidraw/excalidraw/index.css';
 import { io, Socket } from 'socket.io-client';
+
+// ExcalidrawImperativeAPI isn't re-exported from the main package entry, so
+// derive its type from the component's prop signature to stay typesafe.
+type ExcalidrawImperativeAPI = Parameters<
+  NonNullable<ComponentProps<typeof Excalidraw>['excalidrawAPI']>
+>[0];
 import {
   Plus, Trash2, PenLine, ChevronLeft, ChevronRight,
   Users, Radio, Save,
