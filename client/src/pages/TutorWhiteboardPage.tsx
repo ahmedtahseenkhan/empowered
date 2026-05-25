@@ -1,6 +1,7 @@
 import { useRef, useState, useEffect, useCallback, type ComponentProps } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Excalidraw } from '@excalidraw/excalidraw';
+// Aliased in vite.config.ts to the built CSS in node_modules.
 import '@excalidraw/excalidraw/index.css';
 import { io, Socket } from 'socket.io-client';
 
