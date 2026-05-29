@@ -191,7 +191,43 @@ const PaymentsPage: React.FC = () => {
                 {/* Payment History */}
                 <Card className="p-6">
                     <h2 className="text-xl font-semibold text-gray-900 mb-4">📋 Payment History</h2>
-                    <div className="overflow-x-auto">
+
+                    {/* Mobile: stacked cards */}
+                    <div className="md:hidden space-y-3">
+                        {paymentHistory.length === 0 ? (
+                            <p className="text-center text-gray-500 py-6 text-sm">No payment history yet</p>
+                        ) : (
+                            paymentHistory.map((payment) => (
+                                <div key={payment.id} className="border border-gray-200 rounded-xl p-4">
+                                    <div className="flex items-center justify-between gap-2 mb-2">
+                                        <span className="font-medium text-gray-900">{payment.studentName}</span>
+                                        <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs whitespace-nowrap">
+                                            ✅ {payment.status}
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between text-sm py-0.5">
+                                        <span className="text-gray-500">Paid on</span>
+                                        <span className="text-gray-900">{formatDate(payment.date)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-sm py-0.5">
+                                        <span className="text-gray-500">Session</span>
+                                        <span className="text-gray-600">{formatDate(payment.sessionDate)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-sm py-0.5">
+                                        <span className="text-gray-500">Charged</span>
+                                        <span className="text-gray-900">{formatCurrency(payment.amountCharged)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-sm py-0.5">
+                                        <span className="text-gray-500">Your earnings</span>
+                                        <span className="font-semibold text-green-600">{formatCurrency(payment.tutorEarnings)}</span>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+
+                    {/* Desktop: table */}
+                    <div className="hidden md:block overflow-x-auto">
                         <table className="w-full">
                             <thead className="bg-gray-50">
                                 <tr>
@@ -280,7 +316,30 @@ const PaymentsPage: React.FC = () => {
                 {Array.isArray(upcomingPayments) && upcomingPayments.length > 0 && (
                     <Card className="p-6">
                         <h2 className="text-xl font-semibold text-gray-900 mb-4">📅 Upcoming Expected Payments</h2>
-                        <div className="overflow-x-auto">
+
+                        {/* Mobile: stacked cards */}
+                        <div className="md:hidden space-y-3">
+                            {upcomingPayments.map((payment) => (
+                                <div key={payment.id} className="border border-gray-200 rounded-xl p-4">
+                                    <div className="font-medium text-gray-900 mb-2">{payment.studentName}</div>
+                                    <div className="flex justify-between text-sm py-0.5">
+                                        <span className="text-gray-500">Session</span>
+                                        <span className="text-gray-600">{formatDate(payment.sessionDate)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-sm py-0.5">
+                                        <span className="text-gray-500">Expected</span>
+                                        <span className="font-semibold text-gray-900">{formatCurrency(payment.expectedAmount)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-sm py-0.5">
+                                        <span className="text-gray-500">Due</span>
+                                        <span className="text-gray-600">{formatDate(payment.paymentDueDate)}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Desktop: table */}
+                        <div className="hidden md:block overflow-x-auto">
                             <table className="w-full">
                                 <thead className="bg-gray-50">
                                     <tr>
