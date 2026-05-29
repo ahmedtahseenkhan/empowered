@@ -111,9 +111,9 @@ const CoursesPage: React.FC = () => {
             <div className="w-full">
                 {/* Header */}
                 <div className="mb-8">
-                    <div className="flex items-center justify-between mb-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
                         <div>
-                            <h1 className="text-4xl font-bold text-[#4A1D96] mb-2">My Courses</h1>
+                            <h1 className="text-3xl sm:text-4xl font-bold text-[#4A1D96] mb-2">My Courses</h1>
                             <p className="text-gray-600">
                                 Welcome to your Course Hub. Here you can add, view and manage your courses.
                             </p>
@@ -121,7 +121,7 @@ const CoursesPage: React.FC = () => {
                         <Button
                             as={Link}
                             to="/courses/new"
-                            className="bg-[#4A1D96] text-white rounded-full px-6 py-3 flex items-center gap-2"
+                            className="bg-[#4A1D96] text-white rounded-full px-6 py-3 flex items-center justify-center gap-2 shrink-0"
                         >
                             <Plus size={20} />
                             Add New Course
@@ -137,8 +137,8 @@ const CoursesPage: React.FC = () => {
                 </div>
 
                 {/* Search and Count */}
-                <div className="flex items-center justify-between mb-6">
-                    <div className="relative flex-1 max-w-md">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+                    <div className="relative w-full sm:flex-1 sm:max-w-md">
                         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
                         <input
                             type="text"
