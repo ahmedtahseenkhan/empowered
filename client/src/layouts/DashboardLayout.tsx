@@ -14,6 +14,9 @@ import {
     Settings,
     Bot,
     PenLine,
+    Menu,
+    X,
+    Monitor,
 } from 'lucide-react';
 
 export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -23,6 +26,18 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
     const tzSynced = useRef(false);
     const photoFetched = useRef(false);
     const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const [showMobileNotice, setShowMobileNotice] = useState(
+        () => typeof window !== 'undefined' && localStorage.getItem('dismissedMobileNotice') !== '1',
+    );
+
+    // Close the mobile drawer whenever the route changes
+    useEffect(() => { setMobileMenuOpen(false); }, [location.pathname]);
+
+    const dismissMobileNotice = () => {
+        setShowMobileNotice(false);
+        try { localStorage.setItem('dismissedMobileNotice', '1'); } catch {}
+    };
 
     // Auto-sync tutor timezone on first load (covers returning sessions from localStorage)
     useEffect(() => {
@@ -87,7 +102,40 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
 
     return (
         <div className="min-h-screen bg-gray-50/80 flex">
-            <aside className="w-56 bg-white border-r border-gray-200 fixed h-full z-10 hidden md:flex flex-col">
+            {/* Mobile top bar with hamburger (hidden on desktop) */}
+            <header className="md:hidden fixed top-0 inset-x-0 h-14 bg-white border-b border-gray-200 z-30 flex items-center gap-3 px-4">
+                <button
+                    onClick={() => setMobileMenuOpen(true)}
+                    className="p-1.5 -ml-1.5 rounded-lg text-gray-600 hover:bg-gray-100"
+                    aria-label="Open menu"
+                >
+                    <Menu className="w-6 h-6" />
+                </button>
+                <Link to="/" className="flex items-center gap-2">
+                    <span className="text-[16px] font-bold text-gray-900">Empower<span className="text-empowered-orange">Ed</span> Learnings</span>
+                </Link>
+            </header>
+
+            {/* Backdrop for the mobile drawer */}
+            {mobileMenuOpen && (
+                <div
+                    className="md:hidden fixed inset-0 bg-black/40 z-40"
+                    onClick={() => setMobileMenuOpen(false)}
+                    aria-hidden="true"
+                />
+            )}
+
+            <aside
+                className={`w-56 bg-white border-r border-gray-200 fixed h-full z-50 flex flex-col transform transition-transform duration-300 ease-in-out md:translate-x-0 ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}
+            >
+                {/* Close button (mobile only) */}
+                <button
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="md:hidden absolute top-3 right-3 p-1 rounded-lg text-gray-500 hover:bg-gray-100"
+                    aria-label="Close menu"
+                >
+                    <X className="w-5 h-5" />
+                </button>
                 <div className="p-4 flex-shrink-0">
                     <Link to="/" className="flex items-center gap-2 mb-4">
                         <span className="text-[17px] font-bold text-gray-900">Empower<span className="text-empowered-orange">Ed</span> Learnings</span>
@@ -144,7 +192,25 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
                 </div>
             </aside>
 
-            <main className="flex-1 md:ml-56 p-6 lg:p-8">
+            <main className="flex-1 md:ml-56 p-4 pt-20 md:p-6 lg:p-8">
+                {/* Mobile-only notice: best experienced on desktop */}
+                {showMobileNotice && (
+                    <div className="md:hidden mb-4 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-amber-800">
+                        <Monitor className="w-5 h-5 shrink-0 mt-0.5" />
+                        <p className="text-xs leading-relaxed flex-1">
+                            For the best experience, we recommend using EmpowerEd Learnings on a
+                            desktop or laptop. Some features — like the whiteboard — work best on a
+                            larger screen.
+                        </p>
+                        <button
+                            onClick={dismissMobileNotice}
+                            className="shrink-0 text-amber-500 hover:text-amber-700"
+                            aria-label="Dismiss notice"
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
+                    </div>
+                )}
                 {children}
             </main>
         </div>
