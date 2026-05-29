@@ -453,7 +453,7 @@ const TutorDashboard: React.FC = () => {
                                             const lessonInfo = lessonsByDayKey.get(key) || { total: 0, free: 0, paid: 0 };
                                             return (
                                                 <button key={i} onClick={() => { setWeekFromDate(d); setViewMode('week'); }}
-                                                    className={`border-r border-b border-gray-50 p-2 text-left h-20 transition-colors
+                                                    className={`border-r border-b border-gray-50 p-1.5 sm:p-2 text-left h-16 sm:h-20 transition-colors
                                                         ${inMonth ? 'bg-white hover:bg-purple-50/50' : 'bg-gray-50/50'}
                                                         ${isToday ? 'ring-2 ring-inset ring-purple-300' : ''}`}>
                                                     <div className={`text-xs font-semibold mb-1 ${isToday ? 'text-purple-700' : inMonth ? 'text-gray-700' : 'text-gray-300'}`}>
@@ -461,13 +461,13 @@ const TutorDashboard: React.FC = () => {
                                                     </div>
                                                     <div className="space-y-0.5">
                                                         {lessonInfo.total > 0 && (
-                                                            <div className="text-[10px] bg-purple-100 text-purple-800 rounded px-1.5 py-0.5 inline-block font-medium">
-                                                                {lessonInfo.total} session{lessonInfo.total > 1 ? 's' : ''}
+                                                            <div className="text-[10px] bg-purple-100 text-purple-800 rounded px-1 sm:px-1.5 py-0.5 inline-block font-medium">
+                                                                {lessonInfo.total}<span className="hidden sm:inline"> session{lessonInfo.total > 1 ? 's' : ''}</span>
                                                             </div>
                                                         )}
                                                         {blockCount > 0 && (
-                                                            <div className="text-[10px] bg-gray-100 text-gray-600 rounded px-1.5 py-0.5 inline-block">
-                                                                {blockCount} blocked
+                                                            <div className="text-[10px] bg-gray-100 text-gray-600 rounded px-1 sm:px-1.5 py-0.5 inline-block">
+                                                                {blockCount}<span className="hidden sm:inline"> blocked</span>
                                                             </div>
                                                         )}
                                                     </div>

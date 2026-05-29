@@ -291,7 +291,7 @@ const StudentDashboard: React.FC = () => {
                                     const count = dayLessons.length;
                                     return (
                                         <button key={iso} type="button" onClick={() => setSelectedDayIso(iso)}
-                                            className={`h-[72px] p-2 text-left border-r border-b border-gray-50 last:border-r-0 transition-colors
+                                            className={`h-14 sm:h-[72px] p-1.5 sm:p-2 text-left border-r border-b border-gray-50 last:border-r-0 transition-colors
                                                 ${inMonth ? 'bg-white hover:bg-purple-50/40' : 'bg-gray-50/50'}
                                                 ${isSelected ? 'ring-2 ring-inset ring-purple-400 bg-purple-50/30' : ''}
                                                 ${isToday && !isSelected ? 'ring-2 ring-inset ring-purple-200' : ''}`}>
@@ -299,9 +299,9 @@ const StudentDashboard: React.FC = () => {
                                                 {d.getDate()}
                                             </div>
                                             {count > 0 && (
-                                                <div className={`inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-md font-semibold
+                                                <div className={`inline-flex items-center text-[10px] px-1 sm:px-1.5 py-0.5 rounded-md font-semibold
                                                     ${count === 1 ? 'bg-purple-100 text-purple-800' : 'bg-purple-200 text-purple-900'}`}>
-                                                    {count === 1 ? '1 session' : `${count} sessions`}
+                                                    {count}<span className="hidden sm:inline">&nbsp;{count === 1 ? 'session' : 'sessions'}</span>
                                                 </div>
                                             )}
                                         </button>
