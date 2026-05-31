@@ -28,7 +28,7 @@ const BetaConfirmationModal: React.FC<Props> = ({ onGoToDashboard, onSetupPaymen
                     <div className="text-5xl mb-4">🎉</div>
                     <h2 className="text-3xl font-extrabold text-white mb-2">Congratulations!</h2>
                     <p className="text-purple-200 text-base max-w-md mx-auto leading-relaxed">
-                        Your free 2-month beta <span className="text-white font-bold">Premium</span> plan has started.
+                        Your free beta <span className="text-white font-bold">Premium</span> plan has started.
                         No credit card is required. You can start using EmpowerEd Learnings today.
                         Please <a href="mailto:support@emplearnings.com" className="underline text-white">contact us</a> if you have any questions.
                     </p>

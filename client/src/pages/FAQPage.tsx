@@ -93,7 +93,7 @@ const mentorFaqs: FAQItem[] = [
     },
     {
         question: 'What happens after the free trial ends?',
-        answer: 'After the 2-month free trial, your selected annual plan will be billed. To avoid charges, cancel before the trial period ends. You can manage or change your plan through your dashboard.',
+        answer: 'After the 1-month free trial, your selected annual plan will be billed. To avoid charges, cancel before the trial period ends. You can manage or change your plan through your dashboard.',
     },
     {
         question: 'Can I cancel my subscription?',

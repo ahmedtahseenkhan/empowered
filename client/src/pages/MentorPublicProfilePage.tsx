@@ -129,6 +129,19 @@ const MentorPublicProfilePage: React.FC = () => {
             .sort((a, b) => a.group.localeCompare(b.group));
     }, [mentor?.categories]);
 
+    const expandCountry = (raw: string): string => {
+        if (!raw) return raw;
+        const trimmed = raw.trim();
+        if (trimmed.length !== 2) return trimmed;
+        try {
+            const names = new Intl.DisplayNames(['en'], { type: 'region' });
+            const full = names.of(trimmed.toUpperCase());
+            return full && full !== trimmed.toUpperCase() ? full : trimmed;
+        } catch {
+            return trimmed;
+        }
+    };
+
     const formatDayKey = (iso: string, timeZone: string) => {
         const d = new Date(iso);
         const fmt = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' });
@@ -363,9 +376,9 @@ const MentorPublicProfilePage: React.FC = () => {
 
                                     <div className="flex flex-wrap items-center gap-4 text-sm text-primary-200">
                                         {mentor.country && (
-                                            <span className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" />{mentor.country}</span>
+                                            <span className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" />{expandCountry(mentor.country)}</span>
                                         )}
-                                        <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" />{mentor.timezone}</span>
+                                        <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" />{mentor.timezone.replace(/_/g, ' ')}</span>
                                     </div>
                                 </div>
 

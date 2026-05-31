@@ -29,7 +29,7 @@ const ChoosePlanDesktop = ({
                 "Student portal access",
                 "Mentor dashboard",
                 "Platform onboarding & support",
-                "2-month free trial",
+                "1-month free trial",
             ],
             notIncluded: [
                 "Marketplace boost",
@@ -69,7 +69,7 @@ const ChoosePlanDesktop = ({
                 "Student portal access",
                 "Mentor dashboard",
                 "Platform onboarding & support",
-                "2-month free trial",
+                "1-month free trial",
             ],
             notIncluded: [
                 "Weekly promotion",
@@ -106,7 +106,7 @@ const ChoosePlanDesktop = ({
                 "Automated email reminders",
                 "Dedicated meeting link for each session",
                 "Student portal access",
-                "2-month free trial",
+                "1-month free trial",
             ],
             notIncluded: [],
         },
@@ -217,32 +217,6 @@ const ChoosePlanDesktop = ({
                         </motion.div>
                     ))}
                 </div>
-
-                {/* Special Offer Notice */}
-                <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 1 }}
-                    className="text-center mt-16"
-                >
-                    <div className="max-w-4xl mx-auto mt-12 bg-gradient-to-r from-orange-400 to-yellow-400 p-1 rounded-3xl shadow-xl">
-                        <div className="bg-white/10 backdrop-blur-md rounded-[20px] p-8 text-black">
-                            <div className="flex flex-col md:flex-row items-center justify-center gap-4 mb-4">
-                                <h1 className="text-3xl font-bold font-poppins">Special Offer</h1>
-                            </div>
-
-                            <div className="flex items-center justify-center gap-4 mb-4">
-                                <img loading="lazy" decoding="async" src={Star} alt="Star" className="w-8 h-8" />
-                                <h3 className="text-xl md:text-2xl font-semibold font-poppins">Don't Miss Out on Our Early Bird Deal!</h3>
-                                <img loading="lazy" decoding="async" src={Clock} alt="Clock" className="w-8 h-8" />
-                            </div>
-
-                            <p className="text-[#4A148C] font-semibold text-lg md:text-xl">
-                                Enjoy 2 Month FREE – Absolutely Risk-Free, with No Registration Fees and No Subscription Costs. Limited Time Offer!
-                            </p>
-                        </div>
-                    </div>
-                </motion.div>
 
                 {/* Trust Indicators */}
                 <motion.div

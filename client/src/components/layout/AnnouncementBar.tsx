@@ -4,7 +4,7 @@ import { Zap } from 'lucide-react';
 
 export const AnnouncementBar: React.FC = () => {
     const message =
-        '🎉 Special Offer — Enjoy 2 Months FREE, No Subscription Costs. Limited Time!';
+        '🚀 Join the First 50 Founding Mentors — Apply for Beta';
 
     return (
         <div className="bg-primary-900 text-white text-xs font-medium py-2 overflow-hidden select-none">
@@ -17,7 +17,7 @@ export const AnnouncementBar: React.FC = () => {
                             to="/beta"
                             className="ml-2 underline underline-offset-2 hover:text-accent-300 transition-colors"
                         >
-                            Claim Offer →
+                            Apply Now →
                         </Link>
                     </span>
                 ))}

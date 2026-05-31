@@ -40,7 +40,7 @@ const plansConfig = [
             'Student portal access',
             'Mentor dashboard',
             'Platform onboarding & support',
-            '2-month free trial',
+            '1-month free trial',
         ],
         notIncluded: [
             'Marketplace boost',
@@ -82,7 +82,7 @@ const plansConfig = [
             'Student portal access',
             'Mentor dashboard',
             'Platform onboarding & support',
-            '2-month free trial',
+            '1-month free trial',
         ],
         notIncluded: [
             'Weekly promotion',
@@ -121,7 +121,7 @@ const plansConfig = [
             'Automated email reminders',
             'Dedicated meeting link for each session',
             'Student portal access',
-            '2-month free trial',
+            '1-month free trial',
         ],
         notIncluded: [],
     },

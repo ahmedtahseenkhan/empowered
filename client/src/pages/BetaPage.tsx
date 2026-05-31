@@ -19,7 +19,7 @@ const SESSION_METHODS = [
 ] as const;
 
 const PERKS = [
-    '2 months free access',
+    'Free access during beta',
     'No credit card required to start',
     'Founding Mentor badge on your profile',
     'Priority placement in the marketplace',
@@ -156,7 +156,7 @@ const BetaPage: React.FC = () => {
                             Turn your tutoring or coaching into a structured, professional business without giving up your earnings.
                         </p>
                         <p className="text-white/70 mb-10">
-                            Get 2 months free. No credit card required. Setup takes minutes.
+                            Free access during beta. No credit card required. Setup takes minutes.
                         </p>
                         <button
                             onClick={scrollToForm}

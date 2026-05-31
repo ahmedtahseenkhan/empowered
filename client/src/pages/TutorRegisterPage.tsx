@@ -59,7 +59,7 @@ const TutorRegisterPage: React.FC = () => {
                 'Student portal access',
                 'Mentor dashboard',
                 'Platform onboarding & support',
-                '2-month free trial',
+                '1-month free trial',
             ],
             notIncluded: [
                 'Marketplace boost',
@@ -96,7 +96,7 @@ const TutorRegisterPage: React.FC = () => {
                 'Student portal access',
                 'Mentor dashboard',
                 'Platform onboarding & support',
-                '2-month free trial',
+                '1-month free trial',
             ],
             notIncluded: [
                 'Weekly promotion',
@@ -132,7 +132,7 @@ const TutorRegisterPage: React.FC = () => {
                 'Automated email reminders',
                 'Dedicated meeting link for each session',
                 'Student portal access',
-                '2-month free trial',
+                '1-month free trial',
             ],
             notIncluded: [],
         },
@@ -217,7 +217,7 @@ const TutorRegisterPage: React.FC = () => {
 
 
     // STEP 4: Plan Selection
-    // Beta-approved users get a 2-month free trial.
+    // Beta-approved users get a 1-month free trial.
     // Everyone else is redirected to Stripe to pay for their chosen plan.
     const handlePlanSubmit = async () => {
         setLoading(true);

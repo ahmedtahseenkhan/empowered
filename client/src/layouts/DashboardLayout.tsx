@@ -23,7 +23,6 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
     const { user, logout } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
-    const tzSynced = useRef(false);
     const photoFetched = useRef(false);
     const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -39,15 +38,6 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
         try { localStorage.setItem('dismissedMobileNotice', '1'); } catch {}
     };
 
-    // Auto-sync tutor timezone on first load (covers returning sessions from localStorage)
-    useEffect(() => {
-        if (tzSynced.current || !user || user.role !== 'TUTOR') return;
-        tzSynced.current = true;
-        const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        if (browserTz && browserTz !== user.timezone) {
-            api.put('/scheduling/me/timezone', { timezone: browserTz }).catch(() => {});
-        }
-    }, [user]);
 
     // Fetch profile photo once per mount
     useEffect(() => {
