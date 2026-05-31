@@ -1,6 +1,5 @@
 import { motion } from 'framer-motion';
 import { FaRocket, FaStar, FaCrown, FaCheck, FaTimes, FaShieldAlt, FaUsers } from 'react-icons/fa';
-import { Clock, Star } from '../../assets';
 
 const ChoosePlanDesktop = ({
     onChoosePlan,
