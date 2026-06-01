@@ -164,7 +164,7 @@ export const createMentorSubscriptionCheckout = async (req: Request, res: Respon
     }
 };
 
-/** Activate 2-month trial without Stripe (no payment collection). For use when Stripe checkout is disabled. */
+/** Activate 1-month trial without Stripe (no payment collection). For use when Stripe checkout is disabled. */
 const ActivateTrialSchema = z.object({
     tier: z.enum(['STANDARD', 'PRO', 'PREMIUM'] as const),
 });
@@ -180,9 +180,13 @@ export const activateMentorTrial = async (req: Request, res: Response) => {
         });
         if (!tutor) return res.status(404).json({ error: 'Tutor profile not found' });
 
-        // Only approved beta applicants may activate the trial
+        // Only approved beta applicants may activate the trial.
+        // Match case-insensitively — application and account emails are not stored with consistent casing.
         const betaApproval = await prisma.betaApplication.findFirst({
-            where: { email: tutor.user.email, status: 'APPROVED' },
+            where: {
+                email: { equals: tutor.user.email, mode: 'insensitive' },
+                status: 'APPROVED',
+            },
             select: { id: true },
         });
         if (!betaApproval) {
@@ -191,23 +195,15 @@ export const activateMentorTrial = async (req: Request, res: Response) => {
             });
         }
 
-        const hasTrialHistory = !!tutor.subscription_end_date
-            || !!tutor.stripe_subscription_id
-            || !!tutor.subscription_status;
-
-        // Check if user has already used their trial
-        if (tutor.has_used_trial || hasTrialHistory) {
-            if (!tutor.has_used_trial && hasTrialHistory) {
-                await prisma.tutorProfile.update({
-                    where: { id: tutor.id },
-                    data: { has_used_trial: true },
-                });
-            }
+        // Gate only on the explicit flag for approved beta mentors. The broader "trial history"
+        // heuristic (stripe_customer/subscription_status set during onboarding) produces false
+        // positives that wrongly push approved beta mentors into paid checkout.
+        if (tutor.has_used_trial) {
             return res.status(400).json({ error: 'You have already used your free trial. Please subscribe to continue.' });
         }
 
         const trialEnd = new Date();
-        trialEnd.setDate(trialEnd.getDate() + 60); // 2-month free beta trial
+        trialEnd.setDate(trialEnd.getDate() + 30); // 1-month free beta trial
 
         await prisma.tutorProfile.update({
             where: { id: tutor.id },
