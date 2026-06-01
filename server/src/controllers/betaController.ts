@@ -18,7 +18,7 @@ export const submitBetaApplication = async (req: Request, res: Response) => {
         };
 
         const full_name = (body.full_name ?? '').trim();
-        const email = (body.email ?? '').trim();
+        const email = (body.email ?? '').trim().toLowerCase();
         const phone_number = (body.phone_number ?? '').trim();
         const service_description = (body.service_description ?? '').trim();
         const category = (body.category ?? '').trim();
