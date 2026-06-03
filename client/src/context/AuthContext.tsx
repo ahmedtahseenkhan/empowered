@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import api from '../api/axios';
 
 interface User {
     id: string;
@@ -30,7 +31,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         if (savedToken && savedUser) {
             setToken(savedToken);
-            setUser(JSON.parse(savedUser));
+            const parsedUser: User = JSON.parse(savedUser);
+            setUser(parsedUser);
+
+            // The cached `tier` is captured at login time and can go stale
+            // (e.g. the user upgrades after logging in). Re-fetch the live tier
+            // for tutors so gated nav items (AI Assist) reflect the current plan.
+            if (parsedUser.role === 'TUTOR') {
+                api.get('/payments/mentor/status')
+                    .then(res => {
+                        const freshTier = res.data?.tier ?? null;
+                        if (freshTier && freshTier !== parsedUser.tier) {
+                            const updatedUser = { ...parsedUser, tier: freshTier };
+                            setUser(updatedUser);
+                            localStorage.setItem('user', JSON.stringify(updatedUser));
+                        }
+                    })
+                    .catch(() => {});
+            }
         }
         setLoading(false);
     }, []);

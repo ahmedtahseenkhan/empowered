@@ -77,8 +77,8 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
             { icon: <CreditCard className="w-5 h-5" />, label: 'Subscription', path: '/subscription-settings' },
             { icon: <CreditCard className="w-5 h-5" />, label: 'Connect Account', path: '/connect-account' },
             { icon: <PenLine className="w-5 h-5" />, label: 'Whiteboard', path: '/tutor/whiteboard' },
-            // AI Assist - Only for Pro and Premium
-            ...((user?.tier === 'PRO' || user?.tier === 'PREMIUM') ? [{
+            // AI Assist - Premium only (must match the route guard in App.tsx)
+            ...(user?.tier === 'PREMIUM' ? [{
                 icon: <Bot className="w-5 h-5" />,
                 label: 'AI Assist',
                 path: '/tutor/ai-assist'
