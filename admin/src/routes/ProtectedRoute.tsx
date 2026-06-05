@@ -15,20 +15,21 @@ const ProtectedRoute = () => {
             }
 
             try {
-                // Verify token and role with backend
-                await api.get('/auth/me');
-                // Ideally, backend check ensures role is ADMIN if using requireAdmin middleware on /auth/me or a separate /admin/me endpoint.
-                // Since we use the generic /auth/me, we should verify the role in the response if possible, 
-                // but if /auth/me doesn't force admin, we might need to check role here.
-                // However, the backend /auth/me returns { user: { role: ... } }.
-
+                // Verify token + role and refresh the cached admin user so that
+                // is_super_admin / permissions stay current for the sidebar + route guards.
                 const res = await api.get('/auth/me');
-                if (res.data.user.role === 'ADMIN') {
+                const user = res.data.user;
+                if (user?.role === 'ADMIN') {
+                    localStorage.setItem('adminUser', JSON.stringify(user));
                     setIsAuthenticated(true);
+                } else {
+                    localStorage.removeItem('adminToken');
+                    localStorage.removeItem('adminUser');
                 }
             } catch (error) {
                 console.error('Auth verification failed', error);
                 localStorage.removeItem('adminToken');
+                localStorage.removeItem('adminUser');
             } finally {
                 setIsLoading(false);
             }

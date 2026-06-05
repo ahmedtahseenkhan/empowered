@@ -2,6 +2,8 @@ import { Response } from 'express';
 import prisma from '../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
 import emailService from '../services/emailService';
+import { hashPassword } from '../utils/auth';
+import { ADMIN_PERMISSION_KEYS, isValidPermissionKey } from '../constants/adminPermissions';
 
 export const adminListMentors = async (req: AuthRequest, res: Response) => {
     try {
@@ -825,6 +827,181 @@ export const adminRejectBetaApplication = async (req: AuthRequest, res: Response
         return res.json({ application: updated });
     } catch (error) {
         console.error('adminRejectBetaApplication error:', error);
+        return res.status(500).json({ error: 'Server error' });
+    }
+};
+
+// ── Sub-admin management (super admin only) ───────────────────────────────────
+
+const sanitizePermissions = (input: unknown): string[] => {
+    if (!Array.isArray(input)) return [];
+    return Array.from(new Set(input.filter(isValidPermissionKey)));
+};
+
+export const adminListSubAdmins = async (_req: AuthRequest, res: Response) => {
+    try {
+        const subAdmins = await prisma.adminProfile.findMany({
+            where: { is_super_admin: false },
+            select: {
+                id: true,
+                username: true,
+                permissions: true,
+                user: { select: { id: true, email: true, is_suspended: true, created_at: true } },
+            },
+            orderBy: { user: { created_at: 'desc' } },
+        });
+
+        return res.json({
+            subAdmins: subAdmins.map((a) => ({
+                id: a.id,
+                userId: a.user.id,
+                email: a.user.email,
+                username: a.username,
+                permissions: a.permissions,
+                isSuspended: a.user.is_suspended,
+                createdAt: a.user.created_at,
+            })),
+            availablePermissions: ADMIN_PERMISSION_KEYS,
+        });
+    } catch (error) {
+        console.error('adminListSubAdmins error:', error);
+        return res.status(500).json({ error: 'Server error' });
+    }
+};
+
+export const adminCreateSubAdmin = async (req: AuthRequest, res: Response) => {
+    try {
+        const { email, password, username, permissions } = req.body as {
+            email?: string;
+            password?: string;
+            username?: string;
+            permissions?: unknown;
+        };
+
+        const trimmedEmail = email?.trim().toLowerCase();
+        const trimmedUsername = username?.trim();
+
+        if (!trimmedEmail || !password || !trimmedUsername) {
+            return res.status(400).json({ error: 'email, password, and username are required' });
+        }
+        if (password.length < 8) {
+            return res.status(400).json({ error: 'Password must be at least 8 characters' });
+        }
+
+        const existing = await prisma.user.findUnique({ where: { email: trimmedEmail } });
+        if (existing) return res.status(409).json({ error: 'A user with that email already exists' });
+
+        const password_hash = await hashPassword(password);
+
+        const user = await prisma.user.create({
+            data: {
+                email: trimmedEmail,
+                password_hash,
+                role: 'ADMIN',
+                is_verified: true,
+                admin_profile: {
+                    create: {
+                        username: trimmedUsername,
+                        is_super_admin: false,
+                        permissions: sanitizePermissions(permissions),
+                    },
+                },
+            },
+            select: {
+                id: true,
+                email: true,
+                admin_profile: { select: { id: true, username: true, permissions: true } },
+            },
+        });
+
+        return res.status(201).json({
+            subAdmin: {
+                id: user.admin_profile!.id,
+                userId: user.id,
+                email: user.email,
+                username: user.admin_profile!.username,
+                permissions: user.admin_profile!.permissions,
+                isSuspended: false,
+            },
+        });
+    } catch (error) {
+        console.error('adminCreateSubAdmin error:', error);
+        return res.status(500).json({ error: 'Server error' });
+    }
+};
+
+export const adminUpdateSubAdmin = async (req: AuthRequest, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { username, permissions, isSuspended } = req.body as {
+            username?: string;
+            permissions?: unknown;
+            isSuspended?: boolean;
+        };
+
+        const profile = await prisma.adminProfile.findUnique({
+            where: { id },
+            select: { id: true, is_super_admin: true, user_id: true },
+        });
+        if (!profile) return res.status(404).json({ error: 'Sub-admin not found' });
+        if (profile.is_super_admin) return res.status(403).json({ error: 'Cannot modify a super admin' });
+
+        const data: { username?: string; permissions?: string[] } = {};
+        if (typeof username === 'string' && username.trim()) data.username = username.trim();
+        if (permissions !== undefined) data.permissions = sanitizePermissions(permissions);
+
+        if (Object.keys(data).length > 0) {
+            await prisma.adminProfile.update({ where: { id }, data });
+        }
+        if (typeof isSuspended === 'boolean') {
+            await prisma.user.update({ where: { id: profile.user_id }, data: { is_suspended: isSuspended } });
+        }
+
+        const updated = await prisma.adminProfile.findUnique({
+            where: { id },
+            select: {
+                id: true,
+                username: true,
+                permissions: true,
+                user: { select: { id: true, email: true, is_suspended: true } },
+            },
+        });
+
+        return res.json({
+            subAdmin: {
+                id: updated!.id,
+                userId: updated!.user.id,
+                email: updated!.user.email,
+                username: updated!.username,
+                permissions: updated!.permissions,
+                isSuspended: updated!.user.is_suspended,
+            },
+        });
+    } catch (error) {
+        console.error('adminUpdateSubAdmin error:', error);
+        return res.status(500).json({ error: 'Server error' });
+    }
+};
+
+export const adminDeleteSubAdmin = async (req: AuthRequest, res: Response) => {
+    try {
+        const { id } = req.params;
+
+        const profile = await prisma.adminProfile.findUnique({
+            where: { id },
+            select: { id: true, is_super_admin: true, user_id: true },
+        });
+        if (!profile) return res.status(404).json({ error: 'Sub-admin not found' });
+        if (profile.is_super_admin) return res.status(403).json({ error: 'Cannot delete a super admin' });
+        if (profile.user_id === req.user?.id) return res.status(403).json({ error: 'You cannot delete yourself' });
+
+        // Remove the admin profile then the user account.
+        await prisma.adminProfile.delete({ where: { id } });
+        await prisma.user.delete({ where: { id: profile.user_id } });
+
+        return res.json({ message: 'Sub-admin removed' });
+    } catch (error) {
+        console.error('adminDeleteSubAdmin error:', error);
         return res.status(500).json({ error: 'Server error' });
     }
 };

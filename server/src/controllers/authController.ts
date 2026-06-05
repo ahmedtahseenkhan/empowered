@@ -282,7 +282,9 @@ export const me = async (req: AuthRequest, res: Response) => {
                 tier: (userProfile as any)?.tier,
                 timezone: (userProfile as any)?.timezone,
                 profile_photo: userProfile?.profile_photo,
-                department: (userProfile as any)?.department
+                department: (userProfile as any)?.department,
+                is_super_admin: (userProfile as any)?.is_super_admin ?? false,
+                permissions: (userProfile as any)?.permissions ?? []
             },
         });
     } catch (error) {

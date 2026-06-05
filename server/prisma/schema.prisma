@@ -192,12 +192,14 @@ model Whiteboard {
 }
 
 model AdminProfile {
-  id            String  @id @default(uuid())
-  user_id       String  @unique
-  user          User    @relation(fields: [user_id], references: [id])
-  username      String
-  profile_photo String?
-  department    String?
+  id             String   @id @default(uuid())
+  user_id        String   @unique
+  user           User     @relation(fields: [user_id], references: [id])
+  username       String
+  profile_photo  String?
+  department     String?
+  is_super_admin Boolean  @default(false)
+  permissions    String[] @default([]) // module keys; ignored when is_super_admin
 }
 
 model TutorMarketingVideoSubmission {

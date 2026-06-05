@@ -1,11 +1,12 @@
 import React from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Users, GraduationCap, FileCheck, LogOut, Settings, MessageSquare, Calendar, Clock, FlaskConical } from 'lucide-react';
+import { LogOut, ShieldCheck } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { ADMIN_MODULES, getStoredAdminUser, canAccessModule } from '../lib/permissions';
 
 const AdminLayout: React.FC = () => {
     const navigate = useNavigate();
-    const user = JSON.parse(localStorage.getItem('adminUser') || '{}');
+    const user = getStoredAdminUser();
 
     const handleLogout = () => {
         localStorage.removeItem('adminToken');
@@ -13,18 +14,11 @@ const AdminLayout: React.FC = () => {
         navigate('/login');
     };
 
-    const navItems = [
-        { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
-        { icon: Users, label: 'Mentors', path: '/mentors' },
-        { icon: GraduationCap, label: 'Students', path: '/students' },
-        { icon: FileCheck, label: 'Approvals', path: '/approvals' },
-        { icon: Settings, label: 'Subscriptions', path: '/subscriptions' },
-        { icon: LayoutDashboard, label: 'Payments', path: '/payments' },
-        { icon: MessageSquare, label: 'Queries', path: '/support' },
-        { icon: Calendar, label: 'Demo Requests', path: '/demo-requests' },
-        { icon: Clock, label: 'Demo Availability', path: '/demo-availability' },
-        { icon: FlaskConical, label: 'Beta Applications', path: '/beta-applications' },
-    ];
+    // Only show modules the admin can access (super admin sees all). Coming Soon
+    // modules are shown to everyone as disabled placeholders.
+    const visibleModules = ADMIN_MODULES.filter(
+        (m) => m.comingSoon || canAccessModule(user, m.key),
+    );
 
     return (
         <div className="flex h-screen bg-gray-50">
@@ -35,10 +29,41 @@ const AdminLayout: React.FC = () => {
                 </div>
 
                 <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
-                    {navItems.map((item) => (
+                    {visibleModules.map((item) =>
+                        item.comingSoon ? (
+                            <div
+                                key={item.key}
+                                className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-400 cursor-not-allowed select-none"
+                                title="Coming soon"
+                            >
+                                <item.icon className="w-5 h-5" />
+                                <span className="flex-1">{item.label}</span>
+                                <span className="text-[10px] font-semibold uppercase tracking-wide bg-gray-100 text-gray-500 rounded px-1.5 py-0.5">
+                                    Soon
+                                </span>
+                            </div>
+                        ) : (
+                            <NavLink
+                                key={item.key}
+                                to={item.path}
+                                end={item.path === '/'}
+                                className={({ isActive }) => cn(
+                                    "flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors",
+                                    isActive
+                                        ? "bg-primary-50 text-primary-900"
+                                        : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                                )}
+                            >
+                                <item.icon className="w-5 h-5" />
+                                {item.label}
+                            </NavLink>
+                        )
+                    )}
+
+                    {/* Sub-admin management — super admin only */}
+                    {user.is_super_admin && (
                         <NavLink
-                            key={item.path}
-                            to={item.path}
+                            to="/sub-admins"
                             className={({ isActive }) => cn(
                                 "flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors",
                                 isActive
@@ -46,10 +71,10 @@ const AdminLayout: React.FC = () => {
                                     : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
                             )}
                         >
-                            <item.icon className="w-5 h-5" />
-                            {item.label}
+                            <ShieldCheck className="w-5 h-5" />
+                            Sub-Admins
                         </NavLink>
-                    ))}
+                    )}
                 </nav>
 
                 <div className="p-4 border-t border-gray-200">
@@ -58,7 +83,12 @@ const AdminLayout: React.FC = () => {
                             {user.username?.[0]?.toUpperCase() || 'A'}
                         </div>
                         <div className="overflow-hidden">
-                            <div className="text-sm font-medium text-gray-900 truncate">{user.username || 'Admin'}</div>
+                            <div className="text-sm font-medium text-gray-900 truncate">
+                                {user.username || 'Admin'}
+                                {user.is_super_admin && (
+                                    <span className="ml-1 text-[10px] font-semibold uppercase text-primary-700">Super</span>
+                                )}
+                            </div>
                             <div className="text-xs text-gray-500 truncate">{user.email}</div>
                         </div>
                     </div>
