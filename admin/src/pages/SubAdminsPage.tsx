@@ -138,7 +138,7 @@ const SubAdminsPage: React.FC = () => {
                 </div>
                 <button
                     onClick={openCreate}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
                 >
                     <Plus className="w-4 h-4" /> Add Sub-Admin
                 </button>
@@ -176,7 +176,7 @@ const SubAdminsPage: React.FC = () => {
                                                 {sa.permissions.map((p) => {
                                                     const mod = GRANTABLE_MODULES.find((m) => m.key === p);
                                                     return (
-                                                        <span key={p} className="px-2 py-0.5 rounded text-xs font-medium bg-primary-50 text-primary-700 border border-primary-100">
+                                                        <span key={p} className="px-2 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary border border-primary/20">
                                                             {mod?.label || p}
                                                         </span>
                                                     );
@@ -289,7 +289,7 @@ const SubAdminsPage: React.FC = () => {
                             <button
                                 onClick={handleSave}
                                 disabled={saving}
-                                className="px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-lg disabled:opacity-60"
+                                className="px-4 py-2 text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 rounded-lg disabled:opacity-60"
                             >
                                 {saving ? 'Saving...' : editing ? 'Save Changes' : 'Create Sub-Admin'}
                             </button>
