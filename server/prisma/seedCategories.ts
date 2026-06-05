@@ -67,6 +67,10 @@ const categories = [
             {
                 name: "Productivity",
                 children: ["Time Management", "Habit Formation", "Prioritization", "Motivation", "Actionable Goal Setting"]
+            },
+            {
+                name: "Other",
+                children: ["Other"]
             }
         ]
     }
