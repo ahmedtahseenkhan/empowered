@@ -3,7 +3,7 @@ import prisma from '../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
 import emailService from '../services/emailService';
 import { hashPassword } from '../utils/auth';
-import { ADMIN_PERMISSION_KEYS, isValidPermissionKey } from '../constants/adminPermissions';
+import { ADMIN_PERMISSION_KEYS, isValidPermissionKey, formatPermissionList } from '../constants/adminPermissions';
 
 export const adminListMentors = async (req: AuthRequest, res: Response) => {
     try {
@@ -914,6 +914,21 @@ export const adminCreateSubAdmin = async (req: AuthRequest, res: Response) => {
             },
         });
 
+        // Email the new sub-admin their credentials. Best-effort: the account is
+        // already created, so don't fail the request if the email can't be sent.
+        let emailSent = true;
+        try {
+            await emailService.sendSubAdminWelcome({
+                email: user.email,
+                username: user.admin_profile!.username,
+                password,
+                permissionsList: formatPermissionList(user.admin_profile!.permissions),
+            });
+        } catch (e) {
+            emailSent = false;
+            console.error('adminCreateSubAdmin: failed to send welcome email:', e);
+        }
+
         return res.status(201).json({
             subAdmin: {
                 id: user.admin_profile!.id,
@@ -923,6 +938,7 @@ export const adminCreateSubAdmin = async (req: AuthRequest, res: Response) => {
                 permissions: user.admin_profile!.permissions,
                 isSuspended: false,
             },
+            emailSent,
         });
     } catch (error) {
         console.error('adminCreateSubAdmin error:', error);

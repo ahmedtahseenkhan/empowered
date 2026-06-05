@@ -563,6 +563,25 @@ class EmailService {
         });
     }
 
+    async sendSubAdminWelcome(data: {
+        email: string;
+        username: string;
+        password: string;
+        permissionsList?: string;
+    }): Promise<void> {
+        // Admin portal lives on a separate domain; never use CLIENT_URL here.
+        const adminBaseUrl = (process.env.ADMIN_DASHBOARD_URL || process.env.ADMIN_URL || 'https://admin.emplearnings.com').replace(/\/+$/, '');
+        const html = this.renderTemplate('admin/sub-admin-welcome', {
+            ...data,
+            loginUrl: `${adminBaseUrl}/login`,
+        });
+        await this.sendEmail({
+            to: data.email,
+            subject: 'Your EmpowerEd Learnings Admin Account',
+            html,
+        });
+    }
+
     async sendBetaApplicationNotification(data: {
         adminEmail: string;
         full_name: string;

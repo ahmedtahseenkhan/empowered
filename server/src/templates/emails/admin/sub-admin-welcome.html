@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your Admin Account</title>
+</head>
+
+<body style="margin: 0; padding: 0; font-family: 'Arial', sans-serif; background-color: #f4f4f4;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f4f4f4; padding: 20px 0;">
+        <tr>
+            <td align="center">
+                <table width="600" cellpadding="0" cellspacing="0"
+                    style="background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    <tr>
+                        <td
+                            style="background: linear-gradient(135deg, #4A148C 0%, #6d28d9 100%); padding: 40px 30px; text-align: center;">
+                            <h1 style="color: #ffffff; margin: 0; font-size: 26px;">🛡️ Your Admin Account is Ready</h1>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td style="padding: 40px 30px;">
+                            <p style="font-size: 16px; color: #333333; line-height: 1.6; margin: 0 0 20px;">
+                                Hi <strong>{{username}}</strong>,
+                            </p>
+                            <p style="font-size: 16px; color: #333333; line-height: 1.6; margin: 0 0 20px;">
+                                An administrator has created a sub-admin account for you on the
+                                <strong>EmpowerEd Learnings</strong> Admin Portal. You can sign in with the
+                                credentials below.
+                            </p>
+
+                            <table width="100%" cellpadding="0" cellspacing="0"
+                                style="background-color: #f5f3ff; border-left: 4px solid #4A148C; padding: 20px; margin: 20px 0;">
+                                <tr>
+                                    <td>
+                                        <p style="margin: 0 0 10px; font-size: 14px; color: #4A148C;">
+                                            📧 <strong>Email:</strong> {{email}}
+                                        </p>
+                                        <p style="margin: 0; font-size: 14px; color: #4A148C;">
+                                            🔑 <strong>Temporary Password:</strong>
+                                            <span style="font-family: monospace; font-size: 15px;">{{password}}</span>
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            {{#if permissionsList}}
+                            <p style="font-size: 14px; color: #333333; line-height: 1.6; margin: 20px 0 6px;">
+                                <strong>Your access:</strong>
+                            </p>
+                            <p style="font-size: 14px; color: #555555; line-height: 1.6; margin: 0 0 20px;">
+                                {{permissionsList}}
+                            </p>
+                            {{/if}}
+
+                            <div style="text-align: center; margin: 30px 0;">
+                                <a href="{{loginUrl}}"
+                                    style="display: inline-block; background-color: #4A148C; color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 9999px; font-size: 16px; font-weight: bold;">
+                                    Open Admin Portal
+                                </a>
+                            </div>
+
+                            <table width="100%" cellpadding="0" cellspacing="0"
+                                style="background-color: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 16px; margin: 10px 0 0;">
+                                <tr>
+                                    <td>
+                                        <p style="margin: 0; font-size: 13px; color: #92400e; line-height: 1.6;">
+                                            🔒 For your security, please keep these credentials private and change your
+                                            password after your first sign-in. If you did not expect this account,
+                                            contact your administrator.
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td
+                            style="background-color: #f8f9fa; padding: 30px; text-align: center; border-top: 1px solid #e0e0e0;">
+                            <p style="margin: 0 0 10px; font-size: 14px; color: #666;">
+                                Best Regards,<br>
+                                <strong>EmpowerEd Learnings Team</strong>
+                            </p>
+                            <p style="margin: 10px 0 0; font-size: 12px; color: #999;">
+                                info@emplearnings.com
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+
+</html>

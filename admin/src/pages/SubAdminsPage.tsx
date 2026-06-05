@@ -91,12 +91,17 @@ const SubAdminsPage: React.FC = () => {
                     permissions: form.permissions,
                 });
             } else {
-                await api.post('/admin/sub-admins', {
+                const res = await api.post('/admin/sub-admins', {
                     email: form.email.trim(),
                     password: form.password,
                     username: form.username.trim(),
                     permissions: form.permissions,
                 });
+                if (res.data?.emailSent === false) {
+                    window.alert(
+                        `Sub-admin created, but the credentials email could not be sent to ${form.email.trim()}. Please share the login details manually.`,
+                    );
+                }
             }
             setModalOpen(false);
             await fetchSubAdmins();

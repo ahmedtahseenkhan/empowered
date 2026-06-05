@@ -21,3 +21,23 @@ export type AdminPermissionKey = (typeof ADMIN_PERMISSION_KEYS)[number];
 
 export const isValidPermissionKey = (key: unknown): key is AdminPermissionKey =>
     typeof key === 'string' && (ADMIN_PERMISSION_KEYS as readonly string[]).includes(key);
+
+// Human-readable labels for permission keys (used in emails/notifications).
+export const ADMIN_PERMISSION_LABELS: Record<AdminPermissionKey, string> = {
+    'dashboard': 'Dashboard',
+    'mentors': 'Mentors',
+    'students': 'Students',
+    'approvals': 'Approvals',
+    'subscriptions': 'Subscriptions',
+    'payments': 'Payments',
+    'support': 'Queries',
+    'demo-requests': 'Demo Calls',
+    'demo-availability': 'Demo Availability',
+    'beta-applications': 'Beta Applications',
+};
+
+export const formatPermissionList = (keys: string[]): string =>
+    keys
+        .filter(isValidPermissionKey)
+        .map((k) => ADMIN_PERMISSION_LABELS[k])
+        .join(', ');
