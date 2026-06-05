@@ -120,15 +120,21 @@ class EmailService {
         sessionTime: string;
         meetingLink: string;
         dashboardUrl?: string;
+        reminderType?: '24h' | '4h';
     }): Promise<void> {
         const baseUrl = this.getClientBaseUrl();
+        const isSoon = data.reminderType === '4h';
+        const whenText = isSoon ? 'in about 4 hours' : 'tomorrow';
         const html = this.renderTemplate('student/session-reminder', {
             ...data,
+            whenText,
             dashboardUrl: data.dashboardUrl || `${baseUrl}/dashboard`,
         });
         await this.sendEmail({
             to: data.studentEmail,
-            subject: '24-Hour Reminder – Don’t Miss Your Session',
+            subject: isSoon
+                ? 'Reminder – Your Session Starts in About 4 Hours'
+                : '24-Hour Reminder – Don’t Miss Your Session',
             html,
         });
     }
@@ -220,16 +226,22 @@ class EmailService {
         sessionTime: string;
         meetingLink: string;
         dashboardUrl?: string;
+        reminderType?: '24h' | '4h';
     }): Promise<void> {
         const baseUrl = this.getClientBaseUrl();
+        const isSoon = data.reminderType === '4h';
+        const whenText = isSoon ? 'in about 4 hours' : 'tomorrow';
         const html = this.renderTemplate('mentor/session-reminder', {
             ...data,
+            whenText,
             dashboardUrl: data.dashboardUrl || `${baseUrl}/dashboard`,
             year: new Date().getFullYear(),
         });
         await this.sendEmail({
             to: data.mentorEmail,
-            subject: `Reminder: Session Tomorrow with ${data.studentName}`,
+            subject: isSoon
+                ? `Reminder: Session in About 4 Hours with ${data.studentName}`
+                : `Reminder: Session Tomorrow with ${data.studentName}`,
             html,
         });
     }

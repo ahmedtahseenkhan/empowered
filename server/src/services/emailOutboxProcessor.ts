@@ -172,6 +172,7 @@ async function sendOutboxRow(row: OutboxRow) {
             sessionTime: formatTimePart(lesson.start_time, studentTimeZone),
             meetingLink: lesson.meeting_link || '',
             dashboardUrl: `${clientBase}/student/sessions/${lesson.id}`,
+            reminderType: row.payload?.reminderType === '4h' ? '4h' : '24h',
         });
 
         return;
@@ -201,6 +202,7 @@ async function sendOutboxRow(row: OutboxRow) {
             sessionTime: formatTimePart(lesson.start_time, timeZone),
             meetingLink: lesson.meeting_link || '',
             dashboardUrl: `${clientBase}/sessions/${lesson.id}`,
+            reminderType: row.payload?.reminderType === '4h' ? '4h' : '24h',
         });
 
         return;

@@ -45,7 +45,7 @@ async function checkSessionReminders() {
                         data: {
                             type: 'SESSION_REMINDER_STUDENT',
                             to_email: lesson.student.user.email,
-                            payload: { lessonId: lesson.id },
+                            payload: { lessonId: lesson.id, reminderType: '24h' },
                             idempotency_key: `session-reminder-student:${lesson.id}`,
                         },
                     });
@@ -64,7 +64,7 @@ async function checkSessionReminders() {
                         data: {
                             type: 'SESSION_REMINDER_TUTOR',
                             to_email: lesson.tutor.user.email,
-                            payload: { lessonId: lesson.id },
+                            payload: { lessonId: lesson.id, reminderType: '24h' },
                             idempotency_key: `session-reminder-tutor:${lesson.id}`,
                         },
                     });
@@ -172,7 +172,7 @@ async function check4HourSessionReminders() {
                         data: {
                             type: 'SESSION_REMINDER_STUDENT',
                             to_email: lesson.student.user.email,
-                            payload: { lessonId: lesson.id },
+                            payload: { lessonId: lesson.id, reminderType: '4h' },
                             idempotency_key: `session-reminder-4h-student:${lesson.id}`,
                         },
                     });
@@ -189,7 +189,7 @@ async function check4HourSessionReminders() {
                         data: {
                             type: 'SESSION_REMINDER_TUTOR',
                             to_email: lesson.tutor.user.email,
-                            payload: { lessonId: lesson.id },
+                            payload: { lessonId: lesson.id, reminderType: '4h' },
                             idempotency_key: `session-reminder-4h-tutor:${lesson.id}`,
                         },
                     });
