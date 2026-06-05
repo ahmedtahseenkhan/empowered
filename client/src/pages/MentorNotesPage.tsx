@@ -43,7 +43,9 @@ const MentorNotesPage: React.FC = () => {
     const fileInputMessageRef = useRef<HTMLInputElement | null>(null);
     const fileInputSubmissionRef = useRef<Record<string, HTMLInputElement | null>>({});
 
-    const allowedFileAccept = 'application/pdf,image/png,image/jpeg,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    const MAX_FILE_BYTES = 2 * 1024 * 1024; // 2 MB
+    const ALLOWED_EXTS = ['.pdf', '.doc', '.docx', '.xls', '.xlsx'];
+    const allowedFileAccept = '.pdf,.doc,.docx,.xls,.xlsx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
     const activeTutor = useMemo(() => mentors.find(m => m.tutor.id === activeTutorId) || null, [mentors, activeTutorId]);
 
@@ -57,6 +59,15 @@ const MentorNotesPage: React.FC = () => {
     const uploadFiles = async (files: FileList) => {
         const out: UploadAttachment[] = [];
         for (const f of Array.from(files)) {
+            const ext = '.' + (f.name.split('.').pop() || '').toLowerCase();
+            if (!ALLOWED_EXTS.includes(ext)) {
+                alert(`"${f.name}" is not allowed. Only PDF, Word (.doc/.docx) and Excel (.xls/.xlsx) files can be shared.`);
+                continue;
+            }
+            if (f.size > MAX_FILE_BYTES) {
+                alert(`"${f.name}" is too large. Maximum file size is 2 MB.`);
+                continue;
+            }
             const dataUrl = await fileToDataUrl(f);
             const res = await api.post('/uploads/base64', { fileName: f.name, dataUrl });
             const a = res.data?.attachment;

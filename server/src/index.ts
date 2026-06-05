@@ -57,10 +57,19 @@ app.use(cors());
 // Webhooks must be mounted BEFORE express.json() to consume raw body
 app.use('/api/stripe', webhookRoutes);
 
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
-app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+// Serve user uploads defensively: force download instead of inline rendering,
+// block MIME sniffing, and neutralize any script if a file is ever opened.
+// This protects against malicious content (HTML/SVG/JS) slipping into /uploads.
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads'), {
+    setHeaders: (res) => {
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('Content-Disposition', 'attachment');
+        res.setHeader('Content-Security-Policy', "default-src 'none'");
+    },
+}));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/tutor', tutorRoutes);
