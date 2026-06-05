@@ -21,7 +21,7 @@ const HeroSection = () => {
                         <p className="mt-6 text-gray-600 font-poppins hidden md:block text-lg leading-relaxed">
                             <span className="text-[#4A148C] font-semibold">EmpowerEd Learnings </span>{" "}
                             helps independent tutors, coaches, mentors, and skill instructors build,
-                            manage, and grow their education business online — with profiles, scheduling,
+                            manage, and grow their education business online with profiles, scheduling,
                             payments, student communication, discovery, and AI-assisted workflows in one place.
                         </p>
                         <div className="flex flex-wrap justify-center md:justify-start gap-4 mt-8">
