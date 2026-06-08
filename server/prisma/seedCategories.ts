@@ -69,6 +69,42 @@ const categories = [
                 children: ["Time Management", "Habit Formation", "Prioritization", "Motivation", "Actionable Goal Setting"]
             },
             {
+                name: "Health & Wellness",
+                children: ["Healthy Habits", "Nutrition & Lifestyle", "Stress Reduction", "Sleep Optimization"]
+            },
+            {
+                name: "Weight Management",
+                children: ["Sustainable Weight Loss", "Healthy Eating Habits", "Accountability Coaching", "Behavior Change"]
+            },
+            {
+                name: "Burnout & Work-Life Balance",
+                children: ["Burnout Recovery", "Boundary Setting", "Energy Management", "Work-Life Integration"]
+            },
+            {
+                name: "Student Success & College Readiness",
+                children: ["Study Skills", "Academic Goal Setting", "College Preparation", "Time Management"]
+            },
+            {
+                name: "Career Development & Transition",
+                children: ["Career Planning", "Career Change", "Job Search Strategy", "Workplace Confidence"]
+            },
+            {
+                name: "Relationship & Family",
+                children: ["Healthy Communication", "Conflict Resolution", "Trust Building", "Parent-Child Communication", "Boundary Setting"]
+            },
+            {
+                name: "Neurodiversity & Executive Function",
+                children: ["ADHD Coaching", "Organization Skills", "Focus Strategies", "Time Management"]
+            },
+            {
+                name: "NLP (Neuro-Linguistic Programming)",
+                children: ["Limiting Belief Transformation", "Mindset Reframing", "Goal Achievement", "Confidence Building"]
+            },
+            {
+                name: "Business",
+                children: ["Entrepreneurship", "Business Strategy", "Leadership Development", "Personal Branding"]
+            },
+            {
                 name: "Other",
                 children: ["Other"]
             }
