@@ -345,8 +345,9 @@ export const rescheduleLesson = async (req: AuthRequest, res: Response) => {
         if (lesson.start_time.getTime() - now.getTime() < cutoffMs) {
             return res.status(400).json({ error: `Sessions can only be rescheduled more than ${RESCHEDULE_CUTOFF_HOURS} hours before they start` });
         }
-        if (newStartDate.getTime() <= now.getTime()) {
-            return res.status(400).json({ error: 'New time must be in the future' });
+        // New time must also be far enough out that the student can still pay before it.
+        if (newStartDate.getTime() - now.getTime() < cutoffMs) {
+            return res.status(400).json({ error: `New time must be more than ${RESCHEDULE_CUTOFF_HOURS} hours from now` });
         }
 
         const newEndDate = new Date(newStartDate.getTime() + lesson.duration * 60 * 1000);
@@ -359,7 +360,14 @@ export const rescheduleLesson = async (req: AuthRequest, res: Response) => {
         });
         if (!available) return res.status(409).json({ error: 'Selected time is no longer available' });
 
-        const deltaMs = newStartDate.getTime() - lesson.start_time.getTime();
+        // Payment rows are keyed to lessons by due_date = start_time - 48h (the convention
+        // used across the webhook, payment, and reminder code). Realign this lesson's row to
+        // the new start so the payment status keeps tracking the same row instead of looking
+        // empty (which the reader treats as "paid").
+        const DUE_OFFSET_MS = 48 * 60 * 60 * 1000;
+        const oldDue = new Date(lesson.start_time.getTime() - DUE_OFFSET_MS);
+        const newDue = new Date(newStartDate.getTime() - DUE_OFFSET_MS);
+        const dueWindowMs = 2 * 60 * 60 * 1000;
 
         await prisma.$transaction(async (tx) => {
             await tx.lesson.update({
@@ -371,25 +379,20 @@ export const rescheduleLesson = async (req: AuthRequest, res: Response) => {
                 },
             });
 
-            // Keep the matching payment schedule row aligned with the new start time.
-            // Payment rows are created 24h before each lesson; isolate this lesson's row
-            // with a ±12h window around its original due date, then shift it by the same delta.
             if (lesson.booking_id) {
-                const originalDue = new Date(lesson.start_time.getTime() - 24 * 60 * 60 * 1000);
-                const windowMs = 12 * 60 * 60 * 1000;
                 const schedule = await tx.paymentSchedule.findFirst({
                     where: {
                         booking_id: lesson.booking_id,
                         due_date: {
-                            gte: new Date(originalDue.getTime() - windowMs),
-                            lte: new Date(originalDue.getTime() + windowMs),
+                            gte: new Date(oldDue.getTime() - dueWindowMs),
+                            lte: new Date(oldDue.getTime() + dueWindowMs),
                         },
                     },
                 });
                 if (schedule) {
                     await tx.paymentSchedule.update({
                         where: { id: schedule.id },
-                        data: { due_date: new Date(schedule.due_date.getTime() + deltaMs) },
+                        data: { due_date: newDue },
                     });
                 }
             }
@@ -418,12 +421,14 @@ export const rescheduleLesson = async (req: AuthRequest, res: Response) => {
         const tutorUser = tutor ? await prisma.user.findUnique({ where: { id: tutor.user_id } }) : null;
         const stamp = newStartDate.getTime();
 
+        const previousStart = lesson.start_time.toISOString();
+
         if (studentUser?.email) {
             await prisma.emailOutbox.create({
                 data: {
                     type: 'SESSION_RESCHEDULED_STUDENT',
                     to_email: studentUser.email,
-                    payload: { lessonId: lesson.id, clientTimezone: clientTimezone || undefined },
+                    payload: { lessonId: lesson.id, previousStart, clientTimezone: clientTimezone || undefined },
                     idempotency_key: `reschedule:${lesson.id}:${stamp}:student`,
                 },
             });
@@ -433,7 +438,7 @@ export const rescheduleLesson = async (req: AuthRequest, res: Response) => {
                 data: {
                     type: 'SESSION_RESCHEDULED_TUTOR',
                     to_email: tutorUser.email,
-                    payload: { lessonId: lesson.id },
+                    payload: { lessonId: lesson.id, previousStart },
                     idempotency_key: `reschedule:${lesson.id}:${stamp}:tutor`,
                 },
             });

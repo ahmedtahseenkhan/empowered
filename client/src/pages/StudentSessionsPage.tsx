@@ -170,7 +170,9 @@ const StudentSessionsPage: React.FC = () => {
         setSlots([]);
         setSlotsBusy(true);
         try {
-            const from = new Date();
+            // Only show slots at least 24h out — the student must still be able to
+            // pay within the payment window before the rescheduled session.
+            const from = new Date(Date.now() + 24 * 60 * 60 * 1000);
             from.setSeconds(0, 0);
             const to = new Date(from);
             to.setDate(to.getDate() + 30);

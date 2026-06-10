@@ -143,6 +143,8 @@ class EmailService {
         studentName: string;
         studentEmail: string;
         mentorName: string;
+        previousDate?: string;
+        previousTime?: string;
         sessionDate: string;
         sessionTime: string;
         meetingLink: string;
@@ -271,6 +273,8 @@ class EmailService {
         mentorName: string;
         mentorEmail: string;
         studentName: string;
+        previousDate?: string;
+        previousTime?: string;
         sessionDate: string;
         sessionTime: string;
         meetingLink: string;

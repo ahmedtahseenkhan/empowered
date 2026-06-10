@@ -225,10 +225,13 @@ async function sendOutboxRow(row: OutboxRow) {
 
         const clientBase = (process.env.CLIENT_URL || process.env.CLIENT_BASE_URL || 'https://emplearnings.com').trim().replace(/\/+$/, '');
         const studentTimeZone = (row.payload?.clientTimezone as string | undefined) || lesson.booking?.client_timezone || lesson.tutor?.timezone || 'UTC';
+        const prevStartStudent = row.payload?.previousStart ? new Date(row.payload.previousStart as string) : null;
         await emailService.sendSessionRescheduledStudent({
             studentName: lesson.student?.username || 'Student',
             studentEmail: row.to_email,
             mentorName: lesson.tutor?.username || 'Mentor',
+            previousDate: prevStartStudent ? formatDatePart(prevStartStudent, studentTimeZone) : '',
+            previousTime: prevStartStudent ? formatTimePart(prevStartStudent, studentTimeZone) : '',
             sessionDate: formatDatePart(lesson.start_time, studentTimeZone),
             sessionTime: formatTimePart(lesson.start_time, studentTimeZone),
             meetingLink: lesson.meeting_link || '',
@@ -254,10 +257,13 @@ async function sendOutboxRow(row: OutboxRow) {
 
         const clientBase = (process.env.CLIENT_URL || process.env.CLIENT_BASE_URL || 'https://emplearnings.com').trim().replace(/\/+$/, '');
         const timeZone = lesson.tutor?.timezone || 'UTC';
+        const prevStartTutor = row.payload?.previousStart ? new Date(row.payload.previousStart as string) : null;
         await emailService.sendSessionRescheduledMentor({
             mentorName: lesson.tutor?.username || 'Mentor',
             mentorEmail: row.to_email,
             studentName: lesson.student?.username || 'Student',
+            previousDate: prevStartTutor ? formatDatePart(prevStartTutor, timeZone) : '',
+            previousTime: prevStartTutor ? formatTimePart(prevStartTutor, timeZone) : '',
             sessionDate: formatDatePart(lesson.start_time, timeZone),
             sessionTime: formatTimePart(lesson.start_time, timeZone),
             meetingLink: lesson.meeting_link || '',
