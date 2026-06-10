@@ -16,6 +16,7 @@ interface BetaApplication {
     session_management: string[];
     has_active_clients: boolean;
     biggest_challenge: string;
+    referral_source: string;
     profile_link: string | null;
     status: BetaStatus;
     actioned_at: string | null;
@@ -254,6 +255,10 @@ const BetaApplicationsPage: React.FC = () => {
                                                     <div>
                                                         <p className="font-semibold text-gray-700 mb-1">Has active clients</p>
                                                         <p className="text-gray-600">{app.has_active_clients ? 'Yes' : 'No'}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-semibold text-gray-700 mb-1">How did you hear about us</p>
+                                                        <p className="text-gray-600">{app.referral_source || '—'}</p>
                                                     </div>
                                                     {app.profile_link && (
                                                         <div>

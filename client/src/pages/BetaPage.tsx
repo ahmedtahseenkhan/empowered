@@ -52,6 +52,7 @@ type FormData = {
     session_management: string[];
     has_active_clients: '' | 'yes' | 'no';
     biggest_challenge: string;
+    referral_source: string;
     profile_link: string;
 };
 
@@ -65,6 +66,7 @@ const initialForm: FormData = {
     session_management: [],
     has_active_clients: '',
     biggest_challenge: '',
+    referral_source: '',
     profile_link: '',
 };
 
@@ -103,7 +105,8 @@ const BetaPage: React.FC = () => {
         setError('');
 
         if (!form.full_name.trim() || !form.email.trim() || !form.phone_number.trim() ||
-            !form.service_description.trim() || !form.category || !form.biggest_challenge.trim()) {
+            !form.service_description.trim() || !form.category || !form.biggest_challenge.trim() ||
+            !form.referral_source.trim()) {
             setError('Please fill in all required fields.');
             return;
         }
@@ -128,6 +131,7 @@ const BetaPage: React.FC = () => {
                 session_management: form.session_management,
                 has_active_clients: form.has_active_clients === 'yes',
                 biggest_challenge: form.biggest_challenge.trim(),
+                referral_source: form.referral_source.trim(),
                 profile_link: form.profile_link.trim() || undefined,
             });
             setSubmitted(true);
@@ -465,6 +469,22 @@ const BetaPage: React.FC = () => {
                                         placeholder="e.g. Managing bookings, getting more clients, organizing sessions..."
                                         required
                                         rows={3}
+                                        className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#4A148C]/40 focus:border-[#4A148C] transition resize-none"
+                                    />
+                                </div>
+
+                                {/* How did you hear about us */}
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                                        How did you hear about EmpowerEd Learnings? <span className="text-red-500">*</span>
+                                    </label>
+                                    <textarea
+                                        name="referral_source"
+                                        value={form.referral_source}
+                                        onChange={handleChange}
+                                        placeholder="If someone referred you, please include their name. Otherwise, tell us where you heard about us."
+                                        required
+                                        rows={2}
                                         className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#4A148C]/40 focus:border-[#4A148C] transition resize-none"
                                     />
                                 </div>

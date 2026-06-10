@@ -15,6 +15,7 @@ export const submitBetaApplication = async (req: Request, res: Response) => {
             has_active_clients?: boolean;
             biggest_challenge?: string;
             profile_link?: string;
+            referral_source?: string;
         };
 
         const full_name = (body.full_name ?? '').trim();
@@ -26,8 +27,9 @@ export const submitBetaApplication = async (req: Request, res: Response) => {
             ? body.session_management.map((s: string) => s.trim()).filter(Boolean)
             : [];
         const biggest_challenge = (body.biggest_challenge ?? '').trim();
+        const referral_source = (body.referral_source ?? '').trim();
 
-        if (!full_name || !email || !phone_number || !service_description || !category || !biggest_challenge) {
+        if (!full_name || !email || !phone_number || !service_description || !category || !biggest_challenge || !referral_source) {
             return res.status(400).json({ error: 'Please fill in all required fields.' });
         }
 
@@ -51,6 +53,7 @@ export const submitBetaApplication = async (req: Request, res: Response) => {
                 has_active_clients: body.has_active_clients,
                 biggest_challenge,
                 profile_link: body.profile_link?.trim() || null,
+                referral_source,
             },
         });
 
@@ -74,6 +77,7 @@ export const submitBetaApplication = async (req: Request, res: Response) => {
                     has_active_clients: body.has_active_clients,
                     biggest_challenge,
                     profile_link: body.profile_link?.trim() || null,
+                    referral_source,
                 });
             } catch (e) {
                 console.error('Failed to send beta application notification email:', e);
