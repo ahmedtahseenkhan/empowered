@@ -1,6 +1,12 @@
 import { Response } from 'express';
 import prisma from '../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
+import { isTutorSlotAvailable } from '../services/availability';
+import { updateMeetEventForLesson } from '../services/googleCalendar';
+
+// Student-initiated reschedule policy
+const RESCHEDULE_CUTOFF_HOURS = 24; // cannot reschedule within 24h of start
+const MAX_RESCHEDULES = 1; // each session can be moved once
 
 export const getMyLessons = async (req: AuthRequest, res: Response) => {
     try {
@@ -52,8 +58,10 @@ export const getMyLessons = async (req: AuthRequest, res: Response) => {
                 booking_id: true,
                 start_time: true,
                 end_time: true,
+                duration: true,
                 status: true,
                 billing_type: true,
+                reschedule_count: true,
                 meeting_link: true,
                 google_calendar_html_link: true,
                 created_at: true,
@@ -278,5 +286,169 @@ export const joinLesson = async (req: AuthRequest, res: Response) => {
     } catch (e) {
         console.error('joinLesson error:', e);
         return res.status(500).json({ error: 'Failed to join lesson' });
+    }
+};
+
+/**
+ * Student-initiated reschedule. Moves a BOOKED lesson to a new start time if the
+ * tutor slot is free, the session is more than 24h away, and it hasn't already been
+ * rescheduled. Auto-confirms (no tutor approval). Keeps the linked payment schedule
+ * row and Google Calendar event in sync.
+ */
+export const rescheduleLesson = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user?.id;
+        const role = req.user?.role;
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+        if (role !== 'STUDENT') return res.status(403).json({ error: 'Only students can reschedule their sessions' });
+
+        const lessonId = (req.params.lessonId || '').trim();
+        if (!lessonId) return res.status(400).json({ error: 'lessonId is required' });
+
+        const { newStart, clientTimezone } = req.body as { newStart?: string; clientTimezone?: string };
+        if (!newStart) return res.status(400).json({ error: 'newStart is required (ISO string)' });
+
+        const newStartDate = new Date(newStart);
+        if (Number.isNaN(newStartDate.getTime())) return res.status(400).json({ error: 'newStart is invalid' });
+
+        const student = await prisma.studentProfile.findUnique({ where: { user_id: userId } });
+        if (!student) return res.status(404).json({ error: 'Student profile not found' });
+
+        const lesson = await prisma.lesson.findUnique({
+            where: { id: lessonId },
+            select: {
+                id: true,
+                tutor_id: true,
+                student_id: true,
+                booking_id: true,
+                start_time: true,
+                end_time: true,
+                duration: true,
+                status: true,
+                reschedule_count: true,
+                google_calendar_event_id: true,
+            },
+        });
+
+        if (!lesson) return res.status(404).json({ error: 'Session not found' });
+        if (lesson.student_id !== student.id) return res.status(403).json({ error: 'Forbidden' });
+
+        if (lesson.status !== 'BOOKED') {
+            return res.status(400).json({ error: 'Only upcoming booked sessions can be rescheduled' });
+        }
+        if (lesson.reschedule_count >= MAX_RESCHEDULES) {
+            return res.status(400).json({ error: 'This session has already been rescheduled and cannot be moved again' });
+        }
+
+        const now = new Date();
+        const cutoffMs = RESCHEDULE_CUTOFF_HOURS * 60 * 60 * 1000;
+        if (lesson.start_time.getTime() - now.getTime() < cutoffMs) {
+            return res.status(400).json({ error: `Sessions can only be rescheduled more than ${RESCHEDULE_CUTOFF_HOURS} hours before they start` });
+        }
+        if (newStartDate.getTime() <= now.getTime()) {
+            return res.status(400).json({ error: 'New time must be in the future' });
+        }
+
+        const newEndDate = new Date(newStartDate.getTime() + lesson.duration * 60 * 1000);
+
+        const available = await isTutorSlotAvailable({
+            tutorId: lesson.tutor_id,
+            start: newStartDate,
+            end: newEndDate,
+            excludeLessonId: lesson.id,
+        });
+        if (!available) return res.status(409).json({ error: 'Selected time is no longer available' });
+
+        const deltaMs = newStartDate.getTime() - lesson.start_time.getTime();
+
+        await prisma.$transaction(async (tx) => {
+            await tx.lesson.update({
+                where: { id: lesson.id },
+                data: {
+                    start_time: newStartDate,
+                    end_time: newEndDate,
+                    reschedule_count: { increment: 1 },
+                },
+            });
+
+            // Keep the matching payment schedule row aligned with the new start time.
+            // Payment rows are created 24h before each lesson; isolate this lesson's row
+            // with a ±12h window around its original due date, then shift it by the same delta.
+            if (lesson.booking_id) {
+                const originalDue = new Date(lesson.start_time.getTime() - 24 * 60 * 60 * 1000);
+                const windowMs = 12 * 60 * 60 * 1000;
+                const schedule = await tx.paymentSchedule.findFirst({
+                    where: {
+                        booking_id: lesson.booking_id,
+                        due_date: {
+                            gte: new Date(originalDue.getTime() - windowMs),
+                            lte: new Date(originalDue.getTime() + windowMs),
+                        },
+                    },
+                });
+                if (schedule) {
+                    await tx.paymentSchedule.update({
+                        where: { id: schedule.id },
+                        data: { due_date: new Date(schedule.due_date.getTime() + deltaMs) },
+                    });
+                }
+            }
+        });
+
+        // Move the calendar event (non-fatal if calendar is not connected)
+        if (lesson.google_calendar_event_id) {
+            try {
+                await updateMeetEventForLesson({
+                    tutorId: lesson.tutor_id,
+                    eventId: lesson.google_calendar_event_id,
+                    start: newStartDate,
+                    end: newEndDate,
+                });
+            } catch (e) {
+                console.error('Calendar event reschedule failed (non-fatal):', e);
+            }
+        }
+
+        // Notify both sides
+        const tutor = await prisma.tutorProfile.findUnique({
+            where: { id: lesson.tutor_id },
+            select: { user_id: true },
+        });
+        const studentUser = await prisma.user.findUnique({ where: { id: userId } });
+        const tutorUser = tutor ? await prisma.user.findUnique({ where: { id: tutor.user_id } }) : null;
+        const stamp = newStartDate.getTime();
+
+        if (studentUser?.email) {
+            await prisma.emailOutbox.create({
+                data: {
+                    type: 'SESSION_RESCHEDULED_STUDENT',
+                    to_email: studentUser.email,
+                    payload: { lessonId: lesson.id, clientTimezone: clientTimezone || undefined },
+                    idempotency_key: `reschedule:${lesson.id}:${stamp}:student`,
+                },
+            });
+        }
+        if (tutorUser?.email) {
+            await prisma.emailOutbox.create({
+                data: {
+                    type: 'SESSION_RESCHEDULED_TUTOR',
+                    to_email: tutorUser.email,
+                    payload: { lessonId: lesson.id },
+                    idempotency_key: `reschedule:${lesson.id}:${stamp}:tutor`,
+                },
+            });
+        }
+
+        return res.json({
+            lesson: {
+                id: lesson.id,
+                start_time: newStartDate.toISOString(),
+                end_time: newEndDate.toISOString(),
+                reschedule_count: lesson.reschedule_count + 1,
+            },
+        });
+    } catch (e) {
+        console.error('rescheduleLesson error:', e);
+        return res.status(500).json({ error: 'Failed to reschedule session' });
     }
 };

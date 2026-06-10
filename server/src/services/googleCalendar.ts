@@ -143,6 +143,38 @@ export const createMeetEventForLesson = async (args: {
 };
 
 /**
+ * Move an existing lesson's calendar event to a new time (used when a student reschedules).
+ * Patches start/end on the stored event id; the Meet link and attendees are preserved.
+ * Returns null if the tutor has no connected calendar or the patch fails (non-fatal).
+ */
+export const updateMeetEventForLesson = async (args: {
+    tutorId: string;
+    eventId: string;
+    start: Date;
+    end: Date;
+}) => {
+    const client = await getAuthorizedCalendarClient(args.tutorId);
+    if (!client) return null;
+
+    const { calendar, conn } = client;
+
+    const resp = await calendar.events.patch({
+        calendarId: conn.calendar_id || 'primary',
+        eventId: args.eventId,
+        requestBody: {
+            start: { dateTime: args.start.toISOString() },
+            end: { dateTime: args.end.toISOString() },
+        },
+    });
+
+    return {
+        eventId: resp.data.id || null,
+        htmlLink: resp.data.htmlLink || null,
+        meetLink: resp.data.hangoutLink || null,
+    };
+};
+
+/**
  * Create a Google Meet link for a demo call (EmpowerEd team with prospect).
  * Required env: GOOGLE_DEMO_REFRESH_TOKEN; optional: GOOGLE_DEMO_CALENDAR_ID (default 'primary').
  * Same GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET are used.

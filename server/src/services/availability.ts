@@ -20,7 +20,7 @@ const isSlotFree = (slot: Interval, blocks: Interval[]) => {
     return true;
 };
 
-const getBlocks = async (tutorId: string, from: Date, to: Date): Promise<Interval[]> => {
+const getBlocks = async (tutorId: string, from: Date, to: Date, excludeLessonId?: string): Promise<Interval[]> => {
     const blocks: Interval[] = [];
 
     const lessons = await prisma.lesson.findMany({
@@ -29,6 +29,7 @@ const getBlocks = async (tutorId: string, from: Date, to: Date): Promise<Interva
             start_time: { lt: to },
             end_time: { gt: from },
             status: { not: 'CANCELLED' as any },
+            ...(excludeLessonId ? { id: { not: excludeLessonId } } : {}),
         },
         select: { start_time: true, end_time: true },
     });
@@ -167,6 +168,7 @@ export const isTutorSlotAvailable = async (args: {
     tutorId: string;
     start: Date;
     end: Date;
+    excludeLessonId?: string;
 }) => {
     if (args.start >= args.end) return false;
 
@@ -195,7 +197,7 @@ export const isTutorSlotAvailable = async (args: {
 
     if (!insideRule) return false;
 
-    const blocks = await getBlocks(args.tutorId, args.start, args.end);
+    const blocks = await getBlocks(args.tutorId, args.start, args.end, args.excludeLessonId);
     return isSlotFree({ start: args.start, end: args.end }, blocks);
 };
 

@@ -208,6 +208,65 @@ async function sendOutboxRow(row: OutboxRow) {
         return;
     }
 
+    if (row.type === 'SESSION_RESCHEDULED_STUDENT') {
+        const lessonId = row.payload?.lessonId as string | undefined;
+        if (!lessonId) throw new Error('Missing lessonId in payload');
+
+        const lesson = await prisma.lesson.findUnique({
+            where: { id: lessonId },
+            include: {
+                student: { select: { username: true } },
+                tutor: { select: { username: true, timezone: true } },
+                booking: { select: { client_timezone: true } },
+            },
+        });
+
+        if (!lesson) throw new Error(`Lesson not found: ${lessonId}`);
+
+        const clientBase = (process.env.CLIENT_URL || process.env.CLIENT_BASE_URL || 'https://emplearnings.com').trim().replace(/\/+$/, '');
+        const studentTimeZone = (row.payload?.clientTimezone as string | undefined) || lesson.booking?.client_timezone || lesson.tutor?.timezone || 'UTC';
+        await emailService.sendSessionRescheduledStudent({
+            studentName: lesson.student?.username || 'Student',
+            studentEmail: row.to_email,
+            mentorName: lesson.tutor?.username || 'Mentor',
+            sessionDate: formatDatePart(lesson.start_time, studentTimeZone),
+            sessionTime: formatTimePart(lesson.start_time, studentTimeZone),
+            meetingLink: lesson.meeting_link || '',
+            dashboardUrl: `${clientBase}/student/sessions/${lesson.id}`,
+        });
+
+        return;
+    }
+
+    if (row.type === 'SESSION_RESCHEDULED_TUTOR') {
+        const lessonId = row.payload?.lessonId as string | undefined;
+        if (!lessonId) throw new Error('Missing lessonId in payload');
+
+        const lesson = await prisma.lesson.findUnique({
+            where: { id: lessonId },
+            include: {
+                student: { select: { username: true } },
+                tutor: { select: { username: true, timezone: true } },
+            },
+        });
+
+        if (!lesson) throw new Error(`Lesson not found: ${lessonId}`);
+
+        const clientBase = (process.env.CLIENT_URL || process.env.CLIENT_BASE_URL || 'https://emplearnings.com').trim().replace(/\/+$/, '');
+        const timeZone = lesson.tutor?.timezone || 'UTC';
+        await emailService.sendSessionRescheduledMentor({
+            mentorName: lesson.tutor?.username || 'Mentor',
+            mentorEmail: row.to_email,
+            studentName: lesson.student?.username || 'Student',
+            sessionDate: formatDatePart(lesson.start_time, timeZone),
+            sessionTime: formatTimePart(lesson.start_time, timeZone),
+            meetingLink: lesson.meeting_link || '',
+            dashboardUrl: `${clientBase}/sessions/${lesson.id}`,
+        });
+
+        return;
+    }
+
     if (row.type === 'PAYMENT_DUE_REMINDER') {
         const paymentId = row.payload?.paymentId as string | undefined;
         if (!paymentId) throw new Error('Missing paymentId in payload');

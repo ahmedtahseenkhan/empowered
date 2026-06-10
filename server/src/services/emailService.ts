@@ -139,6 +139,27 @@ class EmailService {
         });
     }
 
+    async sendSessionRescheduledStudent(data: {
+        studentName: string;
+        studentEmail: string;
+        mentorName: string;
+        sessionDate: string;
+        sessionTime: string;
+        meetingLink: string;
+        dashboardUrl?: string;
+    }): Promise<void> {
+        const baseUrl = this.getClientBaseUrl();
+        const html = this.renderTemplate('student/session-rescheduled', {
+            ...data,
+            dashboardUrl: data.dashboardUrl || `${baseUrl}/dashboard`,
+        });
+        await this.sendEmail({
+            to: data.studentEmail,
+            subject: 'Your Session Has Been Rescheduled',
+            html,
+        });
+    }
+
     async sendPostSessionFeedback(data: {
         studentName: string;
         studentEmail: string;
@@ -242,6 +263,28 @@ class EmailService {
             subject: isSoon
                 ? `Reminder: Session in About 4 Hours with ${data.studentName}`
                 : `Reminder: Session Tomorrow with ${data.studentName}`,
+            html,
+        });
+    }
+
+    async sendSessionRescheduledMentor(data: {
+        mentorName: string;
+        mentorEmail: string;
+        studentName: string;
+        sessionDate: string;
+        sessionTime: string;
+        meetingLink: string;
+        dashboardUrl?: string;
+    }): Promise<void> {
+        const baseUrl = this.getClientBaseUrl();
+        const html = this.renderTemplate('mentor/session-rescheduled', {
+            ...data,
+            dashboardUrl: data.dashboardUrl || `${baseUrl}/dashboard`,
+            year: new Date().getFullYear(),
+        });
+        await this.sendEmail({
+            to: data.mentorEmail,
+            subject: `Session Rescheduled by ${data.studentName}`,
             html,
         });
     }
@@ -593,6 +636,7 @@ class EmailService {
         has_active_clients: boolean;
         biggest_challenge: string;
         profile_link: string | null;
+        referral_source?: string;
     }): Promise<void> {
         const rows = [
             ['Name', data.full_name],
@@ -603,6 +647,7 @@ class EmailService {
             ['Session management', data.session_management.join(', ')],
             ['Has active clients', data.has_active_clients ? 'Yes' : 'No'],
             ['Biggest challenge', data.biggest_challenge],
+            ['How did you hear about us', data.referral_source || '—'],
             ['Profile link', data.profile_link || '—'],
         ]
             .map(([label, value]) => `<tr><td style="padding:6px 12px;font-weight:600;background:#f3e5f5;white-space:nowrap">${label}</td><td style="padding:6px 12px">${value}</td></tr>`)

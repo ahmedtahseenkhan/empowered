@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, ExternalLink, CreditCard } from 'lucide-react';
+import { Calendar, ExternalLink, CreditCard, Clock } from 'lucide-react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -10,8 +10,11 @@ import api from '../api/axios';
 
 type Lesson = {
     id: string;
+    tutor_id?: string;
     start_time: string;
     end_time: string;
+    duration?: number;
+    reschedule_count?: number;
     created_at?: string;
     status: string;
     billing_type?: 'FREE_TRIAL' | 'FREE_INTRO' | 'PAID';
@@ -98,7 +101,7 @@ const StudentSessionsPage: React.FC = () => {
         });
     };
 
-    const tzOpts = { timeZone: studentTimezone } as const;
+    const tzOpts = useMemo(() => ({ timeZone: studentTimezone }) as const, [studentTimezone]);
 
     const formatDateLong = (iso: string) => {
         const d = new Date(iso);
@@ -143,6 +146,97 @@ const StudentSessionsPage: React.FC = () => {
 
     const [payBusyId, setPayBusyId] = useState<string | null>(null);
     const [payError, setPayError] = useState<string>('');
+
+    // Reschedule state
+    const [rescheduleTarget, setRescheduleTarget] = useState<Lesson | null>(null);
+    const [slots, setSlots] = useState<{ start: string; end: string }[]>([]);
+    const [slotsBusy, setSlotsBusy] = useState(false);
+    const [selectedSlot, setSelectedSlot] = useState<string>('');
+    const [rescheduleBusy, setRescheduleBusy] = useState(false);
+    const [rescheduleError, setRescheduleError] = useState<string>('');
+
+    const canReschedule = (l: Lesson) => {
+        if (tab !== 'upcoming') return false;
+        if ((l.status || '').toUpperCase() !== 'BOOKED') return false;
+        if ((l.reschedule_count ?? 0) >= 1) return false;
+        return new Date(l.start_time).getTime() - Date.now() > 24 * 60 * 60 * 1000;
+    };
+
+    const openReschedule = async (l: Lesson) => {
+        if (!l.tutor_id) return;
+        setRescheduleTarget(l);
+        setSelectedSlot('');
+        setRescheduleError('');
+        setSlots([]);
+        setSlotsBusy(true);
+        try {
+            const from = new Date();
+            from.setSeconds(0, 0);
+            const to = new Date(from);
+            to.setDate(to.getDate() + 30);
+            const dur = l.duration || durationMinutes(l.start_time, l.end_time);
+            const res = await api.get(`/availability/tutor/${l.tutor_id}/slots`, {
+                params: {
+                    from: from.toISOString(),
+                    to: to.toISOString(),
+                    durationMinutes: dur,
+                    stepMinutes: dur,
+                },
+            });
+            const fetched: { start: string; end: string }[] = res.data?.slots || [];
+            // Drop the slot identical to the current start so the student must pick a different time
+            setSlots(fetched.filter((s) => new Date(s.start).getTime() !== new Date(l.start_time).getTime()));
+        } catch {
+            setRescheduleError('Could not load available times. Please try again.');
+        } finally {
+            setSlotsBusy(false);
+        }
+    };
+
+    const submitReschedule = async () => {
+        if (!rescheduleTarget || !selectedSlot) return;
+        try {
+            setRescheduleBusy(true);
+            setRescheduleError('');
+            const res = await api.patch(`/lessons/${rescheduleTarget.id}/reschedule`, {
+                newStart: selectedSlot,
+                clientTimezone: studentTimezone,
+            });
+            const updated = res.data?.lesson;
+            if (updated) {
+                setLessons((prev) =>
+                    prev.map((l) =>
+                        l.id === rescheduleTarget.id
+                            ? { ...l, start_time: updated.start_time, end_time: updated.end_time, reschedule_count: updated.reschedule_count }
+                            : l
+                    )
+                );
+            }
+            setRescheduleTarget(null);
+        } catch (e: any) {
+            setRescheduleError(e?.response?.data?.error || 'Unable to reschedule. Please try again.');
+        } finally {
+            setRescheduleBusy(false);
+        }
+    };
+
+    const slotsByDay = useMemo(() => {
+        const groups: { day: string; label: string; items: { start: string; end: string }[] }[] = [];
+        const map = new Map<string, { label: string; items: { start: string; end: string }[] }>();
+        for (const s of slots) {
+            const d = new Date(s.start);
+            const key = d.toLocaleDateString(undefined, { ...tzOpts, year: 'numeric', month: '2-digit', day: '2-digit' });
+            if (!map.has(key)) {
+                map.set(key, {
+                    label: d.toLocaleDateString(undefined, { ...tzOpts, weekday: 'long', month: 'long', day: 'numeric' }),
+                    items: [],
+                });
+            }
+            map.get(key)!.items.push(s);
+        }
+        for (const [day, value] of map) groups.push({ day, ...value });
+        return groups;
+    }, [slots, tzOpts]);
 
     const mapPaymentBadge = (lesson: Lesson) => {
         const billing = (lesson.billing_type || '').toUpperCase();
@@ -307,6 +401,19 @@ const StudentSessionsPage: React.FC = () => {
                                                     </>
                                                 );
                                             })()}
+                                            {canReschedule(l) ? (
+                                                <Button
+                                                    variant="outline"
+                                                    className="flex items-center gap-2"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        openReschedule(l);
+                                                    }}
+                                                >
+                                                    <Clock className="w-4 h-4" />
+                                                    Reschedule
+                                                </Button>
+                                            ) : null}
                                             {l.google_calendar_html_link ? (
                                                 <a href={l.google_calendar_html_link} target="_blank" rel="noreferrer">
                                                     <Button variant="outline">Open in Calendar</Button>
@@ -326,6 +433,75 @@ const StudentSessionsPage: React.FC = () => {
                 title="Error"
             >
                 <p>{joinError || payError}</p>
+            </Modal>
+
+            <Modal
+                isOpen={!!rescheduleTarget}
+                onClose={() => setRescheduleTarget(null)}
+                title="Reschedule Session"
+            >
+                {rescheduleTarget ? (
+                    <div className="space-y-4">
+                        <div className="text-sm text-gray-600">
+                            Current time: <strong>{formatDateLong(rescheduleTarget.start_time)}</strong>,{' '}
+                            {formatTimeOnlyRange(rescheduleTarget.start_time, rescheduleTarget.end_time)}
+                        </div>
+                        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                            A session can only be rescheduled once, and only more than 24 hours before it starts.
+                        </p>
+
+                        {slotsBusy ? (
+                            <div className="text-sm text-gray-600">Loading available times…</div>
+                        ) : slotsByDay.length === 0 ? (
+                            <div className="text-sm text-gray-600">
+                                No open times in the next 30 days. Please check back later.
+                            </div>
+                        ) : (
+                            <div className="max-h-72 overflow-y-auto space-y-4 pr-1">
+                                {slotsByDay.map((group) => (
+                                    <div key={group.day}>
+                                        <div className="text-sm font-semibold text-gray-800 mb-2">{group.label}</div>
+                                        <div className="flex flex-wrap gap-2">
+                                            {group.items.map((s) => {
+                                                const active = selectedSlot === s.start;
+                                                return (
+                                                    <button
+                                                        key={s.start}
+                                                        type="button"
+                                                        onClick={() => setSelectedSlot(s.start)}
+                                                        className={`px-3 py-1.5 rounded-md border text-sm ${
+                                                            active
+                                                                ? 'bg-[#4A1D96] text-white border-[#4A1D96]'
+                                                                : 'bg-white text-gray-700 border-gray-300 hover:border-[#4A1D96]'
+                                                        }`}
+                                                    >
+                                                        {new Date(s.start).toLocaleTimeString(undefined, {
+                                                            ...tzOpts,
+                                                            hour: 'numeric',
+                                                            minute: '2-digit',
+                                                            hour12: true,
+                                                        })}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {rescheduleError ? <p className="text-sm text-red-600">{rescheduleError}</p> : null}
+
+                        <div className="flex justify-end gap-2 pt-2">
+                            <Button variant="outline" onClick={() => setRescheduleTarget(null)} disabled={rescheduleBusy}>
+                                Cancel
+                            </Button>
+                            <Button onClick={submitReschedule} disabled={!selectedSlot || rescheduleBusy}>
+                                {rescheduleBusy ? 'Rescheduling…' : 'Confirm New Time'}
+                            </Button>
+                        </div>
+                    </div>
+                ) : null}
             </Modal>
         </DashboardLayout>
     );

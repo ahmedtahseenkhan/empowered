@@ -417,6 +417,7 @@ model Lesson {
   duration                  Int // in minutes
   status                    LessonStatus      @default(PENDING)
   billing_type              LessonBillingType @default(PAID)
+  reschedule_count          Int               @default(0)
   meeting_link              String?
   google_calendar_event_id  String?           @unique
   google_calendar_html_link String?
@@ -785,6 +786,7 @@ model BetaApplication {
   has_active_clients  Boolean
   biggest_challenge   String                @db.Text
   profile_link        String?
+  referral_source     String                @db.Text
   status              BetaApplicationStatus @default(PENDING)
   actioned_at         DateTime?
   created_at          DateTime              @default(now())
