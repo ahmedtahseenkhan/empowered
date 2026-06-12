@@ -409,10 +409,79 @@ class EmailService {
         studentName: string;
         sessionDate: string;
         sessionTime: string;
+        dashboardUrl?: string;
     }): Promise<void> {
-        const html = this.renderTemplate('mentor/student-payment-received', data);
+        const baseUrl = this.getClientBaseUrl();
+        const html = this.renderTemplate('mentor/student-payment-received', {
+            ...data,
+            dashboardUrl: data.dashboardUrl || `${baseUrl}/dashboard`,
+        });
         await this.sendEmail({
             to: data.mentorEmail,
+            subject: 'Payment Confirmed for Upcoming Session',
+            html,
+        });
+    }
+
+    async sendMentorSessionCancelledUnpaid(data: {
+        mentorName: string;
+        mentorEmail: string;
+        studentName: string;
+        sessionDate: string;
+        sessionTime: string;
+        timezone?: string;
+    }): Promise<void> {
+        const html = this.renderTemplate('mentor/session-cancelled-unpaid', {
+            ...data,
+            year: new Date().getFullYear(),
+        });
+        await this.sendEmail({
+            to: data.mentorEmail,
+            subject: 'Session Cancelled — Payment Not Received',
+            html,
+        });
+    }
+
+    async sendStudentSessionCancelledUnpaid(data: {
+        studentName: string;
+        studentEmail: string;
+        mentorName: string;
+        sessionDate: string;
+        sessionTime: string;
+        amount?: string;
+        dashboardUrl?: string;
+    }): Promise<void> {
+        const baseUrl = this.getClientBaseUrl();
+        const html = this.renderTemplate('student/session-cancelled-unpaid', {
+            ...data,
+            dashboardUrl: data.dashboardUrl || `${baseUrl}/student/sessions`,
+            year: new Date().getFullYear(),
+        });
+        await this.sendEmail({
+            to: data.studentEmail,
+            subject: 'Your Session Has Been Cancelled — Payment Not Received',
+            html,
+        });
+    }
+
+    async sendStudentPaymentReceipt(data: {
+        studentName: string;
+        studentEmail: string;
+        tutorName: string;
+        sessionDate: string;
+        sessionTime: string;
+        amount: string;
+        paymentDate: string;
+        dashboardUrl?: string;
+    }): Promise<void> {
+        const baseUrl = this.getClientBaseUrl();
+        const html = this.renderTemplate('student/payment-receipt', {
+            ...data,
+            dashboardUrl: data.dashboardUrl || `${baseUrl}/student/sessions`,
+            year: new Date().getFullYear(),
+        });
+        await this.sendEmail({
+            to: data.studentEmail,
             subject: 'Payment Confirmed for Upcoming Session',
             html,
         });
@@ -555,12 +624,20 @@ class EmailService {
     async sendWelcomeEmail(data: {
         username: string;
         email: string;
-        loginLink: string;
+        role?: string;
+        loginLink?: string;
+        dashboardUrl?: string;
     }): Promise<void> {
-        const html = this.renderTemplate('welcome', { ...data, year: new Date().getFullYear() });
+        const baseUrl = this.getClientBaseUrl();
+        const template = data.role === 'TUTOR' ? 'mentor/welcome' : 'student/welcome';
+        const html = this.renderTemplate(template, {
+            ...data,
+            dashboardUrl: data.dashboardUrl || `${baseUrl}/dashboard`,
+            year: new Date().getFullYear(),
+        });
         await this.sendEmail({
             to: data.email,
-            subject: 'Welcome to EmpowerEd Learnings!',
+            subject: 'Welcome to EmpowerEd Learnings',
             html,
         });
     }

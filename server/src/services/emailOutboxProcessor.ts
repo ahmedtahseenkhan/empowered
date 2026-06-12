@@ -342,20 +342,14 @@ async function sendOutboxRow(row: OutboxRow) {
         const timeZone = lesson.booking?.client_timezone || lesson.tutor?.timezone || 'UTC';
         const amountDollars = Number(row.payload?.amount || 0).toFixed(2);
 
-        await emailService.sendEmail({
-            to: row.to_email,
-            subject: 'Your session has been cancelled — payment not received',
-            html: `
-<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 24px;color:#222">
-  <h2 style="color:#b91c1c;margin:0 0 16px 0">Session Cancelled</h2>
-  <p style="margin:0 0 12px 0">Hi ${lesson.student?.username || 'there'},</p>
-  <p style="margin:0 0 12px 0">Your session with <strong>${lesson.tutor?.username || 'your mentor'}</strong> scheduled for
-    <strong>${formatDatePart(lesson.start_time, timeZone)} at ${formatTimePart(lesson.start_time, timeZone)}</strong>
-    has been cancelled because the payment of <strong>$${amountDollars}</strong> was not received before the 24-hour deadline.</p>
-  <p style="margin:0 0 24px 0">If you would like to rebook, you can do so from your dashboard.</p>
-  <a href="${clientBase}/student/sessions" style="display:inline-block;background:#4A1D96;color:#fff;text-decoration:none;padding:12px 28px;border-radius:9999px;font-weight:600">Go to My Sessions</a>
-  <p style="margin:32px 0 0 0;color:#999;font-size:12px">— EmpowerEd Learnings</p>
-</div>`,
+        await emailService.sendStudentSessionCancelledUnpaid({
+            studentName: lesson.student?.username || 'Student',
+            studentEmail: row.to_email,
+            mentorName: lesson.tutor?.username || 'Mentor',
+            sessionDate: formatDatePart(lesson.start_time, timeZone),
+            sessionTime: formatTimePart(lesson.start_time, timeZone),
+            amount: `$${amountDollars}`,
+            dashboardUrl: `${clientBase}/student/sessions`,
         });
         return;
     }
@@ -377,20 +371,13 @@ async function sendOutboxRow(row: OutboxRow) {
         const timeZone = lesson.tutor?.timezone || 'UTC';
         const studentName = (row.payload?.studentName as string | undefined) || lesson.student?.username || 'A student';
 
-        await emailService.sendEmail({
-            to: row.to_email,
-            subject: 'Session Cancelled — Payment Not Received',
-            html: `
-<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 24px;color:#222">
-  <h2 style="color:#b91c1c;margin:0 0 16px 0">Session Cancelled — Payment Not Received</h2>
-  <p style="margin:0 0 12px 0">Hi ${lesson.tutor?.username || 'there'},</p>
-  <p style="margin:0 0 12px 0">Your session with <strong>${studentName}</strong>, scheduled for
-    <strong>${formatDatePart(lesson.start_time, timeZone)} at ${formatTimePart(lesson.start_time, timeZone)} (${timeZone})</strong>,
-    has been automatically cancelled because payment was not received at least 24 hours before the session.</p>
-  <p style="margin:0 0 12px 0">This time slot has now been released and is available for other bookings.</p>
-  <p style="margin:0 0 24px 0">No further action is needed from you. If the student still wants to meet, they will need to book a new session and complete payment before the payment deadline.</p>
-  <p style="margin:0;color:#999;font-size:12px">Team EmpowerEd Learnings</p>
-</div>`,
+        await emailService.sendMentorSessionCancelledUnpaid({
+            mentorName: lesson.tutor?.username || 'Mentor',
+            mentorEmail: row.to_email,
+            studentName,
+            sessionDate: formatDatePart(lesson.start_time, timeZone),
+            sessionTime: formatTimePart(lesson.start_time, timeZone),
+            timezone: timeZone,
         });
         return;
     }
@@ -429,20 +416,12 @@ async function sendOutboxRow(row: OutboxRow) {
         const p = row.payload as { tutorName?: string; studentName?: string; lessonStart?: string; amount?: number; timezone?: string };
         const lessonStart = p.lessonStart ? new Date(p.lessonStart) : null;
         const timeZone = p.timezone || 'UTC';
-        const amountDollars = p.amount ? Number(p.amount).toFixed(2) : '0.00';
-        await emailService.sendEmail({
-            to: row.to_email,
-            subject: 'Payment Confirmed for Upcoming Session',
-            html: `
-<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 24px;color:#222">
-  <h2 style="color:#4A1D96;margin:0 0 16px 0">Payment Confirmed for Upcoming Session</h2>
-  <p style="margin:0 0 12px 0">Hi ${p.tutorName || 'there'},</p>
-  <p style="margin:0 0 12px 0">Payment has been successfully received for:</p>
-  <p style="margin:0 0 8px 0">👤 Student: <strong>${p.studentName || 'Student'}</strong></p>
-  ${lessonStart ? `<p style="margin:0 0 8px 0">📅 Session: <strong>${formatDatePart(lessonStart, timeZone)} at ${formatTimePart(lessonStart, timeZone)}</strong></p>` : ''}
-  <p style="margin:0 0 24px 0">The session is fully confirmed.</p>
-  <p style="margin:0;color:#999;font-size:12px">Team EmpowerEd Learnings</p>
-</div>`,
+        await emailService.sendMentorPaymentReceived({
+            mentorName: p.tutorName || 'Mentor',
+            mentorEmail: row.to_email,
+            studentName: p.studentName || 'Student',
+            sessionDate: lessonStart ? formatDatePart(lessonStart, timeZone) : '—',
+            sessionTime: lessonStart ? formatTimePart(lessonStart, timeZone) : '—',
         });
         return;
     }
@@ -503,24 +482,15 @@ async function sendOutboxRow(row: OutboxRow) {
 
     if (row.type === 'STUDENT_PAYMENT_RECEIPT') {
         const p = row.payload as { studentName?: string; tutorName?: string; sessionDate?: string; sessionTime?: string; amount?: string; paymentDate?: string; dashboardUrl?: string };
-        await emailService.sendEmail({
-            to: row.to_email,
-            subject: 'Payment Receipt — EmpowerEd Learnings',
-            html: `
-<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 24px;color:#222">
-  <h2 style="color:#7c3aed;margin:0 0 16px 0">🧾 Payment Receipt</h2>
-  <p style="margin:0 0 12px 0">Hi <strong>${p.studentName || 'there'}</strong>,</p>
-  <p style="margin:0 0 12px 0">Thank you for your payment. Here's your receipt:</p>
-  <div style="background:#f5f3ff;border-radius:8px;padding:16px;margin:0 0 20px 0">
-    <p style="margin:0 0 8px 0;font-size:14px;color:#4c1d95">🧑‍🏫 <strong>Mentor:</strong> ${p.tutorName || '—'}</p>
-    <p style="margin:0 0 8px 0;font-size:14px;color:#4c1d95">📅 <strong>Session Date:</strong> ${p.sessionDate || '—'}</p>
-    <p style="margin:0 0 8px 0;font-size:14px;color:#4c1d95">🕐 <strong>Session Time:</strong> ${p.sessionTime || '—'}</p>
-    <p style="margin:0 0 8px 0;font-size:14px;color:#4c1d95">💰 <strong>Amount Paid:</strong> ${p.amount || '—'}</p>
-    <p style="margin:0;font-size:14px;color:#4c1d95">🗓️ <strong>Payment Date:</strong> ${p.paymentDate || '—'}</p>
-  </div>
-  <p style="margin:0 0 24px 0">Your session is confirmed. We'll send you a reminder before it starts. See you soon!</p>
-  <p style="margin:0;color:#999;font-size:12px">Please keep this email as your receipt. Team EmpowerEd Learnings</p>
-</div>`,
+        await emailService.sendStudentPaymentReceipt({
+            studentName: p.studentName || 'Student',
+            studentEmail: row.to_email,
+            tutorName: p.tutorName || 'Mentor',
+            sessionDate: p.sessionDate || '—',
+            sessionTime: p.sessionTime || '—',
+            amount: p.amount || '—',
+            paymentDate: p.paymentDate || '—',
+            dashboardUrl: p.dashboardUrl,
         });
         return;
     }

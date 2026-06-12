@@ -24,7 +24,29 @@ type PublicTutor = {
     review_count: number;
     tier: string;
     is_verified: boolean;
-    categories: { category: { id: string; name: string } }[];
+    categories: {
+        category: {
+            id: string;
+            name: string;
+            parent?: { id: string; name: string; parent?: { id: string; name: string } | null } | null;
+        };
+    }[];
+};
+
+// Mentors are tagged with leaf "area of expertise" categories. On cards we show the
+// top-level (main) category instead — e.g. "Life Coaching" rather than its leaves.
+const getMainCategories = (categories: Mentor['categories']): { id: string; name: string }[] => {
+    const seen = new Set<string>();
+    const result: { id: string; name: string }[] = [];
+    for (const c of categories || []) {
+        let node: { id: string; name: string; parent?: { id: string; name: string; parent?: any } | null } = c.category;
+        while (node?.parent) node = node.parent;
+        if (node && !seen.has(node.id)) {
+            seen.add(node.id);
+            result.push({ id: node.id, name: node.name });
+        }
+    }
+    return result;
 };
 
 const StudentMentorResultsPage: React.FC = () => {
@@ -342,9 +364,9 @@ const StudentMentorResultsPage: React.FC = () => {
                             </div>
 
                             <div className="mt-4 flex flex-wrap gap-2">
-                                {m.categories?.slice(0, 3).map((c) => (
-                                    <span key={c.category.id} className="text-xs bg-purple-50 text-purple-700 border border-purple-100 px-2 py-1 rounded-full">
-                                        {c.category.name}
+                                {getMainCategories(m.categories).slice(0, 3).map((c) => (
+                                    <span key={c.id} className="text-xs bg-purple-50 text-purple-700 border border-purple-100 px-2 py-1 rounded-full">
+                                        {c.name}
                                     </span>
                                 ))}
                             </div>

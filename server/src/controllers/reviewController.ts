@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import prisma from '../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
+import { recalculateTutorReviewStats } from '../utils/reviewStats';
 
 // Create a Review
 export const createReview = async (req: AuthRequest, res: Response) => {
@@ -57,20 +58,8 @@ export const createReview = async (req: AuthRequest, res: Response) => {
             }
         });
 
-        // Update Tutor Stats (Rating & Review Count)
-        const aggregations = await prisma.review.aggregate({
-            where: { tutor_id: tutorId },
-            _avg: { rating: true },
-            _count: { rating: true }
-        });
-
-        await prisma.tutorProfile.update({
-            where: { id: tutorId },
-            data: {
-                rating: aggregations._avg.rating || 0,
-                review_count: aggregations._count.rating || 0
-            }
-        });
+        // Recalculate the tutor's denormalized rating + review_count from real rows.
+        await recalculateTutorReviewStats(tutorId);
 
         res.status(201).json({ review });
     } catch (error) {

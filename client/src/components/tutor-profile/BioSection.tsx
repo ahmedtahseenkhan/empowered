@@ -17,6 +17,10 @@ export const BioSection: React.FC<BioSectionProps> = ({ onBack }) => {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
+    // Track whether the user picked a NEW photo this session. The existing photo is
+    // stored as a large base64 data URL, so re-sending it on every text-only edit can
+    // exceed the server body limit (413) and fail the save. Only send it when changed.
+    const [photoChanged, setPhotoChanged] = useState(false);
 
     const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -54,6 +58,7 @@ export const BioSection: React.FC<BioSectionProps> = ({ onBack }) => {
         reader.onloadend = () => {
             const result = reader.result as string;
             setProfilePhoto(result);
+            setPhotoChanged(true);
         };
         reader.readAsDataURL(file);
     };
@@ -61,14 +66,27 @@ export const BioSection: React.FC<BioSectionProps> = ({ onBack }) => {
     const handleSave = async () => {
         setSaving(true);
         try {
-            await api.put('/tutor/me/bio', {
-                ...formData,
-                profile_photo: profilePhoto,
-            });
+            const payload: Record<string, unknown> = { ...formData };
+
+            // Only touch the photo when the user picked a new one. Upload it as a real
+            // file first and store just the returned URL — never the raw base64 blob,
+            // which bloats the DB and can exceed the request body limit on later saves.
+            if (photoChanged && profilePhoto?.startsWith('data:')) {
+                const uploadRes = await api.post('/uploads/image', { dataUrl: profilePhoto });
+                payload.profile_photo = uploadRes.data.url;
+            }
+
+            await api.put('/tutor/me/bio', payload);
             onBack();
-        } catch (err) {
+        } catch (err: any) {
             console.error("Failed to save profile", err);
-            alert("Failed to save changes. Please try again.");
+            const status = err?.response?.status;
+            const serverMsg = err?.response?.data?.error as string | undefined;
+            alert(
+                status === 413 || /too large/i.test(serverMsg || '')
+                    ? "Your profile photo is too large. Please choose a smaller image (under 5MB)."
+                    : (serverMsg || "Failed to save changes. Please try again.")
+            );
         } finally {
             setSaving(false);
         }

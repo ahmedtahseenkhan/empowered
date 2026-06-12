@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>We Missed You!</title>
+    <title>Session Cancelled — Payment Not Received</title>
 </head>
 
 <body style="margin: 0; padding: 0; font-family: 'Arial', sans-serif; background-color: #f4f4f4;">
@@ -15,9 +15,8 @@
                     style="background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
                     <!-- Header -->
                     <tr>
-                        <td
-                            style="background: linear-gradient(135deg, #ef5350 0%, #d32f2f 100%); padding: 40px 30px; text-align: center;">
-                            <h1 style="color: #ffffff; margin: 0; font-size: 28px;">We Missed You</h1>
+                        <td style="background: #b91c1c; padding: 30px; text-align: center;">
+                            <h1 style="color: #ffffff; margin: 0; font-size: 22px;">Session Cancelled — Payment Not Received</h1>
                         </td>
                     </tr>
 
@@ -25,21 +24,26 @@
                     <tr>
                         <td style="padding: 40px 30px;">
                             <p style="font-size: 16px; color: #333333; line-height: 1.6; margin: 0 0 20px;">
-                                Hi <strong>{{mentorName}}</strong>,
+                                Hi <strong>{{studentName}}</strong>,
                             </p>
                             <p style="font-size: 16px; color: #333333; line-height: 1.6; margin: 0 0 20px;">
-                                We noticed you were unable to attend your scheduled demo.
+                                Your session with <strong>{{mentorName}}</strong>, scheduled for
+                                <strong>{{sessionDate}} at {{sessionTime}}</strong>,
+                                has been cancelled because the payment{{#if amount}} of <strong>{{amount}}</strong>{{/if}} was not received before the 24-hour deadline.
                             </p>
                             <p style="font-size: 16px; color: #333333; line-height: 1.6; margin: 0 0 20px;">
-                                If you'd still like to explore the platform, you can reschedule below.
+                                If you'd still like to meet, you can book a new session from your dashboard.
+                            </p>
+                            <p style="font-size: 14px; color: #333333; line-height: 1.6; margin: 0 0 20px;">
+                                To view or manage your sessions, please go to your dashboard.
                             </p>
 
                             <!-- CTA Button -->
                             <table width="100%" cellpadding="0" cellspacing="0" style="margin: 30px 0;">
                                 <tr>
                                     <td align="center">
-                                        <a href="{{rescheduleLink}}"
-                                            style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; text-decoration: none; padding: 15px 40px; border-radius: 6px; font-size: 16px; font-weight: bold;">Reschedule</a>
+                                        <a href="{{dashboardUrl}}"
+                                            style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; text-decoration: none; padding: 15px 40px; border-radius: 6px; font-size: 16px; font-weight: bold;">Go to Dashboard</a>
                                     </td>
                                 </tr>
                             </table>
@@ -52,14 +56,12 @@
 
                     <!-- Footer -->
                     <tr>
-                        <td
-                            style="background-color: #f8f9fa; padding: 30px; text-align: center; border-top: 1px solid #e0e0e0;">
+                        <td style="background-color: #f8f9fa; padding: 30px; text-align: center; border-top: 1px solid #e0e0e0;">
                             <p style="margin: 0 0 10px; font-size: 14px; color: #666;">
-                                Best,<br>
                                 <strong>Team EmpowerEd Learnings</strong>
                             </p>
                             <p style="margin: 10px 0 0; font-size: 12px; color: #999;">
-                                © 2026 EmpowerEd Learnings. All rights reserved.
+                                © {{year}} EmpowerEd Learnings. All rights reserved.
                             </p>
                         </td>
                     </tr>

@@ -154,7 +154,21 @@ export const listPublicTutors = async (req: Request, res: Response) => {
             total_students: true,
             student_levels: true,
             categories: {
-                include: { category: true }
+                select: {
+                    category: {
+                        select: {
+                            id: true,
+                            name: true,
+                            parent: {
+                                select: {
+                                    id: true,
+                                    name: true,
+                                    parent: { select: { id: true, name: true } },
+                                },
+                            },
+                        },
+                    },
+                },
             },
         } as const;
 
@@ -185,7 +199,27 @@ export const listPublicTutors = async (req: Request, res: Response) => {
             });
         }
 
-        res.json({ mentors });
+        // total_students is denormalized and not maintained, so compute it live:
+        // distinct students who have a non-cancelled lesson with each tutor.
+        const tutorIds = mentors.map((m) => m.id);
+        const studentCountByTutor: Record<string, number> = {};
+        if (tutorIds.length > 0) {
+            const pairs = await prisma.lesson.findMany({
+                where: { tutor_id: { in: tutorIds }, status: { not: 'CANCELLED' } },
+                distinct: ['tutor_id', 'student_id'],
+                select: { tutor_id: true },
+            });
+            for (const p of pairs) {
+                studentCountByTutor[p.tutor_id] = (studentCountByTutor[p.tutor_id] || 0) + 1;
+            }
+        }
+
+        const mentorsWithCounts = mentors.map((m) => ({
+            ...m,
+            total_students: studentCountByTutor[m.id] || 0,
+        }));
+
+        res.json({ mentors: mentorsWithCounts });
     } catch (error) {
         console.error('List Public Tutors Error:', error);
         res.status(500).json({ error: 'Server error' });
@@ -308,8 +342,17 @@ export const getPublicTutorById = async (req: Request, res: Response) => {
 
         if (!mentor) return res.status(404).json({ error: 'Tutor not found' });
 
+        // total_students is denormalized and not maintained, so compute it live:
+        // distinct students who have a non-cancelled lesson with this tutor.
+        const studentPairs = await prisma.lesson.findMany({
+            where: { tutor_id: id, status: { not: 'CANCELLED' } },
+            distinct: ['student_id'],
+            select: { student_id: true },
+        });
+        const totalStudents = studentPairs.length;
+
         const { marketing_video_submission, ...rest } = mentor as any;
-        res.json({ mentor: { ...rest, marketing_video_url: marketing_video_submission?.video_url ?? null } });
+        res.json({ mentor: { ...rest, total_students: totalStudents, marketing_video_url: marketing_video_submission?.video_url ?? null } });
     } catch (error) {
         console.error('Get Public Tutor Error:', error);
         res.status(500).json({ error: 'Server error' });

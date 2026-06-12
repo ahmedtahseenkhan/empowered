@@ -434,7 +434,9 @@ export const verifyEmailCode = async (req: Request, res: Response) => {
             await emailService.sendWelcomeEmail({
                 username: username || 'User',
                 email: user.email,
+                role: user.role,
                 loginLink: `${baseUrl}/login`,
+                dashboardUrl: `${baseUrl}/dashboard`,
             });
         } catch (_e) { /* non-fatal */ }
 

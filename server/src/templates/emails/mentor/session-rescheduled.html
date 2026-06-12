@@ -25,7 +25,7 @@
                                 Hi <strong>{{mentorName}}</strong>,
                             </p>
                             <p style="font-size: 16px; color: #4b5563; line-height: 1.6; margin: 0 0 24px;">
-                                <strong>{{studentName}}</strong> moved their session with you to a new time. Your calendar has already been updated.
+                                <strong>{{studentName}}</strong> has rescheduled an existing session with you based on your available calendar slots. Your calendar has already been updated.
                             </p>
 
                             <table width="100%" cellpadding="0" cellspacing="0" style="margin: 0 0 24px;">
@@ -46,13 +46,17 @@
                                 </tr>
                             </table>
 
+                            <p style="font-size: 15px; color: #4b5563; line-height: 1.6; margin: 0 0 24px;">
+                                Please go to your dashboard to check the updated session details.
+                            </p>
+
                             <table width="100%" cellpadding="0" cellspacing="0" style="margin: 0 0 8px;">
                                 <tr>
                                     <td align="center">
                                         {{#if meetingLink}}<a href="{{meetingLink}}"
-                                            style="display: inline-block; background: linear-gradient(135deg, #4A1D96 0%, #7C3AED 100%); color: #ffffff; text-decoration: none; padding: 13px 32px; border-radius: 8px; font-size: 15px; font-weight: 600; margin: 0 6px 8px;">Join Link</a>{{/if}}
+                                            style="display: inline-block; background: #ffffff; color: #4A1D96; border: 1px solid #ddd6fe; text-decoration: none; padding: 13px 32px; border-radius: 8px; font-size: 15px; font-weight: 600; margin: 0 6px 8px;">Join Link</a>{{/if}}
                                         <a href="{{dashboardUrl}}"
-                                            style="display: inline-block; background: #ffffff; color: #4A1D96; border: 1px solid #ddd6fe; text-decoration: none; padding: 13px 32px; border-radius: 8px; font-size: 15px; font-weight: 600; margin: 0 6px 8px;">View Session</a>
+                                            style="display: inline-block; background: linear-gradient(135deg, #4A1D96 0%, #7C3AED 100%); color: #ffffff; text-decoration: none; padding: 13px 32px; border-radius: 8px; font-size: 15px; font-weight: 600; margin: 0 6px 8px;">Go to Dashboard</a>
                                     </td>
                                 </tr>
                             </table>

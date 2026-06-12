@@ -210,7 +210,7 @@ export async function handleCheckoutSessionCompleted(session: any) {
                         tutorName,
                         sessionDate,
                         sessionTime,
-                        amount: `£${Number(updatedSchedule.amount).toFixed(2)}`,
+                        amount: `$${Number(updatedSchedule.amount).toFixed(2)}`,
                         paymentDate: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
                         dashboardUrl: `${process.env.CLIENT_URL || 'https://empoweredlearnings.com'}/sessions`,
                     },

@@ -12,6 +12,9 @@ model TutorTimeBlock {
   reason     String?
 
   created_at DateTime @default(now())
+
+  @@index([tutor_id])
+  @@index([tutor_id, start_time])
 }
 
 datasource db {
@@ -85,6 +88,8 @@ model User {
   email_verification_codes EmailVerificationCode[]
 
   support_tickets SupportTicket[]
+
+  @@index([role])
 }
 
 model StudentProfile {
@@ -115,6 +120,8 @@ model StudentProfile {
   homework_tasks HomeworkTask[]
 
   homework_submissions HomeworkSubmission[]
+
+  @@index([stripe_customer_id])
 }
 
 model TutorProfile {
@@ -177,6 +184,11 @@ model TutorProfile {
 
   marketing_video_submission TutorMarketingVideoSubmission?
   whiteboards                Whiteboard[]
+
+  @@index([stripe_subscription_id])
+  @@index([stripe_customer_id])
+  @@index([stripe_account_id])
+  @@index([is_verified])
 }
 
 model Whiteboard {
@@ -189,6 +201,8 @@ model Whiteboard {
   scene_data Json
   created_at DateTime     @default(now())
   updated_at DateTime     @updatedAt
+
+  @@index([tutor_id])
 }
 
 model AdminProfile {
@@ -274,6 +288,9 @@ model OAuthState {
   tutor      TutorProfile @relation(fields: [tutor_id], references: [id])
   expires_at DateTime
   created_at DateTime     @default(now())
+
+  @@index([tutor_id])
+  @@index([expires_at])
 }
 
 model EmailOutbox {
@@ -288,6 +305,10 @@ model EmailOutbox {
   idempotency_key String?   @unique
   created_at      DateTime  @default(now())
   sent_at         DateTime?
+
+  // Processor polls: status IN (...) AND (next_retry_at IS NULL OR <= now) ORDER BY created_at
+  @@index([status, next_retry_at])
+  @@index([status, created_at])
 }
 
 model TutorExternalReview {
@@ -308,9 +329,12 @@ model TutorExternalReview {
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
+
+  @@index([tutor_id])
+  @@index([verification_status])
 }
 
-// ... existing TutorEducation, TutorExperience, TutorCertification, TutorLanguage ... 
+// ... existing TutorEducation, TutorExperience, TutorCertification, TutorLanguage ...
 // (Assuming these are unchanged, but I need to include them or use replace chunks carefully if I don't want to overwrite them. 
 // Since I'm using replace_file_content with a large range, I must include EVERYTHING in the range.)
 
@@ -322,6 +346,8 @@ model TutorEducation {
   degree         String
   field_of_study String
   year           Int
+
+  @@index([tutor_id])
 }
 
 model TutorExperience {
@@ -333,6 +359,8 @@ model TutorExperience {
   start_year  Int
   end_year    Int?
   description String?
+
+  @@index([tutor_id])
 }
 
 model TutorCertification {
@@ -351,6 +379,9 @@ model TutorCertification {
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
+
+  @@index([tutor_id])
+  @@index([verification_status])
 }
 
 model TutorLanguage {
@@ -359,6 +390,8 @@ model TutorLanguage {
   tutor       TutorProfile @relation(fields: [tutor_id], references: [id])
   language    String
   proficiency String
+
+  @@index([tutor_id])
 }
 
 model Category {
@@ -369,6 +402,8 @@ model Category {
   children  Category[] @relation("CategoryHierarchy")
 
   tutors TutorCategory[]
+
+  @@index([parent_id])
 }
 
 model TutorCategory {
@@ -378,6 +413,7 @@ model TutorCategory {
   category    Category     @relation(fields: [category_id], references: [id])
 
   @@id([tutor_id, category_id])
+  @@index([category_id])
 }
 
 model Booking {
@@ -401,6 +437,10 @@ model Booking {
 
   lessons          Lesson[]
   payment_schedule PaymentSchedule[]
+
+  @@index([student_id])
+  @@index([tutor_id])
+  @@index([status])
 }
 
 model Lesson {
@@ -430,6 +470,13 @@ model Lesson {
 
   progress_notes ProgressNote[]
   whiteboard     Whiteboard?
+
+  @@index([tutor_id])
+  @@index([student_id])
+  @@index([booking_id])
+  @@index([start_time])
+  // Scheduler scans lessons by status within a start_time window (reminders, auto-cancel)
+  @@index([status, start_time])
 }
 
 model PaymentSchedule {
@@ -443,6 +490,11 @@ model PaymentSchedule {
   stripe_pi_id String? // PaymentIntent ID
 
   created_at DateTime @default(now())
+
+  @@index([booking_id])
+  @@index([stripe_pi_id])
+  // Scheduler/reconcile filters by status + due_date window
+  @@index([status, due_date])
 }
 
 model Availability {
@@ -452,6 +504,8 @@ model Availability {
   day_of_week Int // 0=Sunday
   start_time  String // "09:00"
   end_time    String // "17:00"
+
+  @@index([tutor_id])
 }
 
 model FreeSessionAvailability {
@@ -461,6 +515,8 @@ model FreeSessionAvailability {
   day_of_week Int // 0=Sunday
   start_time  String // "09:00"
   end_time    String // "17:00"
+
+  @@index([tutor_id])
 }
 
 enum CourseStatus {
@@ -500,6 +556,9 @@ model Course {
 
   // Relations
   purchases CoursePurchase[]
+
+  @@index([tutor_id])
+  @@index([status])
 }
 
 model CoursePurchase {
@@ -518,6 +577,7 @@ model CoursePurchase {
   access_granted Boolean  @default(true)
 
   @@unique([course_id, student_id])
+  @@index([student_id])
 }
 
 model Review {
@@ -533,6 +593,9 @@ model Review {
   comment     String?
   is_verified Boolean  @default(false)
   created_at  DateTime @default(now())
+
+  @@index([tutor_id])
+  @@index([student_id])
 }
 
 model Subscription {
@@ -549,6 +612,10 @@ model Subscription {
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
+
+  @@index([student_id])
+  @@index([tutor_id])
+  @@index([stripe_sub_id])
 }
 
 model StudentTutorStatus {
@@ -561,6 +628,7 @@ model StudentTutorStatus {
   status          String
 
   @@id([student_id, tutor_id])
+  @@index([tutor_id])
 }
 
 enum NoteVisibility {
@@ -598,6 +666,7 @@ model ProgressNote {
   created_at DateTime @default(now())
 
   @@index([tutor_id, student_id])
+  @@index([lesson_id])
 }
 
 model HomeworkTask {
@@ -690,6 +759,9 @@ model SupportTicket {
   updated_at DateTime @updatedAt
 
   admin_replies AdminReply[]
+
+  @@index([user_id])
+  @@index([status])
 }
 
 model AdminReply {
@@ -699,6 +771,8 @@ model AdminReply {
 
   message String   @db.Text
   sent_at DateTime @default(now())
+
+  @@index([ticket_id])
 }
 
 enum CreditTransactionType {
