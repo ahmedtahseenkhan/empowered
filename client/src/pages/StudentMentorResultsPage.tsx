@@ -35,7 +35,7 @@ type PublicTutor = {
 
 // Mentors are tagged with leaf "area of expertise" categories. On cards we show the
 // top-level (main) category instead — e.g. "Life Coaching" rather than its leaves.
-const getMainCategories = (categories: Mentor['categories']): { id: string; name: string }[] => {
+const getMainCategories = (categories: PublicTutor['categories']): { id: string; name: string }[] => {
     const seen = new Set<string>();
     const result: { id: string; name: string }[] = [];
     for (const c of categories || []) {
