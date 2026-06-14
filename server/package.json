@@ -13,7 +13,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "seed:categories": "ts-node prisma/seedCategories.ts",
     "recalc:reviews": "ts-node scripts/recalc-review-stats.ts",
-    "migrate:photos": "ts-node scripts/migrate-photos-to-files.ts"
+    "migrate:photos": "ts-node scripts/migrate-photos-to-files.ts",
+    "clear:photos": "ts-node scripts/clear-photos.ts"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

@@ -50,14 +50,49 @@ export const BioSection: React.FC<BioSectionProps> = ({ onBack }) => {
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
+    // Downscale + recompress to a small JPEG before upload. Profile photos only need
+    // to render at avatar size, so we cap the largest dimension and use JPEG quality
+    // to keep files ~100-300 KB instead of multi-MB originals.
+    const resizeImage = (dataUrl: string, maxDim = 600, quality = 0.82): Promise<string> =>
+        new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => {
+                let { width, height } = img;
+                if (width > height && width > maxDim) {
+                    height = Math.round((height * maxDim) / width);
+                    width = maxDim;
+                } else if (height >= width && height > maxDim) {
+                    width = Math.round((width * maxDim) / height);
+                    height = maxDim;
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) {
+                    resolve(dataUrl); // fall back to original if canvas unavailable
+                    return;
+                }
+                ctx.drawImage(img, 0, 0, width, height);
+                resolve(canvas.toDataURL('image/jpeg', quality));
+            };
+            img.onerror = () => reject(new Error('Could not read the selected image.'));
+            img.src = dataUrl;
+        });
+
     const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
         const reader = new FileReader();
-        reader.onloadend = () => {
+        reader.onloadend = async () => {
             const result = reader.result as string;
-            setProfilePhoto(result);
+            try {
+                const resized = await resizeImage(result);
+                setProfilePhoto(resized);
+            } catch {
+                setProfilePhoto(result); // worst case, upload the original
+            }
             setPhotoChanged(true);
         };
         reader.readAsDataURL(file);
