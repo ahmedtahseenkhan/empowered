@@ -84,6 +84,17 @@ app.use('/api/reviews', reviewRoutes);
 app.use('/api/progress', progressRoutes);
 
 app.use('/api/uploads', uploadRoutes);
+// Also serve uploaded files under the /api prefix so they're reachable through the
+// same proxy path as the API (a bare /uploads path is often not proxied to the
+// backend). The router above only handles POST routes; GETs fall through to here.
+// Images are served inline (validated by magic bytes on upload) so <img> renders.
+app.use('/api/uploads', express.static(path.join(process.cwd(), 'uploads'), {
+    setHeaders: (res) => {
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('Content-Disposition', 'inline');
+        res.setHeader('Content-Security-Policy', "default-src 'none'");
+    },
+}));
 app.use('/api/admin', adminRoutes);
 app.use('/api/demo', demoRoutes);
 app.use('/api/payments', paymentRoutes);

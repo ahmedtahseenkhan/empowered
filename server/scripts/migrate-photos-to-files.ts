@@ -45,14 +45,19 @@ const writeDataUrlToFile = (dataUrl: string, prefix: string): string | null => {
     const ext = extForMime(parsed.mimeType);
     const storedName = `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}${ext}`;
     fs.writeFileSync(path.join(UPLOADS_DIR, storedName), buffer);
-    return `/uploads/${encodeURIComponent(storedName)}`;
+    return `/api/uploads/${encodeURIComponent(storedName)}`;
 };
 
-// Turn an absolute upload URL (any scheme/host) into a root-relative /uploads/... path.
-const toRelativeUploadUrl = (value: string): string | null => {
-    const idx = value.indexOf('/uploads/');
-    if (idx <= 0) return null; // not absolute, or already relative (idx === 0)
-    return value.slice(idx);
+// Normalize any upload reference to the proxied, root-relative /api/uploads/<file>.
+// Handles absolute URLs (http://host/uploads/x, https://ip/api/uploads/x) and the
+// older bare-relative /uploads/x form.
+const toApiUploadUrl = (value: string): string | null => {
+    const marker = '/uploads/';
+    const idx = value.indexOf(marker);
+    if (idx < 0) return null;
+    const file = value.slice(idx + marker.length);
+    const next = `/api/uploads/${file}`;
+    return next === value ? null : next;
 };
 
 async function migrateModel(
@@ -74,8 +79,9 @@ async function migrateModel(
                 console.warn(`  ! ${label} ${row.id}: could not parse data URL, skipped.`);
                 continue;
             }
-        } else if (/^https?:\/\//i.test(photo)) {
-            nextUrl = toRelativeUploadUrl(photo); // absolute upload URL -> relative
+        } else {
+            // Absolute URL or older /uploads/ path -> proxied /api/uploads/ path.
+            nextUrl = toApiUploadUrl(photo);
         }
 
         if (!nextUrl || nextUrl === photo) continue;
