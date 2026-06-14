@@ -16,6 +16,7 @@ type CategoryNode = {
 type PublicTutor = {
     id: string;
     username: string;
+    profile_photo: string | null;
     tagline: string | null;
     about: string | null;
     hourly_rate: number;
@@ -347,8 +348,22 @@ const StudentMentorResultsPage: React.FC = () => {
                     {mentors.map((m) => (
                         <Card key={m.id} className="p-6">
                             <div className="flex items-start justify-between gap-4">
-                                <div>
-                                    <div className="flex items-center gap-2">
+                                <div className="flex items-start gap-3">
+                                    {m.profile_photo ? (
+                                        <img
+                                            loading="lazy"
+                                            decoding="async"
+                                            src={m.profile_photo}
+                                            alt={m.username}
+                                            className="w-12 h-12 rounded-full object-cover border border-gray-200 flex-shrink-0"
+                                        />
+                                    ) : (
+                                        <div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center text-base font-bold text-purple-700 flex-shrink-0">
+                                            {m.username?.charAt(0)?.toUpperCase()}
+                                        </div>
+                                    )}
+                                    <div>
+                                    <div className="flex items-center gap-2 flex-wrap">
                                         <h3 className="text-lg font-bold text-gray-900">{m.username}</h3>
                                         {m.is_verified && (
                                             <span className="text-[10px] bg-green-50 text-green-700 border border-green-200 px-2 py-0.5 rounded-full">Verified</span>
@@ -356,6 +371,7 @@ const StudentMentorResultsPage: React.FC = () => {
                                         <span className="text-[10px] bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">{m.tier}</span>
                                     </div>
                                     {m.tagline && <p className="text-sm text-gray-600 mt-1">{m.tagline}</p>}
+                                    </div>
                                 </div>
                                 <div className="text-right">
                                     <div className="text-sm text-gray-500">50-min rate</div>

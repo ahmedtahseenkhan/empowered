@@ -16,6 +16,7 @@ type CategoryNode = {
 type PublicTutor = {
     id: string;
     username: string;
+    profile_photo: string | null;
     tagline: string | null;
     about: string | null;
     hourly_rate: number;
@@ -399,9 +400,19 @@ const MentorResultsPage: React.FC = () => {
                                             <div className="p-5">
                                                 <div className="flex items-start gap-4">
                                                     {/* Avatar */}
-                                                    <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary-700 to-secondary-500 flex items-center justify-center text-white text-lg font-extrabold flex-shrink-0">
-                                                        {initials}
-                                                    </div>
+                                                    {m.profile_photo ? (
+                                                        <img
+                                                            loading="lazy"
+                                                            decoding="async"
+                                                            src={m.profile_photo}
+                                                            alt={m.username}
+                                                            className="w-14 h-14 rounded-full object-cover border border-gray-200 flex-shrink-0"
+                                                        />
+                                                    ) : (
+                                                        <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary-700 to-secondary-500 flex items-center justify-center text-white text-lg font-extrabold flex-shrink-0">
+                                                            {initials}
+                                                        </div>
+                                                    )}
                                                     <div className="flex-1 min-w-0">
                                                         <div className="flex flex-wrap items-center gap-1.5">
                                                             <h3 className="text-base font-bold text-gray-900">{m.username}</h3>

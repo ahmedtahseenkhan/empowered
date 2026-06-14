@@ -10,6 +10,7 @@ import { Award } from 'lucide-react';
 type PublicTutorProfile = {
     id: string;
     username: string;
+    profile_photo: string | null;
     tagline: string | null;
     about: string | null;
     hourly_rate: number;
@@ -397,8 +398,22 @@ const StudentMentorPublicProfilePage: React.FC = () => {
                         <div className="rounded-2xl overflow-hidden mb-8 border border-purple-100">
                             <div className="bg-gradient-to-r from-purple-700 to-purple-600 px-6 py-7">
                                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                                    <div>
-                                        <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-4">
+                                        {mentor.profile_photo ? (
+                                            <img
+                                                loading="lazy"
+                                                decoding="async"
+                                                src={mentor.profile_photo}
+                                                alt={mentor.username}
+                                                className="w-16 h-16 md:w-20 md:h-20 rounded-full object-cover border-2 border-white/40 shadow-sm flex-shrink-0"
+                                            />
+                                        ) : (
+                                            <div className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-white/20 border-2 border-white/40 flex items-center justify-center text-2xl font-extrabold text-white flex-shrink-0">
+                                                {mentor.username?.charAt(0)?.toUpperCase()}
+                                            </div>
+                                        )}
+                                        <div>
+                                        <div className="flex items-center gap-2 flex-wrap">
                                             <h1 className="text-2xl md:text-3xl font-extrabold text-white">{mentor.username}</h1>
                                             {mentor.is_verified && (
                                                 <span className="text-[10px] bg-white/20 text-white border border-white/30 px-2 py-0.5 rounded-full">Verified</span>
@@ -412,6 +427,7 @@ const StudentMentorPublicProfilePage: React.FC = () => {
                                         </div>
                                         {mentor.tagline && <div className="text-purple-50 mt-2">{mentor.tagline}</div>}
                                         <div className="text-sm text-purple-100 mt-1">{mentor.country || 'Remote'} • Tutor timezone: {mentor.timezone}</div>
+                                        </div>
                                     </div>
 
                                     <div className="flex flex-wrap gap-3">

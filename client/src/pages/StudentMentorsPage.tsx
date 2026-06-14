@@ -8,6 +8,7 @@ interface MyMentor {
     tutor: {
         id: string;
         username: string;
+        profile_photo: string | null;
         tagline: string | null;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         hourly_rate: any;
@@ -118,7 +119,7 @@ const StudentMentorsPage: React.FC = () => {
                                         id: m.tutor.id,
                                         name: m.tutor.username,
                                         username: m.tutor.username,
-                                        profilePhoto: undefined, // Add if API returns it
+                                        profilePhoto: m.tutor.profile_photo || undefined,
                                         isVerified: m.tutor.is_verified,
                                         enrolledDate: formatDate(m.lastSessionStart) || 'Recent',
                                         totalSessions: m.totalLessons,

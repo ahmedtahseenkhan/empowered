@@ -23,6 +23,7 @@ export const getMyMentors = async (req: AuthRequest, res: Response) => {
                     select: {
                         id: true,
                         username: true,
+                        profile_photo: true,
                         tagline: true,
                         hourly_rate: true,
                         rating: true,
@@ -49,6 +50,7 @@ export const getMyMentors = async (req: AuthRequest, res: Response) => {
                 tutor: {
                     id: string;
                     username: string;
+                    profile_photo: string | null;
                     tagline: string | null;
                     hourly_rate: any;
                     rating: number | null;
