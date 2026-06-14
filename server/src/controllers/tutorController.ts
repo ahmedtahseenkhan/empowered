@@ -217,6 +217,10 @@ export const listPublicTutors = async (req: Request, res: Response) => {
         const mentorsWithCounts = mentors.map((m) => ({
             ...m,
             total_students: studentCountByTutor[m.id] || 0,
+            // Never ship inline base64 photos in the list: a single legacy data-URL
+            // can be many MB and balloons the whole payload. Only return real URLs.
+            // (Run `npm run migrate:photos` to convert legacy base64 photos to files.)
+            profile_photo: m.profile_photo?.startsWith('data:') ? null : m.profile_photo,
         }));
 
         res.json({ mentors: mentorsWithCounts });
