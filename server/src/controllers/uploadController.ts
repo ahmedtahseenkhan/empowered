@@ -110,7 +110,10 @@ export const uploadBase64Image = async (req: AuthRequest, res: Response) => {
         const storedPath = path.join(UPLOADS_DIR, storedName);
         fs.writeFileSync(storedPath, buffer);
 
-        const url = `${req.protocol}://${req.get('host')}/uploads/${encodeURIComponent(storedName)}`;
+        // Root-relative so it inherits the page's scheme/host. Absolute URLs broke
+        // here: behind TLS-terminating proxies req.protocol is http (mixed content),
+        // and /uploads is served from the same origin as the app anyway.
+        const url = `/uploads/${encodeURIComponent(storedName)}`;
         return res.status(201).json({ url, mime_type: rule.mime, size });
     } catch (e) {
         console.error('uploadBase64Image error:', e);
@@ -161,7 +164,10 @@ export const uploadBase64File = async (req: AuthRequest, res: Response) => {
 
         fs.writeFileSync(storedPath, buffer);
 
-        const url = `${req.protocol}://${req.get('host')}/uploads/${encodeURIComponent(storedName)}`;
+        // Root-relative so it inherits the page's scheme/host. Absolute URLs broke
+        // here: behind TLS-terminating proxies req.protocol is http (mixed content),
+        // and /uploads is served from the same origin as the app anyway.
+        const url = `/uploads/${encodeURIComponent(storedName)}`;
 
         return res.status(201).json({
             attachment: {

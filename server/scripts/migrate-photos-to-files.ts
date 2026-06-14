@@ -5,12 +5,13 @@
  * Older profile photos were stored inline as multi-MB base64 strings, which
  * bloats API payloads (the mentor list could hit 10+ MB and time out).
  *
+ * It also normalizes any existing ABSOLUTE upload URLs (e.g. http://host/uploads/x
+ * or https://1.2.3.4/uploads/x) down to root-relative /uploads/x, which fixes
+ * mixed-content and TLS cert-name errors when /uploads is served from the app origin.
+ *
  * Usage:
  *   cd server
- *   SERVER_PUBLIC_URL=https://api.emplearnings.com npx ts-node scripts/migrate-photos-to-files.ts
- *
- * SERVER_PUBLIC_URL must be the public origin that serves /uploads (the API host).
- * Defaults to http://localhost:3000 if not set.
+ *   npx ts-node scripts/migrate-photos-to-files.ts
  */
 import { PrismaClient } from '@prisma/client';
 import path from 'path';
@@ -18,7 +19,6 @@ import fs from 'fs';
 
 const prisma = new PrismaClient();
 const UPLOADS_DIR = path.resolve(process.cwd(), 'uploads');
-const BASE_URL = (process.env.SERVER_PUBLIC_URL || 'http://localhost:3000').replace(/\/+$/, '');
 
 const extForMime = (mime: string): string => {
     switch (mime) {
@@ -45,7 +45,14 @@ const writeDataUrlToFile = (dataUrl: string, prefix: string): string | null => {
     const ext = extForMime(parsed.mimeType);
     const storedName = `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}${ext}`;
     fs.writeFileSync(path.join(UPLOADS_DIR, storedName), buffer);
-    return `${BASE_URL}/uploads/${encodeURIComponent(storedName)}`;
+    return `/uploads/${encodeURIComponent(storedName)}`;
+};
+
+// Turn an absolute upload URL (any scheme/host) into a root-relative /uploads/... path.
+const toRelativeUploadUrl = (value: string): string | null => {
+    const idx = value.indexOf('/uploads/');
+    if (idx <= 0) return null; // not absolute, or already relative (idx === 0)
+    return value.slice(idx);
 };
 
 async function migrateModel(
@@ -54,25 +61,36 @@ async function migrateModel(
     update: (id: string, url: string) => Promise<unknown>,
 ) {
     const rows = await findMany();
-    const targets = rows.filter((r) => r.profile_photo?.startsWith('data:'));
-    console.log(`${label}: ${targets.length} base64 photo(s) to migrate (of ${rows.length} total).`);
-
     let migrated = 0;
-    for (const row of targets) {
-        const url = writeDataUrlToFile(row.profile_photo as string, label.toLowerCase());
-        if (!url) {
-            console.warn(`  ! ${label} ${row.id}: could not parse data URL, skipped.`);
-            continue;
+
+    for (const row of rows) {
+        const photo = row.profile_photo;
+        if (!photo) continue;
+
+        let nextUrl: string | null = null;
+        if (photo.startsWith('data:')) {
+            nextUrl = writeDataUrlToFile(photo, label.toLowerCase());
+            if (!nextUrl) {
+                console.warn(`  ! ${label} ${row.id}: could not parse data URL, skipped.`);
+                continue;
+            }
+        } else if (/^https?:\/\//i.test(photo)) {
+            nextUrl = toRelativeUploadUrl(photo); // absolute upload URL -> relative
         }
-        await update(row.id, url);
+
+        if (!nextUrl || nextUrl === photo) continue;
+
+        await update(row.id, nextUrl);
         migrated++;
-        console.log(`  ✓ ${label} ${row.id} -> ${url}`);
+        console.log(`  ✓ ${label} ${row.id} -> ${nextUrl}`);
     }
+
+    console.log(`${label}: fixed ${migrated} photo(s) (of ${rows.length} total).`);
     return migrated;
 }
 
 async function main() {
-    console.log(`Migrating base64 profile photos to files. Base URL: ${BASE_URL}`);
+    console.log('Migrating base64 profile photos to files and normalizing absolute upload URLs to relative...');
 
     let total = 0;
     total += await migrateModel(
