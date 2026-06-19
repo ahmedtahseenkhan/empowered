@@ -16,6 +16,7 @@ interface TemplateData {
 class EmailService {
     private fromEmail: string;
     private fromName: string;
+    private templateCache: Map<string, ReturnType<typeof handlebars.compile>> = new Map();
 
     constructor() {
         // Always show brand address so recipients see "From: Empowered Learnings <info@emplearnings.com>".
@@ -49,19 +50,59 @@ class EmailService {
     }
 
     /**
-     * Render template with data
+     * Locate a template's HTML source. Searches every place it can live across dev
+     * (ts-node from src) and prod (compiled dist — with or without the template copy
+     * step, and accounting for the `cp -r` nesting gotcha). This is what prevents the
+     * raw-JSON fallback when a deploy ships dist without templates copied alongside it.
+     */
+    private loadTemplateSource(templateName: string): string {
+        const candidates = [
+            path.join(__dirname, '../templates/emails', `${templateName}.html`),           // dist/templates/emails OR src (ts-node)
+            path.join(__dirname, '../../src/templates/emails', `${templateName}.html`),     // running from dist, source still deployed
+            path.join(__dirname, '../templates/templates/emails', `${templateName}.html`),  // `cp -r src/templates dist/templates` nesting
+            path.join(process.cwd(), 'dist/templates/emails', `${templateName}.html`),
+            path.join(process.cwd(), 'src/templates/emails', `${templateName}.html`),
+        ];
+        for (const candidate of candidates) {
+            if (fs.existsSync(candidate)) return fs.readFileSync(candidate, 'utf-8');
+        }
+        throw new Error(`Email template not found: ${templateName}`);
+    }
+
+    /**
+     * Render template with data. Compiled templates are cached.
      */
     private renderTemplate(templateName: string, data: TemplateData): string {
         try {
-            const templatePath = path.join(__dirname, '../templates/emails', `${templateName}.html`);
-            const templateSource = fs.readFileSync(templatePath, 'utf-8');
-            const template = handlebars.compile(templateSource);
-            return template(data);
+            let compiled = this.templateCache.get(templateName);
+            if (!compiled) {
+                compiled = handlebars.compile(this.loadTemplateSource(templateName));
+                this.templateCache.set(templateName, compiled);
+            }
+            return compiled(data);
         } catch (error) {
             console.error(`❌ Template rendering failed for ${templateName}:`, error);
-            // Fallback to plain text
-            return `<p>${JSON.stringify(data)}</p>`;
+            return this.renderFallbackEmail(data);
         }
+    }
+
+    /**
+     * Last-resort body used only if a template genuinely can't be found or compiled.
+     * Produces a clean, branded message and never leaks the raw data object to the recipient.
+     */
+    private renderFallbackEmail(data: TemplateData): string {
+        const name = (data.username || data.name || data.fullName || data.mentorName || data.studentName || 'there') as string;
+        const actionUrl = (data.dashboardUrl || data.loginLink || data.verificationLink || this.getClientBaseUrl()) as string;
+        return `
+            <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 24px;color:#333333">
+              <h2 style="color:#4f46e5;margin:0 0 16px">EmpowerEd Learnings</h2>
+              <p style="font-size:16px;line-height:1.6;margin:0 0 16px">Hi ${name},</p>
+              <p style="font-size:16px;line-height:1.6;margin:0 0 16px">There's an update on your EmpowerEd Learnings account. Sign in to your dashboard to view the details.</p>
+              <p style="margin:24px 0">
+                <a href="${actionUrl}" style="display:inline-block;background:#4f46e5;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:6px;font-size:16px;font-weight:bold">Go to your dashboard</a>
+              </p>
+              <p style="font-size:13px;color:#999999;margin:24px 0 0">— Team EmpowerEd Learnings</p>
+            </div>`;
     }
 
     /**
