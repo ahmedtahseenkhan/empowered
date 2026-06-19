@@ -390,6 +390,8 @@ async function checkBetaEndingReminders() {
 
         const expiringTutors = await prisma.tutorProfile.findMany({
             where: {
+                // Beta mentors have unlimited access — never warn them their access is ending.
+                is_beta: false,
                 subscription_status: 'trialing',
                 subscription_end_date: {
                     gte: windowStart,

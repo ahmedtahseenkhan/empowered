@@ -423,7 +423,8 @@ export const getSubscriptionStatus = async (req: Request, res: Response) => {
                 subscription_status: true,
                 subscription_end_date: true,
                 stripe_account_id: true,
-                has_used_trial: true
+                has_used_trial: true,
+                is_beta: true
             }
         });
 
@@ -443,7 +444,8 @@ export const getSubscriptionStatus = async (req: Request, res: Response) => {
                 subscription_status: true,
                 subscription_end_date: true,
                 stripe_account_id: true,
-                has_used_trial: true
+                has_used_trial: true,
+                is_beta: true
             }
         });
 

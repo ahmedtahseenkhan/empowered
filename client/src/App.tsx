@@ -77,7 +77,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
   const location = useLocation();
   const [subLoading, setSubLoading] = useState(true);
-  const [subStatus, setSubStatus] = useState<{ subscription_status?: string | null; subscription_end_date?: string | null } | null>(null);
+  const [subStatus, setSubStatus] = useState<{ subscription_status?: string | null; subscription_end_date?: string | null; is_beta?: boolean | null } | null>(null);
 
   const isTutor = user?.role !== 'STUDENT';
   const isAllowedWithoutSubscription = useMemo(() => {
@@ -135,17 +135,20 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
       );
     }
 
-    const status = subStatus?.subscription_status;
-    const endDate = subStatus?.subscription_end_date ? new Date(subStatus.subscription_end_date) : null;
-    const hasValidEnd = !!endDate && !Number.isNaN(endDate.getTime());
-    const daysLeft = hasValidEnd ? Math.ceil((endDate!.getTime() - Date.now()) / (1000 * 3600 * 24)) : null;
-    const expired = daysLeft !== null && daysLeft <= 0;
+    // Beta mentors have unlimited access — never gate them on subscription status/expiry.
+    if (!subStatus?.is_beta) {
+      const status = subStatus?.subscription_status;
+      const endDate = subStatus?.subscription_end_date ? new Date(subStatus.subscription_end_date) : null;
+      const hasValidEnd = !!endDate && !Number.isNaN(endDate.getTime());
+      const daysLeft = hasValidEnd ? Math.ceil((endDate!.getTime() - Date.now()) / (1000 * 3600 * 24)) : null;
+      const expired = daysLeft !== null && daysLeft <= 0;
 
-    const isActiveOrTrial = status === 'active' || status === 'trialing';
+      const isActiveOrTrial = status === 'active' || status === 'trialing';
 
-    // Redirect if not active/trialing, or if there is an end date and it has already passed.
-    if (!isActiveOrTrial || (hasValidEnd && expired)) {
-      return <Navigate to="/subscription-settings" replace />;
+      // Redirect if not active/trialing, or if there is an end date and it has already passed.
+      if (!isActiveOrTrial || (hasValidEnd && expired)) {
+        return <Navigate to="/subscription-settings" replace />;
+      }
     }
   }
 

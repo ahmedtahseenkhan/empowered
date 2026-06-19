@@ -12,6 +12,7 @@ interface TutorProfile {
     subscription_status?: string | null;
     subscription_end_date?: string | null;
     has_used_trial?: boolean;
+    is_beta?: boolean | null;
 }
 
 type ServerPlan = { id: string; name: string; priceMonthly: number; annualAmount: number; priceId: string };
@@ -294,6 +295,47 @@ const SubscriptionSettingsPage: React.FC = () => {
                         <div className="w-12 h-12 border-4 border-primary-200 border-t-primary-900 rounded-full animate-spin mx-auto mb-3"></div>
                         <p className="text-gray-500 text-sm">Loading subscription details...</p>
                     </div>
+                </div>
+            </DashboardLayout>
+        );
+    }
+
+    // Beta mentors have unlimited access — show a dedicated "unlimited" state with no plans,
+    // billing, expiry, or "subscription required" messaging.
+    if (profile?.is_beta) {
+        const currentPlanName = currentPlan?.name || profile?.tier || 'Beta';
+        return (
+            <DashboardLayout>
+                <div className="w-full max-w-3xl mx-auto">
+                    <div className="mb-6">
+                        <h1 className="text-2xl font-bold text-gray-900">Subscription Settings</h1>
+                        <p className="text-sm text-gray-500 mt-1">Manage your subscription plan and billing</p>
+                    </div>
+
+                    <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-6">
+                        <div className="flex items-start gap-4">
+                            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center flex-shrink-0">
+                                <Crown className="w-6 h-6 text-white" />
+                            </div>
+                            <div className="flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <h2 className="text-lg font-bold text-gray-900">Unlimited Beta Access</h2>
+                                    <span className="text-xs font-semibold bg-amber-100 text-amber-800 px-2.5 py-0.5 rounded-full">Beta</span>
+                                </div>
+                                <p className="text-sm text-gray-600 mt-1">
+                                    As an onboarded beta mentor, you have full access to all mentor features with no time limit. There's nothing to pay and nothing expires.
+                                </p>
+                                <div className="mt-3 inline-flex items-center gap-2 text-sm text-gray-700">
+                                    <Check className="w-4 h-4 text-green-600" />
+                                    <span>Current plan: <span className="font-semibold">{currentPlanName}</span> · Unlimited</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <p className="text-xs text-gray-400 mt-4">
+                        Questions about your access? Contact support and we'll help.
+                    </p>
                 </div>
             </DashboardLayout>
         );

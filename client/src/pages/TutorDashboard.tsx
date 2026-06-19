@@ -204,6 +204,7 @@ const TutorDashboard: React.FC = () => {
     })();
 
     const subscriptionDaysLeft = (() => {
+        if (profile?.is_beta) return null; // Beta mentors have unlimited access — no countdown.
         if (!profile?.subscription_end_date) return null;
         const diff = new Date(profile.subscription_end_date).getTime() - Date.now();
         return Math.max(0, Math.ceil(diff / (1000 * 3600 * 24)));
@@ -353,7 +354,9 @@ const TutorDashboard: React.FC = () => {
                             <span className="text-xs font-semibold bg-purple-100 text-purple-800 px-2.5 py-0.5 rounded-full">
                                 {profile?.tier || 'STANDARD'}
                             </span>
-                            {profile?.subscription_status === 'trialing' && (
+                            {profile?.is_beta ? (
+                                <span className="text-xs font-semibold bg-amber-100 text-amber-800 px-2.5 py-0.5 rounded-full">Beta · Unlimited</span>
+                            ) : profile?.subscription_status === 'trialing' && (
                                 <span className="text-xs font-medium bg-blue-50 text-blue-700 px-2.5 py-0.5 rounded-full">Free trial</span>
                             )}
                             {profile?.is_founding_mentor && (
@@ -775,11 +778,15 @@ const TutorDashboard: React.FC = () => {
                             <div className="p-4">
                                 <div className="flex items-center justify-between mb-1">
                                     <span className="text-base font-bold text-gray-900">{profile?.tier || 'STANDARD'}</span>
-                                    {profile?.subscription_status === 'trialing' && (
+                                    {profile?.is_beta ? (
+                                        <span className="text-[10px] font-semibold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">Unlimited</span>
+                                    ) : profile?.subscription_status === 'trialing' && (
                                         <span className="text-[10px] font-semibold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">Trial</span>
                                     )}
                                 </div>
-                                {subscriptionDaysLeft !== null && (
+                                {profile?.is_beta ? (
+                                    <p className="text-xs font-medium mb-3 text-amber-600">Unlimited access</p>
+                                ) : subscriptionDaysLeft !== null && (
                                     <p className={`text-xs font-medium mb-3 ${subscriptionDaysLeft <= 7 ? 'text-red-600' : subscriptionDaysLeft <= 14 ? 'text-amber-600' : 'text-gray-500'}`}>
                                         {subscriptionDaysLeft === 0 ? 'Expired' : `${subscriptionDaysLeft} days remaining`}
                                     </p>
