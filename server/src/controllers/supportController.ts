@@ -1,7 +1,24 @@
 import { Response } from 'express';
+import { z } from 'zod';
 import prisma from '../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
 import emailService from '../services/emailService';
+
+// Collapse CR/LF (header-injection guard) and cap length for short fields.
+const shortField = (max: number) =>
+    z.string().trim().min(1).max(max).transform((s) => s.replace(/[\r\n]+/g, ' '));
+
+const guestSchema = z.object({
+    name: shortField(120),
+    email: z.string().trim().min(3).max(254).email(),
+    subject: shortField(200),
+    message: z.string().trim().min(1).max(5000),
+});
+
+const authedSchema = z.object({
+    subject: shortField(200),
+    message: z.string().trim().min(1).max(5000),
+});
 
 /**
  * Create a support ticket (query/complaint).
@@ -11,24 +28,20 @@ import emailService from '../services/emailService';
 export const createTicket = async (req: AuthRequest, res: Response) => {
     try {
         const user = req.user;
-        const body = req.body as {
-            name?: string;
-            email?: string;
-            subject?: string;
-            message?: string;
-        };
-
-        const subject = (body.subject ?? '').trim();
-        const message = (body.message ?? '').trim();
-        if (!subject || !message) {
-            return res.status(400).json({ error: 'Subject and message are required.' });
-        }
 
         let user_id: string | null = null;
         let submitter_name: string | null = null;
         let submitter_email: string | null = null;
+        let subject: string;
+        let message: string;
 
         if (user) {
+            const parsed = authedSchema.safeParse(req.body);
+            if (!parsed.success) {
+                return res.status(400).json({ error: 'Subject and message are required (subject ≤ 200, message ≤ 5000 chars).' });
+            }
+            subject = parsed.data.subject;
+            message = parsed.data.message;
             user_id = user.id;
             const dbUser = await prisma.user.findUnique({
                 where: { id: user.id },
@@ -46,13 +59,14 @@ export const createTicket = async (req: AuthRequest, res: Response) => {
                     : (dbUser.tutor_profile?.username ?? 'Mentor');
             submitter_email = dbUser.email;
         } else {
-            const name = (body.name ?? '').trim();
-            const email = (body.email ?? '').trim();
-            if (!name || !email) {
-                return res.status(400).json({ error: 'Name and email are required for guest submissions.' });
+            const parsed = guestSchema.safeParse(req.body);
+            if (!parsed.success) {
+                return res.status(400).json({ error: 'Please provide a valid name, email, subject and message.' });
             }
-            submitter_name = name;
-            submitter_email = email;
+            subject = parsed.data.subject;
+            message = parsed.data.message;
+            submitter_name = parsed.data.name;
+            submitter_email = parsed.data.email;
         }
 
         const ticket = await prisma.supportTicket.create({

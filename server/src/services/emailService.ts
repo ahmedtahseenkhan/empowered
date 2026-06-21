@@ -36,10 +36,13 @@ class EmailService {
      */
     async sendEmail(options: EmailOptions): Promise<void> {
         try {
+            // Strip CR/LF and cap length to guard against email header injection
+            // via any user-influenced subject (e.g. contact-form subject lines).
+            const safeSubject = (options.subject || '').replace(/[\r\n]+/g, ' ').slice(0, 250);
             await transporter.sendMail({
                 from: `"${this.fromName}" <${this.fromEmail}>`,
                 to: Array.isArray(options.to) ? options.to.join(', ') : options.to,
-                subject: options.subject,
+                subject: safeSubject,
                 html: options.html,
             });
             console.log(`✅ Email sent to: ${options.to}`);
