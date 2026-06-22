@@ -136,6 +136,16 @@ export const listPublicTutors = async (req: Request, res: Response) => {
             where.student_levels = { has: levelFilter };
         }
 
+        // Public visibility gate. A mentor only appears in search when ALL hold:
+        //  - admin-approved          (is_verified = true)
+        //  - Stripe payout set up    (stripe_account_id present)
+        //  - account email-verified and not suspended (on the related User)
+        // This keeps fake/bot, unapproved, suspended and not-payment-ready
+        // profiles out of the public listing.
+        where.is_verified = true;
+        where.stripe_account_id = { not: null };
+        where.user = { is_suspended: false, is_verified: true };
+
         const select = {
             id: true,
             username: true,
@@ -258,6 +268,9 @@ export const getPublicTutorById = async (req: Request, res: Response) => {
                 total_students: true,
                 student_levels: true,
                 free_session_enabled: true,
+                // Needed only to enforce the public visibility gate (stripped before response).
+                stripe_account_id: true,
+                user: { select: { is_suspended: true, is_verified: true } },
                 categories: {
                     select: {
                         category: {
@@ -346,6 +359,17 @@ export const getPublicTutorById = async (req: Request, res: Response) => {
 
         if (!mentor) return res.status(404).json({ error: 'Tutor not found' });
 
+        // Same public visibility gate as the listing: hide unapproved, not-payment-ready,
+        // suspended or email-unverified mentors. 404 so the profile is indistinguishable
+        // from one that doesn't exist.
+        const isPubliclyVisible =
+            mentor.is_verified &&
+            !!mentor.stripe_account_id &&
+            !!mentor.user &&
+            !mentor.user.is_suspended &&
+            mentor.user.is_verified;
+        if (!isPubliclyVisible) return res.status(404).json({ error: 'Tutor not found' });
+
         // total_students is denormalized and not maintained, so compute it live:
         // distinct students who have a non-cancelled lesson with this tutor.
         const studentPairs = await prisma.lesson.findMany({
@@ -355,7 +379,8 @@ export const getPublicTutorById = async (req: Request, res: Response) => {
         });
         const totalStudents = studentPairs.length;
 
-        const { marketing_video_submission, ...rest } = mentor as any;
+        // Strip gate-only fields so we don't leak account/Stripe internals to clients.
+        const { marketing_video_submission, stripe_account_id, user, ...rest } = mentor as any;
         res.json({ mentor: { ...rest, total_students: totalStudents, marketing_video_url: marketing_video_submission?.video_url ?? null } });
     } catch (error) {
         console.error('Get Public Tutor Error:', error);
@@ -950,26 +975,7 @@ export const updateExternalReviews = async (req: AuthenticatedRequest, res: Resp
     }
 };
 
-// Update Access Tier (Standard / Pro / Premium)
-export const updateTier = async (req: AuthenticatedRequest, res: Response) => {
-    try {
-        const userId = req.user?.id;
-        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
-
-        const { tier } = req.body;
-        // Validate tier against enum if possible, or just string match
-        if (!['STANDARD', 'PRO', 'PREMIUM'].includes(tier)) {
-            return res.status(400).json({ error: 'Invalid tier' });
-        }
-
-        const updatedProfile = await prisma.tutorProfile.update({
-            where: { user_id: userId },
-            data: { tier } // tier must be one of TutorTier enum
-        });
-
-        res.json(updatedProfile);
-    } catch (error) {
-        console.error('Update Tier Error:', error);
-        res.status(500).json({ error: 'Server error' });
-    }
-};
+// NOTE: updateTier (PUT /me/tier) was intentionally removed. It allowed any logged-in
+// mentor to set their own tier (PRO/PREMIUM) without paying. Tier is now derived solely
+// from a real subscription: set by the Stripe webhook after payment, or by
+// activateMentorTrial for approved beta users.

@@ -15,12 +15,16 @@ interface DetailedMentor {
     country: string | null;
     tier: string;
     is_verified: boolean;
+    stripe_account_id: string | null;
+    subscription_status: string | null;
+    is_beta: boolean;
     rating: number;
     review_count: number;
     user: {
         id: string;
         email: string;
         is_suspended: boolean;
+        is_verified: boolean;
     };
     certifications: any[];
     external_reviews: any[];
@@ -69,8 +73,34 @@ const MentorDetailPage: React.FC = () => {
         }
     };
 
+    const handleApproveToggle = async () => {
+        if (!mentor) return;
+        const newStatus = !mentor.is_verified;
+        if (!confirm(`Are you sure you want to ${newStatus ? 'APPROVE' : 'REVOKE APPROVAL for'} this mentor? Approved mentors appear in the public listing.`)) return;
+
+        setActionLoading(true);
+        try {
+            await api.put(`/admin/mentors/${mentor.id}/approved`, { is_verified: newStatus });
+            setMentor(prev => prev ? { ...prev, is_verified: newStatus } : null);
+        } catch (error) {
+            console.error('Failed to update approval status', error);
+            alert('Failed to update approval status');
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
     if (loading) return <div className="text-center py-12 text-gray-500">Loading profile...</div>;
     if (!mentor) return <div className="text-center py-12 text-gray-500">Mentor not found.</div>;
+
+    // A mentor is shown to students only when ALL of these hold.
+    const visibilityChecks = [
+        { label: 'Email verified', ok: mentor.user.is_verified },
+        { label: 'Admin approved', ok: mentor.is_verified },
+        { label: 'Stripe set up', ok: !!mentor.stripe_account_id },
+        { label: 'Not suspended', ok: !mentor.user.is_suspended },
+    ];
+    const isPubliclyVisible = visibilityChecks.every(c => c.ok);
 
     return (
         <div className="space-y-6">
@@ -115,12 +145,21 @@ const MentorDetailPage: React.FC = () => {
 
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
                             <div className="p-3 bg-gray-50 rounded-lg">
-                                <div className="text-xs text-gray-500 uppercase font-semibold">Tier</div>
+                                <div className="text-xs text-gray-500 uppercase font-semibold">Plan / Subscription</div>
                                 <div className={cn(
                                     "mt-1 font-medium",
                                     mentor.tier === 'PREMIUM' ? "text-purple-600" :
                                         mentor.tier === 'PRO' ? "text-blue-600" : "text-gray-700"
                                 )}>{mentor.tier}</div>
+                                <div className="mt-0.5 text-xs">
+                                    {mentor.is_beta ? (
+                                        <span className="text-purple-600 font-medium">Beta (free)</span>
+                                    ) : mentor.subscription_status === 'active' || mentor.subscription_status === 'trialing' ? (
+                                        <span className="text-green-600 font-medium">Paid · {mentor.subscription_status}</span>
+                                    ) : (
+                                        <span className="text-amber-600 font-medium">Not subscribed</span>
+                                    )}
+                                </div>
                             </div>
                             <div className="p-3 bg-gray-50 rounded-lg">
                                 <div className="text-xs text-gray-500 uppercase font-semibold">Hourly Rate</div>
@@ -141,7 +180,43 @@ const MentorDetailPage: React.FC = () => {
                     </div>
                 </div>
 
-                <div className="mt-8 flex gap-3 border-t border-gray-100 pt-6">
+                {/* Public visibility status — explains exactly why a mentor is or isn't listed. */}
+                <div className={cn(
+                    "mt-6 rounded-lg border p-4",
+                    isPubliclyVisible ? "bg-green-50 border-green-200" : "bg-amber-50 border-amber-200"
+                )}>
+                    <div className="flex items-center gap-2 font-medium text-sm mb-3">
+                        {isPubliclyVisible
+                            ? <><CheckCircle className="w-4 h-4 text-green-600" /> <span className="text-green-800">Visible to students</span></>
+                            : <><AlertTriangle className="w-4 h-4 text-amber-600" /> <span className="text-amber-800">Hidden from students — requirements not met</span></>}
+                    </div>
+                    <div className="flex flex-wrap gap-x-6 gap-y-2">
+                        {visibilityChecks.map(c => (
+                            <span key={c.label} className={cn(
+                                "flex items-center gap-1.5 text-sm",
+                                c.ok ? "text-green-700" : "text-gray-500"
+                            )}>
+                                {c.ok ? <CheckCircle className="w-4 h-4 text-green-500" /> : <XCircle className="w-4 h-4 text-gray-400" />}
+                                {c.label}
+                            </span>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="mt-8 flex flex-wrap gap-3 border-t border-gray-100 pt-6">
+                    <button
+                        onClick={handleApproveToggle}
+                        disabled={actionLoading}
+                        className={cn(
+                            "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors border",
+                            mentor.is_verified
+                                ? "bg-white text-amber-700 border-amber-200 hover:bg-amber-50"
+                                : "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+                        )}
+                    >
+                        {mentor.is_verified ? <XCircle className="w-4 h-4" /> : <ShieldCheck className="w-4 h-4" />}
+                        {mentor.is_verified ? 'Revoke Approval' : 'Approve Mentor'}
+                    </button>
                     <button
                         onClick={handleSuspendToggle}
                         disabled={actionLoading}
@@ -155,7 +230,6 @@ const MentorDetailPage: React.FC = () => {
                         {mentor.user.is_suspended ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
                         {mentor.user.is_suspended ? 'Activate Account' : 'Suspend Account'}
                     </button>
-                    {/* Add more actions here later like "Change Tier" or "Verify Manually" */}
                 </div>
             </div>
 

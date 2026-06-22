@@ -13,7 +13,7 @@ const getClientBaseUrl = (): string => {
 
 export const register = async (req: Request, res: Response) => {
     try {
-        const { email, password, role, username, tier } = RegisterSchema.parse(req.body);
+        const { email, password, role, username } = RegisterSchema.parse(req.body);
 
         // Check if user exists
         const existingUser = await prisma.user.findUnique({ where: { email } });
@@ -43,11 +43,13 @@ export const register = async (req: Request, res: Response) => {
                     },
                 });
             } else if (role === 'TUTOR') {
+                // NOTE: never trust a client-supplied tier here. Tier must reflect a real
+                // paid subscription (set by the Stripe webhook) or an approved beta trial.
+                // New mentors start on the default tier with no active subscription.
                 await tx.tutorProfile.create({
                     data: {
                         user_id: newUser.id,
                         username,
-                        tier: tier || 'STANDARD', // Save tier or default to STANDARD
                     },
                 });
             }
@@ -309,6 +311,23 @@ export const login = async (req: Request, res: Response) => {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
 
+        // Block sign-in until the email address has been verified.
+        if (!user.is_verified) {
+            return res.status(403).json({
+                error: 'Please verify your email address before signing in. Check your inbox for the verification code.',
+                code: 'EMAIL_NOT_VERIFIED',
+                email: user.email,
+            });
+        }
+
+        // Suspended accounts cannot sign in (middleware also blocks them per-request).
+        if (user.is_suspended) {
+            return res.status(403).json({
+                error: 'Your account has been suspended. Please contact support.',
+                code: 'ACCOUNT_SUSPENDED',
+            });
+        }
+
         const token = generateToken(user.id, user.role);
         const username = user.role === 'STUDENT' ? user.student_profile?.username : user.tutor_profile?.username;
         const tier = user.role === 'TUTOR' ? user.tutor_profile?.tier : undefined;
@@ -426,10 +445,10 @@ export const verifyEmailCode = async (req: Request, res: Response) => {
         ]);
 
         // Send welcome email now that email is confirmed
+        const username = user.role === 'STUDENT'
+            ? (await prisma.studentProfile.findUnique({ where: { user_id: user.id } }))?.username
+            : (await prisma.tutorProfile.findUnique({ where: { user_id: user.id } }))?.username;
         try {
-            const username = user.role === 'STUDENT'
-                ? (await prisma.studentProfile.findUnique({ where: { user_id: user.id } }))?.username
-                : (await prisma.tutorProfile.findUnique({ where: { user_id: user.id } }))?.username;
             const baseUrl = getClientBaseUrl();
             await emailService.sendWelcomeEmail({
                 username: username || 'User',
@@ -440,7 +459,14 @@ export const verifyEmailCode = async (req: Request, res: Response) => {
             });
         } catch (_e) { /* non-fatal */ }
 
-        return res.json({ message: 'Email verified successfully' });
+        // Issue the login token ONLY now that the email is verified. The registration
+        // endpoint deliberately does not grant mentors access before this step.
+        const token = generateToken(user.id, user.role);
+        return res.json({
+            message: 'Email verified successfully',
+            token,
+            user: { id: user.id, email: user.email, role: user.role, username },
+        });
     } catch (error) {
         console.error('verifyEmailCode error:', error);
         return res.status(500).json({ error: 'Server error' });

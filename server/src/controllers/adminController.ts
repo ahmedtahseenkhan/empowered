@@ -45,7 +45,7 @@ export const adminGetMentor = async (req: AuthRequest, res: Response) => {
         const mentor = await prisma.tutorProfile.findUnique({
             where: { id },
             include: {
-                user: { select: { id: true, email: true, is_suspended: true } },
+                user: { select: { id: true, email: true, is_suspended: true, is_verified: true } },
                 certifications: true,
                 external_reviews: true,
                 categories: { include: { category: true } },
@@ -132,6 +132,29 @@ export const adminSetUserSuspended = async (req: AuthRequest, res: Response) => 
         return res.json({ user: updated });
     } catch (error) {
         console.error('adminSetUserSuspended error:', error);
+        return res.status(500).json({ error: 'Server error' });
+    }
+};
+
+// Approve (or revoke approval of) a mentor. Sets TutorProfile.is_verified, which
+// gates whether the mentor appears in the public listing / profile pages.
+export const adminSetMentorApproved = async (req: AuthRequest, res: Response) => {
+    try {
+        const { id } = req.params; // tutor profile id
+        const { is_verified } = req.body as { is_verified?: boolean };
+
+        if (!id) return res.status(400).json({ error: 'Mentor id is required' });
+        if (typeof is_verified !== 'boolean') return res.status(400).json({ error: 'is_verified must be a boolean' });
+
+        const updated = await prisma.tutorProfile.update({
+            where: { id },
+            data: { is_verified },
+            select: { id: true, username: true, is_verified: true },
+        });
+
+        return res.json({ mentor: updated });
+    } catch (error) {
+        console.error('adminSetMentorApproved error:', error);
         return res.status(500).json({ error: 'Server error' });
     }
 };

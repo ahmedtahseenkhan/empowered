@@ -161,16 +161,14 @@ const TutorRegisterPage: React.FC = () => {
         setLoading(true);
         setError('');
         try {
-            // Register user immediately to create account
-            const response = await api.post('/auth/register', {
+            // Create the account, but do NOT log in yet. Access is granted only after the
+            // email is verified (step 2). Tier is never sent — it is set by payment/beta only.
+            await api.post('/auth/register', {
                 username: formData.username,
                 email: formData.email,
                 password: formData.password,
                 role: 'TUTOR',
-                tier: formData.plan // Send selected plan as tier
             });
-            // Auto-login to get token
-            login(response.data.token, response.data.user);
             setCurrentStep(2);
         } catch (err: any) {
             setError(err.response?.data?.error || 'Registration failed.');
@@ -185,10 +183,14 @@ const TutorRegisterPage: React.FC = () => {
         setVerifyLoading(true);
         setError('');
         try {
-            await api.post('/auth/verify-email-code', {
+            const response = await api.post('/auth/verify-email-code', {
                 email: formData.email,
                 code: verificationCode.trim(),
             });
+            // The account is only authenticated once the email is verified.
+            if (response.data?.token && response.data?.user) {
+                login(response.data.token, response.data.user);
+            }
             setCurrentStep(3);
         } catch (err: any) {
             setError(err.response?.data?.error || 'Invalid or expired code. Please try again.');
@@ -223,8 +225,9 @@ const TutorRegisterPage: React.FC = () => {
         setLoading(true);
         setError('');
         try {
-            // Try beta trial first — server always grants PREMIUM to approved beta applicants
-            await api.put('/tutor/me/tier', { tier: formData.plan });
+            // Try the free beta trial first — the server grants it ONLY to approved beta
+            // applicants (returns 403 otherwise, handled below by redirecting to Stripe).
+            // Tier is never set here; it follows from the trial or the paid subscription.
             await api.post('/payments/mentor/subscription/activate-trial', { tier: formData.plan });
             setFormData(prev => ({ ...prev, plan: 'PREMIUM' }));
             setBetaActivated(true);

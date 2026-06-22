@@ -98,8 +98,10 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
         setSubStatus(res.data);
       } catch (e) {
         console.error('Failed to fetch subscription status', e);
-        // On network/server error, grant access rather than locking the mentor out.
-        setSubStatus({ subscription_status: 'active', subscription_end_date: null });
+        // On error, do NOT assume the mentor has paid — send them to the subscription
+        // page (which loads without an active subscription) so they can retry/verify.
+        // Failing open here previously let unpaid mentors into the dashboard.
+        setSubStatus({ subscription_status: null, subscription_end_date: null });
       } finally {
         setSubLoading(false);
       }

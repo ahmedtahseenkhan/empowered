@@ -11,7 +11,6 @@ import {
     updatePricing,
     getCategories,
     updateExternalReviews,
-    updateTier,
     getMarketingVideoSubmission,
     upsertMarketingVideoSubmission
 } from '../controllers/tutorController';
@@ -32,7 +31,9 @@ router.put('/me/education', authenticateToken, updateEducation);
 router.put('/me/services', authenticateToken, updateServices);
 router.put('/me/student-levels', authenticateToken, updateStudentLevels);
 router.put('/me/pricing', authenticateToken, updatePricing);
-router.put('/me/tier', authenticateToken, updateTier);
+// NOTE: `PUT /me/tier` was removed — it let any logged-in mentor set their own tier
+// (PRO/PREMIUM) for free. Tier is now set only by the Stripe webhook (after payment)
+// or by activateMentorTrial (approved beta users).
 router.put('/me/external-reviews', authenticateToken, updateExternalReviews);
 router.get('/me/marketing-video', authenticateToken, getMarketingVideoSubmission);
 router.put('/me/marketing-video', authenticateToken, upsertMarketingVideoSubmission);

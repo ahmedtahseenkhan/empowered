@@ -224,13 +224,24 @@ const SubscriptionSettingsPage: React.FC = () => {
                 });
                 await fetchProfile();
                 alert('Subscription updated successfully!');
-            } else if (!profile?.has_used_trial) {
-                // Beta user: activate free trial and show congratulations popup
-                await api.post('/payments/mentor/subscription/activate-trial', { tier: planId });
-                await fetchProfile();
-                setShowBetaConfirmation(true);
             } else {
-                // Trial already used: redirect to Stripe checkout for paid subscription
+                // Not on an active paid plan. The free trial is for approved beta users only:
+                // try it first, and if the server says "not beta" (403), fall through to paid
+                // Stripe checkout. This is why non-beta users must pay instead of seeing the
+                // "Beta access only" error.
+                if (!profile?.has_used_trial) {
+                    try {
+                        await api.post('/payments/mentor/subscription/activate-trial', { tier: planId });
+                        await fetchProfile();
+                        setShowBetaConfirmation(true);
+                        return;
+                    } catch (trialErr: any) {
+                        // Re-throw anything that isn't the beta gate so it surfaces normally.
+                        if (trialErr.response?.status !== 403) throw trialErr;
+                    }
+                }
+
+                // Paid subscription via Stripe checkout (also gives new users a Stripe trial).
                 if (!priceId) {
                     alert('Unable to determine plan price. Please try again.');
                     return;

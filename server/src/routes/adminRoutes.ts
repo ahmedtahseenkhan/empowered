@@ -14,6 +14,7 @@ import {
     adminRejectCertification,
     adminRejectExternalReview,
     adminSetUserSuspended,
+    adminSetMentorApproved,
     adminListSubscriptions,
     adminListPayments,
     adminListTickets,
@@ -44,6 +45,7 @@ router.get('/analytics', requirePermission('dashboard'), adminGetAnalytics);
 
 router.get('/mentors', requirePermission('mentors'), adminListMentors);
 router.get('/mentors/:id', requirePermission('mentors'), adminGetMentor);
+router.put('/mentors/:id/approved', requirePermission('mentors'), adminSetMentorApproved);
 
 router.get('/students', requirePermission('students'), adminListStudents);
 router.get('/students/:id', requirePermission('students'), adminGetStudent);
