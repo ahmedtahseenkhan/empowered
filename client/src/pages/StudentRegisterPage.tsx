@@ -5,11 +5,9 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
 import api from '../api/axios';
-import { useAuth } from '../context/AuthContext';
 
 export const StudentRegisterPage: React.FC = () => {
     const navigate = useNavigate();
-    const { login } = useAuth();
     const [formData, setFormData] = useState({
         fullName: '',
         email: '',
@@ -69,15 +67,16 @@ export const StudentRegisterPage: React.FC = () => {
 
         try {
             setSubmitting(true);
-            const response = await api.post('/auth/register', {
+            const email = formData.email.trim();
+            await api.post('/auth/register', {
                 username: formData.fullName.trim(),
-                email: formData.email.trim(),
+                email,
                 password: formData.password,
                 role: 'STUDENT',
             });
 
-            login(response.data.token, response.data.user);
-            navigate('/dashboard');
+            // Account created but not yet usable — must verify email first.
+            navigate(`/verify-code?email=${encodeURIComponent(email)}&redirect=${encodeURIComponent('/dashboard')}`);
         } catch (err: any) {
             setSubmitError(err.response?.data?.error || 'Registration failed. Please try again.');
         } finally {

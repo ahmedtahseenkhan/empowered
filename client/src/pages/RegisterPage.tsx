@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
 import { PageLayout } from '../layouts/PageLayout';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -17,7 +16,6 @@ const RegisterPage: React.FC = () => {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
-    const { login } = useAuth();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
 
@@ -27,16 +25,11 @@ const RegisterPage: React.FC = () => {
         setLoading(true);
 
         try {
-            const response = await api.post('/auth/register', formData);
-            login(response.data.token, response.data.user);
+            await api.post('/auth/register', formData);
 
-            const redirect = searchParams.get('redirect');
-            if (redirect) {
-                navigate(redirect);
-                return;
-            }
-
-            navigate('/dashboard');
+            // Account created but not yet usable — must verify email first.
+            const redirect = searchParams.get('redirect') || '/dashboard';
+            navigate(`/verify-code?email=${encodeURIComponent(formData.email.trim())}&redirect=${encodeURIComponent(redirect)}`);
         } catch (err: any) {
             setError(err.response?.data?.error || 'Registration failed. Please try again.');
         } finally {

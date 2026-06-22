@@ -57,9 +57,6 @@ export const register = async (req: Request, res: Response) => {
             return newUser;
         });
 
-        // Generate Token
-        const token = generateToken(result.id, result.role);
-
         // Send Verification Code Email (6-digit code for inline wizard flow)
         try {
             const code = crypto.randomInt(0, 1000000).toString().padStart(6, '0');
@@ -83,10 +80,14 @@ export const register = async (req: Request, res: Response) => {
             console.error('Failed to send verification code email:', emailError);
         }
 
+        // NOTE: no token is issued here. Access is granted only after the email is
+        // verified via /auth/verify-email-code (which returns the login token). This
+        // applies to every role — no account can be used before verification.
         res.status(201).json({
-            message: 'User registered successfully. Please check your email to verify your account.',
-            token,
-            user: { id: result.id, email: result.email, role: result.role, username }
+            message: 'User registered successfully. Please check your email for a verification code.',
+            requiresVerification: true,
+            email: result.email,
+            role: result.role,
         });
 
     } catch (error: any) {

@@ -65,6 +65,7 @@ import ConnectAccountPage from './pages/ConnectAccountPage';
 import BookDemoPage from './pages/BookDemoPage';
 import FAQPage from './pages/FAQPage';
 import VerifyEmailPage from './pages/VerifyEmailPage';
+import VerifyCodePage from './pages/VerifyCodePage';
 import BetaPage from './pages/BetaPage';
 
 const DashboardRouter = () => {
@@ -221,6 +222,7 @@ function App() {
           <Route path="/faqs" element={<FAQPage />} />
           <Route path="/find-mentor" element={<FindMentorPage />} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
+          <Route path="/verify-code" element={<VerifyCodePage />} />
           <Route path="/beta" element={<BetaPage />} />
           <Route path="/mentors" element={<MentorResultsPage />} />
           <Route path="/mentors/:id" element={<MentorPublicProfilePage />} />

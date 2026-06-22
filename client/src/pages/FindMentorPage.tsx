@@ -278,30 +278,33 @@ const FindMentorPage: React.FC = () => {
         }
 
         const username = `${formData.firstName.trim()} ${formData.lastName.trim()}`.trim();
+        const email = formData.email.trim();
+        const mentorsUrl = `/student/mentors?${params.toString()}`;
+        const verifyUrl = `/verify-code?email=${encodeURIComponent(email)}&redirect=${encodeURIComponent(mentorsUrl)}`;
         try {
             setBusy(true);
-            let authRes: any;
+
+            // New account: created but not usable until the email is verified.
             try {
-                authRes = await api.post('/auth/register', {
-                    email: formData.email.trim(),
-                    password: formData.password,
-                    role: 'STUDENT',
-                    username,
-                });
+                await api.post('/auth/register', { email, password: formData.password, role: 'STUDENT', username });
+                navigate(verifyUrl);
+                return;
             } catch (e: any) {
-                if (e.response?.data?.error === 'User already exists') {
-                    authRes = await api.post('/auth/login', {
-                        email: formData.email.trim(),
-                        password: formData.password,
-                    });
-                } else throw e;
+                if (e.response?.data?.error !== 'User already exists') throw e;
             }
 
-            const token = authRes.data?.token;
-            const userData = authRes.data?.user;
-            if (!token || !userData) throw new Error('Authentication failed');
-            login(token, userData);
-            navigate(`/student/mentors?${params.toString()}`);
+            // Existing account: log in. If the email was never verified, send them to verify.
+            try {
+                const loginRes = await api.post('/auth/login', { email, password: formData.password });
+                login(loginRes.data.token, loginRes.data.user);
+                navigate(mentorsUrl);
+            } catch (loginErr: any) {
+                if (loginErr.response?.data?.code === 'EMAIL_NOT_VERIFIED') {
+                    navigate(verifyUrl);
+                    return;
+                }
+                throw loginErr;
+            }
         } catch (e: any) {
             const apiErr = e.response?.data?.error;
             if (Array.isArray(apiErr)) {

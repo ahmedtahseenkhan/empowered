@@ -43,6 +43,12 @@ const LoginPage: React.FC = () => {
 
             navigate('/dashboard');
         } catch (err: any) {
+            // If the email was never verified, send them to the verification page
+            // (pre-filled) instead of a dead-end error.
+            if (err.response?.data?.code === 'EMAIL_NOT_VERIFIED') {
+                navigate(`/verify-code?email=${encodeURIComponent(email.trim())}`);
+                return;
+            }
             setError(err.response?.data?.error || 'Login failed. Please check your credentials.');
         } finally {
             setLoading(false);
