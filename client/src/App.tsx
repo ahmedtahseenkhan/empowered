@@ -67,6 +67,7 @@ import FAQPage from './pages/FAQPage';
 import VerifyEmailPage from './pages/VerifyEmailPage';
 import VerifyCodePage from './pages/VerifyCodePage';
 import BetaPage from './pages/BetaPage';
+import AdminReviewPage from './pages/AdminReviewPage';
 
 const DashboardRouter = () => {
   const { user } = useAuth();
@@ -173,6 +174,25 @@ const GuestRoute = ({ children }: { children: React.ReactNode }) => {
   }
 
   if (user) return <Navigate to="/dashboard" />;
+
+  return <>{children}</>;
+};
+
+/** Restricts a route to ADMIN users only. Does its own auth check (not nested in ProtectedRoute,
+ *  which gates on tutor subscription status that admins don't have). */
+const AdminRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-16 h-16 border-4 border-primary-200 border-t-primary-900 rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role !== 'ADMIN') return <Navigate to="/dashboard" replace />;
 
   return <>{children}</>;
 };
@@ -501,6 +521,16 @@ function App() {
               <ProtectedRoute>
                 <ConnectAccountPage />
               </ProtectedRoute>
+            }
+          />
+
+          {/* Admin */}
+          <Route
+            path="/admin/approvals"
+            element={
+              <AdminRoute>
+                <AdminReviewPage />
+              </AdminRoute>
             }
           />
 

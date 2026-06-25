@@ -696,23 +696,65 @@ export const updateEducation = async (req: AuthenticatedRequest, res: Response) 
                 }
             }
 
-            // Update Certifications
+            // Update Certifications.
+            // Reconcile by id so editing/removing one certification does NOT wipe the
+            // admin-approved verification status of the others. Only brand-new or
+            // content-changed certifications are (re)set to PENDING for re-review.
             if (certifications) {
-                await tx.tutorCertification.deleteMany({ where: { tutor_id: tutorId } });
-                if (certifications.length > 0) {
-                    await tx.tutorCertification.createMany({
-                        data: certifications.map((cert: any) => ({
-                            tutor_id: tutorId,
-                            name: cert?.name,
-                            issuer: cert?.issuer,
-                            year: cert?.year,
-                            image_url: cert?.image_url ?? null,
-                            is_verified: false,
-                            verification_status: 'PENDING',
-                            rejection_reason: null,
-                            reviewed_at: null,
-                        })),
-                    });
+                const existing = await tx.tutorCertification.findMany({ where: { tutor_id: tutorId } });
+                const existingById = new Map(existing.map((c) => [c.id, c]));
+                const keepIds = new Set<string>();
+
+                for (const cert of certifications as any[]) {
+                    const data = {
+                        name: cert?.name,
+                        issuer: cert?.issuer,
+                        year: cert?.year,
+                        image_url: cert?.image_url ?? null,
+                    };
+
+                    // Only trust an id that actually belongs to this tutor.
+                    const prev = cert?.id ? existingById.get(cert.id) : undefined;
+
+                    if (prev) {
+                        keepIds.add(prev.id);
+                        const unchanged =
+                            prev.name === data.name &&
+                            prev.issuer === data.issuer &&
+                            prev.year === data.year &&
+                            (prev.image_url ?? null) === data.image_url;
+
+                        await tx.tutorCertification.update({
+                            where: { id: prev.id },
+                            // Unchanged → keep existing verification fields. Changed → re-review.
+                            data: unchanged
+                                ? data
+                                : {
+                                    ...data,
+                                    is_verified: false,
+                                    verification_status: 'PENDING',
+                                    rejection_reason: null,
+                                    reviewed_at: null,
+                                },
+                        });
+                    } else {
+                        await tx.tutorCertification.create({
+                            data: {
+                                tutor_id: tutorId,
+                                ...data,
+                                is_verified: false,
+                                verification_status: 'PENDING',
+                                rejection_reason: null,
+                                reviewed_at: null,
+                            },
+                        });
+                    }
+                }
+
+                // Delete only the certifications the mentor actually removed.
+                const toDelete = existing.filter((c) => !keepIds.has(c.id)).map((c) => c.id);
+                if (toDelete.length > 0) {
+                    await tx.tutorCertification.deleteMany({ where: { id: { in: toDelete } } });
                 }
             }
         });
@@ -940,25 +982,70 @@ export const updateExternalReviews = async (req: AuthenticatedRequest, res: Resp
         if (!profile) return res.status(404).json({ error: 'Profile not found' });
         const tutorId = profile.id;
 
+        // Reconcile by id so editing/removing one review does NOT wipe the
+        // admin-approved verification status of the others. Only brand-new or
+        // content-changed reviews are (re)set to PENDING for re-review.
         if (external_reviews) {
-            await prisma.tutorExternalReview.deleteMany({ where: { tutor_id: tutorId } });
-            if (external_reviews.length > 0) {
-                await prisma.tutorExternalReview.createMany({
-                    data: external_reviews.map((rev: any) => ({
-                        tutor_id: tutorId,
+            await prisma.$transaction(async (tx) => {
+                const existing = await tx.tutorExternalReview.findMany({ where: { tutor_id: tutorId } });
+                const existingById = new Map(existing.map((r) => [r.id, r]));
+                const keepIds = new Set<string>();
+
+                for (const rev of external_reviews as any[]) {
+                    const incomingDate = rev?.date ? new Date(rev.date) : null;
+                    const data = {
                         platform: rev?.platform,
                         reviewer: rev?.reviewer,
                         rating: rev?.rating,
                         comment: rev?.comment ?? null,
                         external_url: rev?.external_url ?? null,
-                        date: rev?.date ? new Date(rev.date) : null,
-                        is_verified: false,
-                        verification_status: 'PENDING',
-                        rejection_reason: null,
-                        reviewed_at: null,
-                    })),
-                });
-            }
+                        date: incomingDate,
+                    };
+
+                    // Only trust an id that actually belongs to this tutor.
+                    const prev = rev?.id ? existingById.get(rev.id) : undefined;
+
+                    if (prev) {
+                        keepIds.add(prev.id);
+                        const unchanged =
+                            prev.platform === data.platform &&
+                            prev.reviewer === data.reviewer &&
+                            prev.rating === data.rating &&
+                            (prev.comment ?? null) === data.comment &&
+                            (prev.external_url ?? null) === data.external_url &&
+                            (prev.date?.getTime() ?? null) === (incomingDate?.getTime() ?? null);
+
+                        await tx.tutorExternalReview.update({
+                            where: { id: prev.id },
+                            data: unchanged
+                                ? data
+                                : {
+                                    ...data,
+                                    is_verified: false,
+                                    verification_status: 'PENDING',
+                                    rejection_reason: null,
+                                    reviewed_at: null,
+                                },
+                        });
+                    } else {
+                        await tx.tutorExternalReview.create({
+                            data: {
+                                tutor_id: tutorId,
+                                ...data,
+                                is_verified: false,
+                                verification_status: 'PENDING',
+                                rejection_reason: null,
+                                reviewed_at: null,
+                            },
+                        });
+                    }
+                }
+
+                const toDelete = existing.filter((r) => !keepIds.has(r.id)).map((r) => r.id);
+                if (toDelete.length > 0) {
+                    await tx.tutorExternalReview.deleteMany({ where: { id: { in: toDelete } } });
+                }
+            });
         }
 
         const updated = await prisma.tutorProfile.findUnique({
