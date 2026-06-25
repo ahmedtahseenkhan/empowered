@@ -50,6 +50,58 @@ const categories = [
             {
                 name: "Public Speaking & Communication",
                 children: ["Presentation Skills", "Storytelling", "Debate", "Speech Writing", "Persuasion"]
+            },
+            {
+                name: "Photography",
+                children: ["Portrait Photography", "Event Photography", "Photo Editing", "Mobile Photography"]
+            },
+            {
+                name: "Cooking & Culinary Arts",
+                children: ["Home Cooking", "Baking & Pastry", "International Cuisine", "Meal Planning"]
+            },
+            {
+                name: "Makeup Artistry",
+                children: ["Everyday Makeup", "Bridal Makeup", "Glam Makeup", "Skincare Fundamentals"]
+            },
+            {
+                name: "Content Creation",
+                children: ["Personal Branding", "Video Content Creation", "Content Strategy", "Social Media Growth"]
+            },
+            {
+                name: "Real Estate",
+                children: ["Real Estate Fundamentals", "Property Investing", "Real Estate Sales", "First-Time Home Buying"]
+            },
+            {
+                name: "Graphic Design",
+                children: ["Canva Design", "Branding Design", "Social Media Graphics", "Design Fundamentals"]
+            },
+            {
+                name: "Digital Marketing",
+                children: ["Social Media Marketing", "Email Marketing", "SEO Basics", "Content Marketing"]
+            },
+            {
+                name: "Video Editing",
+                children: ["Adobe Premiere Pro", "CapCut Editing", "YouTube Editing", "Short-Form Content"]
+            },
+            {
+                name: "Artificial Intelligence",
+                children: ["AI Tools & Productivity", "Prompt Engineering", "AI for Business", "Generative AI"]
+            },
+            {
+                name: "Fashion & Styling",
+                children: ["Personal Styling", "Wardrobe Planning", "Color Analysis", "Fashion Fundamentals"]
+            },
+            {
+                name: "Interior Design",
+                children: ["Home Styling", "Space Planning", "Color Coordination", "Decor Design"]
+            },
+            {
+                name: "Fitness Instruction",
+                children: ["Strength Training", "Weight Loss Fitness", "Mobility Training", "Exercise Fundamentals"]
+            },
+            {
+                name: "Language Learning",
+                children: ["Conversational Language Skills", "Grammar & Writing", "Pronunciation & Accent Improvement", "Language Proficiency & Fluency"]
             }
         ]
     },
