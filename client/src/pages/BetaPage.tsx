@@ -151,10 +151,10 @@ const BetaPage: React.FC = () => {
                 <section className="bg-gradient-to-br from-[#4A148C] to-[#8B55CC] text-white py-24 px-4">
                     <div className="max-w-3xl mx-auto text-center">
                         <span className="inline-block bg-white/15 border border-white/30 text-white text-sm font-semibold px-4 py-1.5 rounded-full mb-6 tracking-wide">
-                            Founding Mentor Programme — 50 Spots Only
+                            Founding Mentor Programme — Limited Spots Only
                         </span>
                         <h1 className="text-4xl md:text-5xl font-bold font-poppins leading-tight mb-6">
-                            Join the First 50 Founding Mentors
+                            Join the Founding Mentors Building Something Bigger Than a Marketplace
                         </h1>
                         <p className="text-lg md:text-xl text-white/85 leading-relaxed mb-4 max-w-2xl mx-auto">
                             Turn your tutoring or coaching into a structured, professional business without giving up your earnings.
