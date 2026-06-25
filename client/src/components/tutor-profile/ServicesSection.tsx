@@ -348,8 +348,8 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({ onBack }) => {
             )}
 
             <Card className="overflow-hidden border-0 shadow-lg">
-                <div className="bg-[#4A1D96] text-white p-4 flex justify-between items-center">
-                    <div>
+                <div className="bg-[#4A1D96] text-white p-4 flex justify-between items-start sm:items-center gap-3">
+                    <div className="min-w-0">
                         <h3 className="font-bold text-lg">My Category</h3>
                         <p className="text-xs text-white/80 mt-1">
                             {planLimitMessage}
@@ -364,7 +364,7 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({ onBack }) => {
                         size="sm"
                         onClick={openAddModal}
                         disabled={!canAddMajor}
-                        className="bg-white/20 hover:bg-white/30 text-white border-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="shrink-0 bg-white/20 hover:bg-white/30 text-white border-0 disabled:opacity-50 disabled:cursor-not-allowed"
                         title={!canAddMajor ? (
                             tier === 'PRO' 
                                 ? `You've reached the Pro plan limit of 3 subcategories. Please remove a subcategory to add a new one.`
@@ -378,8 +378,8 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({ onBack }) => {
                 </div>
 
                 <div className="p-0">
-                    {/* Table Header */}
-                    <div className="grid grid-cols-12 gap-4 p-4 border-b bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    {/* Table Header — desktop only */}
+                    <div className="hidden md:grid grid-cols-12 gap-4 p-4 border-b bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                         <div className="col-span-3">Details</div>
                         <div className="col-span-3">Subject</div>
                         <div className="col-span-5">Area of Expertise</div>
@@ -393,29 +393,53 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({ onBack }) => {
                         </div>
                     ) : (
                         <div className="divide-y divide-gray-100">
-                            {groupedServices.map((group) => (
-                                <div key={`${group.main.id}-${group.sub.id}`} className="grid grid-cols-12 gap-4 p-4 items-center hover:bg-gray-50 transition-colors">
-                                    <div className="col-span-3 font-medium text-gray-900">{group.main.name}</div>
-                                    <div className="col-span-3 text-gray-600">{group.sub.name}</div>
-                                    <div className="col-span-5 text-gray-600 text-sm">
-                                        {group.expertise.map(e => e.name).join(", ")}
-                                    </div>
-                                    <div className="col-span-1 flex justify-end gap-2">
+                            {groupedServices.map((group) => {
+                                const actions = (
+                                    <>
                                         <button
                                             onClick={() => openEditModal(group)}
+                                            aria-label="Edit category"
                                             className="p-1.5 text-gray-400 hover:text-[#4A1D96] hover:bg-purple-50 rounded transition-colors"
                                         >
                                             <Edit2 className="w-4 h-4" />
                                         </button>
                                         <button
                                             onClick={() => handleDeleteRow(group)}
+                                            aria-label="Delete category"
                                             className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
                                         >
                                             <Trash2 className="w-4 h-4" />
                                         </button>
+                                    </>
+                                );
+                                return (
+                                    <div
+                                        key={`${group.main.id}-${group.sub.id}`}
+                                        className="flex flex-col gap-2 p-4 hover:bg-gray-50 transition-colors md:grid md:grid-cols-12 md:gap-4 md:items-center"
+                                    >
+                                        {/* Details + mobile action buttons */}
+                                        <div className="flex items-start justify-between gap-2 md:col-span-3 md:block">
+                                            <span className="font-medium text-gray-900">{group.main.name}</span>
+                                            <div className="flex gap-1 shrink-0 md:hidden">{actions}</div>
+                                        </div>
+
+                                        {/* Subject */}
+                                        <div className="text-gray-600 md:col-span-3">
+                                            <span className="md:hidden text-[11px] font-semibold uppercase tracking-wider text-gray-400 mr-2">Subject</span>
+                                            {group.sub.name}
+                                        </div>
+
+                                        {/* Area of Expertise */}
+                                        <div className="text-gray-600 text-sm md:col-span-5">
+                                            <span className="md:hidden block text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-0.5">Area of Expertise</span>
+                                            {group.expertise.map(e => e.name).join(", ")}
+                                        </div>
+
+                                        {/* Desktop action buttons */}
+                                        <div className="hidden md:flex md:col-span-1 justify-end gap-2">{actions}</div>
                                     </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     )}
                 </div>
