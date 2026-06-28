@@ -18,6 +18,9 @@ interface ConnectAccountStatus {
     };
 }
 
+const apiError = (e: unknown): { code?: string; error?: string } =>
+    (e as { response?: { data?: { code?: string; error?: string } } })?.response?.data || {};
+
 const supportedCountries = [
     { code: 'US', name: 'United States' },
     { code: 'CA', name: 'Canada' },
@@ -65,9 +68,28 @@ const ConnectAccountPage: React.FC = () => {
             if (res.data?.url) {
                 window.location.href = res.data.url;
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Failed to create onboarding link:', error);
-            alert(error.response?.data?.error || 'Failed to start onboarding. Please try again.');
+            alert(apiError(error).error || 'Failed to start onboarding. Please try again.');
+        } finally {
+            setCreatingLink(false);
+        }
+    };
+
+    const handleManageOnStripe = async () => {
+        try {
+            setCreatingLink(true);
+            const res = await api.post('/payments/mentor/express-login');
+            if (res.data?.url) {
+                window.location.href = res.data.url;
+            }
+        } catch (error: unknown) {
+            // If Stripe says onboarding isn't actually complete, fall back to the onboarding flow.
+            if (apiError(error).code === 'ONBOARDING_INCOMPLETE') {
+                return handleStartOnboarding();
+            }
+            console.error('Failed to open Stripe dashboard:', error);
+            alert(apiError(error).error || 'Failed to open your Stripe dashboard. Please try again.');
         } finally {
             setCreatingLink(false);
         }
@@ -82,7 +104,7 @@ const ConnectAccountPage: React.FC = () => {
             // Refresh status to show the "Connect" button and country selector again
             await fetchStatus();
             setSelectedCountry('US'); // Reset selection
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Failed to disconnect:', error);
             alert('Failed to disconnect account.');
         } finally {
@@ -102,6 +124,9 @@ const ConnectAccountPage: React.FC = () => {
 
     const isFullyOnboarded = status?.detailsSubmitted && status?.chargesEnabled && status?.payoutsEnabled;
     const hasPendingRequirements = (status?.requirements?.currentlyDue?.length || 0) > 0 || (status?.requirements?.pastDue?.length || 0) > 0;
+    // Once details are submitted and nothing is outstanding, send the mentor to their
+    // Express dashboard (login link) instead of re-running onboarding.
+    const canManageOnStripe = !!status?.detailsSubmitted && !hasPendingRequirements;
 
     return (
         <DashboardLayout>
@@ -228,24 +253,28 @@ const ConnectAccountPage: React.FC = () => {
                             </div>
                         )}
                         <Button
-                            onClick={handleStartOnboarding}
+                            onClick={canManageOnStripe ? handleManageOnStripe : handleStartOnboarding}
                             disabled={creatingLink}
                             className="w-full sm:w-auto flex items-center gap-2"
                         >
                             {creatingLink && <Loader className="w-4 h-4 animate-spin" />}
                             <span>
-                                {status?.hasAccount
-                                    ? isFullyOnboarded
-                                        ? 'Update Account Details'
-                                        : 'Complete Onboarding'
-                                    : 'Connect with Stripe'}
+                                {!status?.hasAccount
+                                    ? 'Connect with Stripe'
+                                    : canManageOnStripe
+                                        ? 'Manage Account on Stripe'
+                                        : 'Complete Onboarding'}
                             </span>
                             <ExternalLink className="w-4 h-4" />
                         </Button>
 
                         <p className="text-sm text-gray-500">
-                            You'll be redirected to Stripe to {status?.hasAccount ? 'manage your account' : 'create and set up your account'}.
-                            This is a secure process handled by Stripe.
+                            {!status?.hasAccount
+                                ? "You'll be redirected to Stripe to create and set up your account."
+                                : canManageOnStripe
+                                    ? "You'll be redirected to your Stripe Express dashboard to view payouts and edit your account details."
+                                    : "You'll be redirected to Stripe to finish setting up your account."}
+                            {' '}This is a secure process handled by Stripe.
                         </p>
 
                         {status?.hasAccount && !isFullyOnboarded && (

@@ -78,6 +78,21 @@ export class StripeService {
     }
 
     /**
+     * Generate a one-time Express Dashboard login link for an already-onboarded account.
+     * Lets the mentor view/edit their account, payouts, and bank details.
+     * Only valid once onboarding is complete (details_submitted = true); throws otherwise.
+     */
+    static async createLoginLink(accountId: string) {
+        try {
+            const loginLink = await stripe.accounts.createLoginLink(accountId);
+            return loginLink.url;
+        } catch (error: any) {
+            console.error('Error creating login link:', error);
+            throw new Error(error.message || 'Failed to create dashboard login link');
+        }
+    }
+
+    /**
      * Get Connect Account details and status
      */
     static async getConnectAccount(accountId: string) {
