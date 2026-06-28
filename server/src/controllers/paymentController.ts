@@ -327,6 +327,38 @@ export const createConnectOnboardingLink = async (req: Request, res: Response) =
     }
 };
 
+export const createConnectLoginLink = async (req: Request, res: Response) => {
+    try {
+        const userId = (req as any).user.id;
+
+        const tutor = await prisma.tutorProfile.findUnique({
+            where: { user_id: userId },
+            select: { stripe_account_id: true },
+        });
+
+        if (!tutor) return res.status(404).json({ error: 'Tutor profile not found' });
+        if (!tutor.stripe_account_id) {
+            return res.status(400).json({ error: 'No Stripe account connected yet.' });
+        }
+
+        // Login links only work once onboarding is complete. If the account hasn't
+        // submitted details, the client should send the mentor through onboarding instead.
+        const account = await StripeService.getConnectAccount(tutor.stripe_account_id);
+        if (!account.details_submitted) {
+            return res.status(400).json({
+                error: 'Account onboarding is not complete.',
+                code: 'ONBOARDING_INCOMPLETE',
+            });
+        }
+
+        const url = await StripeService.createLoginLink(tutor.stripe_account_id);
+        res.json({ url });
+    } catch (error: any) {
+        console.error('Create login link error:', error);
+        res.status(500).json({ error: error.message || 'Failed to create dashboard login link' });
+    }
+};
+
 export const getConnectAccountStatus = async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user.id;

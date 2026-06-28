@@ -7,6 +7,7 @@ import {
     finalizeMentorSubscription,
     verifyMentorSubscription,
     createConnectOnboardingLink,
+    createConnectLoginLink,
     getConnectAccountStatus,
     getSubscriptionStatus,
     createStudentBookingCheckout,
@@ -41,6 +42,7 @@ router.get('/mentor/status', getSubscriptionStatus);
 
 // Mentor Connect (Payouts)
 router.post('/mentor/onboard', createConnectOnboardingLink);
+router.post('/mentor/express-login', createConnectLoginLink);
 router.get('/mentor/connect-status', getConnectAccountStatus);
 router.delete('/mentor/connect-account', disconnectStripeAccount);
 
