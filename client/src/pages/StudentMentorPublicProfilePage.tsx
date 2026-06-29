@@ -5,7 +5,7 @@ import api from '../api/axios';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
-import { Award } from 'lucide-react';
+import { Award, Star } from 'lucide-react';
 
 type PublicTutorProfile = {
     id: string;
@@ -427,30 +427,47 @@ const StudentMentorPublicProfilePage: React.FC = () => {
                                         </div>
                                         {mentor.tagline && <div className="text-purple-50 mt-2">{mentor.tagline}</div>}
                                         <div className="text-sm text-purple-100 mt-1">{mentor.country || 'Remote'} • Tutor timezone: {mentor.timezone}</div>
+                                        {/* Review stars */}
+                                        <div className="flex items-center gap-2 mt-2">
+                                            <div className="flex items-center">
+                                                {[1, 2, 3, 4, 5].map((i) => (
+                                                    <Star
+                                                        key={i}
+                                                        className={`w-4 h-4 ${i <= Math.round(mentor.rating || 0) ? 'fill-amber-400 text-amber-400' : 'text-white/30'}`}
+                                                    />
+                                                ))}
+                                            </div>
+                                            <span className="text-sm text-purple-100">
+                                                {mentor.review_count
+                                                    ? `${(mentor.rating || 0).toFixed(1)} (${mentor.review_count} review${mentor.review_count === 1 ? '' : 's'})`
+                                                    : 'No reviews yet'}
+                                            </span>
+                                        </div>
                                         </div>
                                     </div>
 
-                                    <div className="flex flex-wrap gap-3">
+                                    {/* Action buttons — clear hierarchy on the purple banner */}
+                                    <div className="flex flex-wrap items-center gap-2 md:justify-end md:flex-shrink-0">
                                         {isPreview ? (
                                             <Link to="/dashboard">
-                                                <Button variant="outline">Back to Dashboard</Button>
+                                                <Button variant="ghost" className="text-white hover:bg-white/15">← Back to Dashboard</Button>
                                             </Link>
                                         ) : (
                                             <Link to={`/student/mentors?frequency=${encodeURIComponent(frequency)}`}>
-                                                <Button variant="outline">Back</Button>
+                                                <Button variant="ghost" className="text-white hover:bg-white/15">← Back</Button>
                                             </Link>
                                         )}
                                         {!isPreview && mentor.free_session_enabled && freeEligible && !freeEligibilityBusy && (
                                             <Button
-                                                variant="outline"
-                                                className="border-green-500 text-green-700 hover:bg-green-50"
+                                                className="bg-transparent text-white border border-white/60 hover:bg-white/10"
                                                 onClick={() => document.getElementById('free-session-card')?.scrollIntoView({ behavior: 'smooth' })}
                                             >
-                                                Book a Free intro Session
+                                                Book a Free Intro Session
                                             </Button>
                                         )}
                                         {!isPreview && (
                                             <Button
+                                                className="bg-white text-purple-700 font-bold hover:bg-purple-50 shadow-sm"
                                                 onClick={() => {
                                                     const qs = new URLSearchParams();
                                                     qs.set('frequency', frequency);

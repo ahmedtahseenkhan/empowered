@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { Card } from '../components/ui/Card';
@@ -22,20 +22,28 @@ const TutorProfileHub: React.FC = () => {
     const [profile, setProfile] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        const fetchProfile = async () => {
-            try {
-                const res = await api.get('/tutor/me');
-                setProfile(res.data);
-            } catch (err) {
-                console.error('Failed to fetch profile', err);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchProfile();
+    const fetchProfile = useCallback(async () => {
+        try {
+            const res = await api.get('/tutor/me');
+            setProfile(res.data);
+        } catch (err) {
+            console.error('Failed to fetch profile', err);
+        } finally {
+            setLoading(false);
+        }
     }, []);
+
+    useEffect(() => {
+        fetchProfile();
+    }, [fetchProfile]);
+
+    // Re-fetch the profile when returning to the overview from a section editor so the
+    // completion percentage and per-section badges reflect the just-saved changes
+    // without requiring a manual page refresh.
+    const handleSectionBack = useCallback(() => {
+        setActiveSection('overview');
+        fetchProfile();
+    }, [fetchProfile]);
 
     const checklist = useMemo(() => {
         const p = profile || {};
@@ -75,12 +83,12 @@ const TutorProfileHub: React.FC = () => {
 
     const renderContent = () => {
         switch (activeSection) {
-            case 'bio': return <BioSection onBack={() => setActiveSection('overview')} />;
-            case 'education': return <EducationSection onBack={() => setActiveSection('overview')} />;
-            case 'services': return <ServicesSection onBack={() => setActiveSection('overview')} />;
-            case 'pricing': return <PricingSection onBack={() => setActiveSection('overview')} />;
-            case 'scheduling': return <SchedulingSection onBack={() => setActiveSection('overview')} />;
-            case 'marketingVideo': return <MarketingVideoSection onBack={() => setActiveSection('overview')} tutorUsername={profile?.username} />;
+            case 'bio': return <BioSection onBack={handleSectionBack} />;
+            case 'education': return <EducationSection onBack={handleSectionBack} />;
+            case 'services': return <ServicesSection onBack={handleSectionBack} />;
+            case 'pricing': return <PricingSection onBack={handleSectionBack} />;
+            case 'scheduling': return <SchedulingSection onBack={handleSectionBack} />;
+            case 'marketingVideo': return <MarketingVideoSection onBack={handleSectionBack} tutorUsername={profile?.username} />;
             default: return renderOverview();
         }
     };

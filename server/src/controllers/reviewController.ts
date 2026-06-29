@@ -26,7 +26,8 @@ export const createReview = async (req: AuthRequest, res: Response) => {
 
         // Verify tutor exists
         const tutor = await prisma.tutorProfile.findUnique({
-            where: { id: tutorId }
+            where: { id: tutorId },
+            include: { user: { select: { email: true } } }
         });
 
         if (!tutor) {
@@ -60,6 +61,28 @@ export const createReview = async (req: AuthRequest, res: Response) => {
 
         // Recalculate the tutor's denormalized rating + review_count from real rows.
         await recalculateTutorReviewStats(tutorId);
+
+        // Notify the mentor that they received a new review (async via the outbox queue).
+        if (tutor.user?.email) {
+            try {
+                await prisma.emailOutbox.create({
+                    data: {
+                        type: 'REVIEW_RECEIVED_MENTOR',
+                        to_email: tutor.user.email,
+                        payload: {
+                            mentorName: tutor.username || 'Mentor',
+                            studentName: studentProfile.username || 'A student',
+                            rating: review.rating,
+                            comment: review.comment || '',
+                        },
+                        idempotency_key: `review-received:${review.id}`,
+                    },
+                });
+            } catch (mailErr) {
+                // Never fail the review because the notification couldn't be queued.
+                console.error('Failed to enqueue review-received email:', mailErr);
+            }
+        }
 
         res.status(201).json({ review });
     } catch (error) {
