@@ -153,8 +153,9 @@ const BetaPage: React.FC = () => {
                         <span className="inline-block bg-white/15 border border-white/30 text-white text-sm font-semibold px-4 py-1.5 rounded-full mb-6 tracking-wide">
                             Founding Mentor Programme — Limited Spots Only
                         </span>
-                        <h1 className="text-4xl md:text-5xl font-bold font-poppins leading-tight mb-6">
-                            Join the Founding Mentors Building Something Bigger Than a Marketplace
+                        <h1 className="text-3xl md:text-4xl font-bold font-poppins leading-tight mb-6">
+                            Join the Founding Mentors<br />
+                            Building Something Bigger Than a Marketplace
                         </h1>
                         <p className="text-lg md:text-xl text-white/85 leading-relaxed mb-4 max-w-2xl mx-auto">
                             Turn your tutoring or coaching into a structured, professional business without giving up your earnings.

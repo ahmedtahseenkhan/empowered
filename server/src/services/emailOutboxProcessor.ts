@@ -426,6 +426,18 @@ async function sendOutboxRow(row: OutboxRow) {
         return;
     }
 
+    if (row.type === 'REVIEW_RECEIVED_MENTOR') {
+        const p = row.payload as { mentorName?: string; studentName?: string; rating?: number; comment?: string };
+        await emailService.sendReviewReceivedMentor({
+            mentorName: p.mentorName || 'Mentor',
+            mentorEmail: row.to_email,
+            studentName: p.studentName || 'A student',
+            rating: typeof p.rating === 'number' ? p.rating : 0,
+            review: p.comment || '',
+        });
+        return;
+    }
+
     if (row.type === 'BETA_ENDING_REMINDER') {
         const p = row.payload as { tutorName?: string };
         await emailService.sendBetaEndingReminder({
