@@ -4,6 +4,7 @@ import { DashboardLayout } from '../layouts/DashboardLayout';
 import api from '../api/axios';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
+import { StarRating } from '../components/common/StarRating';
 import { MENTOR_SEARCH_AGE_OPTIONS } from '../constants/mentorSearch';
 
 type Frequency = 'WEEKLY' | 'TWICE_WEEKLY';
@@ -371,6 +372,7 @@ const StudentMentorResultsPage: React.FC = () => {
                                         <span className="text-[10px] bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">{m.tier}</span>
                                     </div>
                                     {m.tagline && <p className="text-sm text-gray-600 mt-1">{m.tagline}</p>}
+                                    <StarRating rating={m.rating} reviewCount={m.review_count} className="mt-1.5" />
                                     </div>
                                 </div>
                                 <div className="text-right">

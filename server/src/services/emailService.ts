@@ -168,7 +168,7 @@ class EmailService {
     }): Promise<void> {
         const baseUrl = this.getClientBaseUrl();
         const isSoon = data.reminderType === '4h';
-        const whenText = isSoon ? 'in about 4 hours' : 'tomorrow';
+        const whenText = isSoon ? 'later today (in about 4 hours)' : 'tomorrow';
         const html = this.renderTemplate('student/session-reminder', {
             ...data,
             whenText,
@@ -297,7 +297,7 @@ class EmailService {
     }): Promise<void> {
         const baseUrl = this.getClientBaseUrl();
         const isSoon = data.reminderType === '4h';
-        const whenText = isSoon ? 'in about 4 hours' : 'tomorrow';
+        const whenText = isSoon ? 'later today (in about 4 hours)' : 'tomorrow';
         const html = this.renderTemplate('mentor/session-reminder', {
             ...data,
             whenText,
@@ -353,6 +353,25 @@ class EmailService {
         await this.sendEmail({
             to: data.mentorEmail,
             subject: 'You Received a New Review',
+            html,
+        });
+    }
+
+    async sendMentorProfileLive(data: {
+        mentorName: string;
+        mentorEmail: string;
+        profileUrl?: string;
+        dashboardUrl?: string;
+    }): Promise<void> {
+        const baseUrl = this.getClientBaseUrl();
+        const html = this.renderTemplate('mentor/profile-live', {
+            ...data,
+            profileUrl: data.profileUrl || `${baseUrl}/dashboard`,
+            dashboardUrl: data.dashboardUrl || `${baseUrl}/dashboard`,
+        });
+        await this.sendEmail({
+            to: data.mentorEmail,
+            subject: 'Congratulations — Your EmpowerEd Mentor Profile Is Now Live!',
             html,
         });
     }
