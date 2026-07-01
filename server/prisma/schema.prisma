@@ -139,6 +139,16 @@ model TutorProfile {
   country          String?
   timezone         String   @default("UTC")
   key_strengths    String? // Stored as comma-separated or JSON string
+
+  // Optional social links, shown on the public mentor profile.
+  facebook_url  String?
+  instagram_url String?
+  linkedin_url  String?
+  twitter_url   String?
+  youtube_url   String?
+  tiktok_url    String?
+  website_url   String?
+
   is_verified      Boolean  @default(false) // Admin verification
   student_levels   String[] @default([]) // ELEMENTARY_SCHOOL, MIDDLE_SCHOOL, HIGH_SCHOOL, COLLEGE_ADULT
 

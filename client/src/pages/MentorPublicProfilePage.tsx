@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { PageLayout } from '../layouts/PageLayout';
 import { Button } from '../components/ui/Button';
+import { MentorSocialLinks } from '../components/common/MentorSocialLinks';
 import api from '../api/axios';
 
 type PublicTutorProfile = {
@@ -26,6 +27,13 @@ type PublicTutorProfile = {
     marketing_video_url: string | null;
     profile_photo: string | null;
     key_strengths: string | null;
+    facebook_url: string | null;
+    instagram_url: string | null;
+    linkedin_url: string | null;
+    twitter_url: string | null;
+    youtube_url: string | null;
+    tiktok_url: string | null;
+    website_url: string | null;
     certifications: { id: string; name: string; issuer: string; year: number; is_verified: boolean }[];
     education: { id: string; institution: string; degree: string; field_of_study: string; year: number }[];
     experience: { id: string; role: string; company: string; start_year: number; end_year: number | null; description: string | null }[];
@@ -453,6 +461,8 @@ const MentorPublicProfilePage: React.FC = () => {
                                             </div>
                                         </div>
                                     )}
+
+                                    <MentorSocialLinks mentor={mentor} className="mt-5" />
 
                                     {mentor.student_levels && mentor.student_levels.length > 0 && (
                                         <div className="mt-5">

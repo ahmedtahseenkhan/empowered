@@ -259,6 +259,13 @@ export const getPublicTutorById = async (req: Request, res: Response) => {
                 country: true,
                 timezone: true,
                 key_strengths: true,
+                facebook_url: true,
+                instagram_url: true,
+                linkedin_url: true,
+                twitter_url: true,
+                youtube_url: true,
+                tiktok_url: true,
+                website_url: true,
                 is_verified: true,
                 is_beta: true,
                 is_founding_mentor: true,
@@ -619,7 +626,14 @@ export const updateBio = async (req: AuthenticatedRequest, res: Response) => {
         const userId = req.user?.id;
         if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-        const { tagline, about, country, video_url, profile_photo, key_strengths, languages, experience_years } = req.body;
+        const {
+            tagline, about, country, video_url, profile_photo, key_strengths, languages, experience_years,
+            facebook_url, instagram_url, linkedin_url, twitter_url, youtube_url, tiktok_url, website_url,
+        } = req.body;
+
+        // Normalize social links: trim, and store null (not empty string) when cleared.
+        const cleanUrl = (v: unknown) =>
+            v === undefined ? undefined : (typeof v === 'string' && v.trim() ? v.trim() : null);
 
         const updatedProfile = await prisma.tutorProfile.update({
             where: { user_id: userId },
@@ -631,6 +645,13 @@ export const updateBio = async (req: AuthenticatedRequest, res: Response) => {
                 profile_photo,
                 experience_years: typeof experience_years === 'number' ? experience_years : undefined,
                 key_strengths, // Assuming string
+                facebook_url: cleanUrl(facebook_url),
+                instagram_url: cleanUrl(instagram_url),
+                linkedin_url: cleanUrl(linkedin_url),
+                twitter_url: cleanUrl(twitter_url),
+                youtube_url: cleanUrl(youtube_url),
+                tiktok_url: cleanUrl(tiktok_url),
+                website_url: cleanUrl(website_url),
                 // Note: profile_photo is usually handled by upload middleware, but assuming string URL here
                 // languages: Handle relation update if passed
             }

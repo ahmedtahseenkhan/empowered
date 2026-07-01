@@ -13,6 +13,13 @@ export const BioSection: React.FC<BioSectionProps> = ({ onBack }) => {
         tagline: '',
         about: '',
         country: '',
+        facebook_url: '',
+        instagram_url: '',
+        linkedin_url: '',
+        twitter_url: '',
+        youtube_url: '',
+        tiktok_url: '',
+        website_url: '',
     });
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -32,6 +39,13 @@ export const BioSection: React.FC<BioSectionProps> = ({ onBack }) => {
                     tagline: res.data.tagline || '',
                     about: res.data.about || '',
                     country: res.data.country || '',
+                    facebook_url: res.data.facebook_url || '',
+                    instagram_url: res.data.instagram_url || '',
+                    linkedin_url: res.data.linkedin_url || '',
+                    twitter_url: res.data.twitter_url || '',
+                    youtube_url: res.data.youtube_url || '',
+                    tiktok_url: res.data.tiktok_url || '',
+                    website_url: res.data.website_url || '',
                 });
                 if (res.data.profile_photo) {
                     setProfilePhoto(res.data.profile_photo);
@@ -195,6 +209,22 @@ export const BioSection: React.FC<BioSectionProps> = ({ onBack }) => {
                         className="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-primary-500 min-h-[150px]"
                         placeholder="Describe your background and teaching style..."
                     ></textarea>
+                </div>
+            </Card>
+
+            <Card className="p-6 space-y-4">
+                <div>
+                    <h3 className="font-bold text-lg">Social Links</h3>
+                    <p className="text-sm text-gray-500 mt-1">Optional. Add the full URL — these appear on your public profile.</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <Input label="Website" name="website_url" value={formData.website_url} onChange={handleChange} placeholder="https://yourwebsite.com" />
+                    <Input label="LinkedIn" name="linkedin_url" value={formData.linkedin_url} onChange={handleChange} placeholder="https://linkedin.com/in/username" />
+                    <Input label="Instagram" name="instagram_url" value={formData.instagram_url} onChange={handleChange} placeholder="https://instagram.com/username" />
+                    <Input label="Facebook" name="facebook_url" value={formData.facebook_url} onChange={handleChange} placeholder="https://facebook.com/username" />
+                    <Input label="X (Twitter)" name="twitter_url" value={formData.twitter_url} onChange={handleChange} placeholder="https://x.com/username" />
+                    <Input label="YouTube" name="youtube_url" value={formData.youtube_url} onChange={handleChange} placeholder="https://youtube.com/@channel" />
+                    <Input label="TikTok" name="tiktok_url" value={formData.tiktok_url} onChange={handleChange} placeholder="https://tiktok.com/@username" />
                 </div>
             </Card>
 
