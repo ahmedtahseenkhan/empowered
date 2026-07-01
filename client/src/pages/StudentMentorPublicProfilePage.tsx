@@ -6,6 +6,7 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { Award, Star } from 'lucide-react';
+import { MentorSocialLinks } from '../components/common/MentorSocialLinks';
 
 type PublicTutorProfile = {
     id: string;
@@ -24,6 +25,13 @@ type PublicTutorProfile = {
     is_founding_mentor: boolean;
     video_url: string | null;
     key_strengths: string | null;
+    facebook_url: string | null;
+    instagram_url: string | null;
+    linkedin_url: string | null;
+    twitter_url: string | null;
+    youtube_url: string | null;
+    tiktok_url: string | null;
+    website_url: string | null;
     certifications: { id: string; name: string; issuer: string; year: number; is_verified: boolean }[];
     education: { id: string; institution: string; degree: string; field_of_study: string; year: number }[];
     experience: { id: string; role: string; company: string; start_year: number; end_year: number | null; description: string | null }[];
@@ -525,6 +533,8 @@ const StudentMentorPublicProfilePage: React.FC = () => {
                                             </div>
                                         </div>
                                     )}
+
+                                    <MentorSocialLinks mentor={mentor} className="mt-5" />
                                 </Card>
 
                                 <Card className="p-6">

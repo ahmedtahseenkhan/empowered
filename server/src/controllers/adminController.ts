@@ -146,13 +146,35 @@ export const adminSetMentorApproved = async (req: AuthRequest, res: Response) =>
         if (!id) return res.status(400).json({ error: 'Mentor id is required' });
         if (typeof is_verified !== 'boolean') return res.status(400).json({ error: 'is_verified must be a boolean' });
 
+        // Read the current state so we only send the "profile is now live" email
+        // on the transition from unverified → verified (not on repeated saves).
+        const existing = await prisma.tutorProfile.findUnique({
+            where: { id },
+            select: { is_verified: true },
+        });
+        if (!existing) return res.status(404).json({ error: 'Mentor not found' });
+
         const updated = await prisma.tutorProfile.update({
             where: { id },
             data: { is_verified },
-            select: { id: true, username: true, is_verified: true },
+            select: { id: true, username: true, is_verified: true, user: { select: { email: true } } },
         });
 
-        return res.json({ mentor: updated });
+        if (is_verified && !existing.is_verified && updated.user?.email) {
+            const baseUrl = (process.env.CLIENT_URL || process.env.CLIENT_BASE_URL || 'https://emplearnings.com').replace(/\/+$/, '');
+            try {
+                await emailService.sendMentorProfileLive({
+                    mentorName: updated.username || 'there',
+                    mentorEmail: updated.user.email,
+                    profileUrl: `${baseUrl}/mentors/${updated.id}`,
+                    dashboardUrl: `${baseUrl}/dashboard`,
+                });
+            } catch (e) {
+                console.error('Failed to send mentor profile-live email:', e);
+            }
+        }
+
+        return res.json({ mentor: { id: updated.id, username: updated.username, is_verified: updated.is_verified } });
     } catch (error) {
         console.error('adminSetMentorApproved error:', error);
         return res.status(500).json({ error: 'Server error' });
