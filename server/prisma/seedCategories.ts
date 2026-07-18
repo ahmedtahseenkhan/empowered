@@ -8,11 +8,15 @@ const categories = [
         children: [
             {
                 name: "Mathematics",
-                children: ["Algebra", "Geometry", "Calculus", "Trigonometry", "Statistics"]
+                children: ["Algebra", "Geometry", "Calculus", "Trigonometry", "Statistics", "Math Foundations", "Basic Arithmetic", "Fractions & Decimals", "SAT/ACT Math Prep"]
             },
             {
                 name: "Science",
-                children: ["Biology", "Chemistry", "Physics", "Environmental Science", "Anatomy & Physiology"]
+                children: ["Biology", "Chemistry", "Physics", "Environmental Science", "Anatomy & Physiology", "General Science", "Life Science"]
+            },
+            {
+                name: "Computer Science & Technology",
+                children: ["Computer Science Fundamentals", "AP Computer Science", "Digital Literacy"]
             },
             {
                 name: "English & Literature",
