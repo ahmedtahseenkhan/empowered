@@ -32,6 +32,55 @@ interface ReviewRequest {
     };
 }
 
+/**
+ * Open a proof document in a new tab. Certification proofs are stored as base64
+ * `data:` URIs, and Chrome/Edge BLOCK top-level navigation to data: URLs for
+ * security — so a plain <a href="data:..."> just shows the raw string and renders
+ * nothing. We convert the data URI to a Blob and open its object URL instead,
+ * which browsers permit. Regular http(s) links open directly.
+ */
+const openDocument = (url: string) => {
+    try {
+        if (!url.startsWith('data:')) {
+            window.open(url, '_blank', 'noopener,noreferrer');
+            return;
+        }
+
+        const commaIdx = url.indexOf(',');
+        const meta = url.substring(5, commaIdx); // strip leading "data:"
+        const data = url.substring(commaIdx + 1);
+        const mime = meta.split(';')[0] || 'application/octet-stream';
+        const isBase64 = /;base64/i.test(meta);
+
+        let bytes: Uint8Array;
+        if (isBase64) {
+            const binary = atob(data);
+            bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        } else {
+            bytes = new TextEncoder().encode(decodeURIComponent(data));
+        }
+
+        const blob = new Blob([bytes], { type: mime });
+        const objectUrl = URL.createObjectURL(blob);
+        const win = window.open(objectUrl, '_blank');
+        if (!win) {
+            // Popup blocked — fall back to a download so the admin can still see it.
+            const a = document.createElement('a');
+            a.href = objectUrl;
+            a.download = `document.${mime.split('/')[1] || 'bin'}`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+        }
+        // Give the new tab time to load before releasing the blob.
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+    } catch (e) {
+        console.error('Failed to open document', e);
+        alert('Could not open this document.');
+    }
+};
+
 const ApprovalsPage: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'certifications' | 'reviews'>('certifications');
     const [certifications, setCertifications] = useState<CertificationRequest[]>([]);
@@ -165,9 +214,9 @@ const ApprovalsPage: React.FC = () => {
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 {cert.image_url ? (
-                                                    <a href={cert.image_url} target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:text-primary-800 flex items-center gap-1 text-sm">
+                                                    <button type="button" onClick={() => openDocument(cert.image_url!)} className="text-primary-600 hover:text-primary-800 flex items-center gap-1 text-sm">
                                                         View Document <ExternalLink className="w-3 h-3" />
-                                                    </a>
+                                                    </button>
                                                 ) : (
                                                     <span className="text-gray-400 text-sm italic">No document</span>
                                                 )}
