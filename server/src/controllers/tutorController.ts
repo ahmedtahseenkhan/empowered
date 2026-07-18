@@ -277,7 +277,7 @@ export const getPublicTutorById = async (req: Request, res: Response) => {
                 free_session_enabled: true,
                 // Needed only to enforce the public visibility gate (stripped before response).
                 stripe_account_id: true,
-                user: { select: { is_suspended: true, is_verified: true } },
+                user: { select: { id: true, is_suspended: true, is_verified: true } },
                 categories: {
                     select: {
                         category: {
@@ -369,13 +369,22 @@ export const getPublicTutorById = async (req: Request, res: Response) => {
         // Same public visibility gate as the listing: hide unapproved, not-payment-ready,
         // suspended or email-unverified mentors. 404 so the profile is indistinguishable
         // from one that doesn't exist.
+        // EXCEPTION: the profile owner (viewing/previewing their own profile) and admins
+        // can always see it, regardless of approval/Stripe status. The route uses
+        // optionalAuth, so req.user is present when a valid token is sent.
+        const requester = (req as any).user as { id?: string; role?: string } | undefined;
+        const isOwner = !!requester?.id && requester.id === mentor.user?.id;
+        const isAdmin = requester?.role === 'ADMIN';
+
         const isPubliclyVisible =
             mentor.is_verified &&
             !!mentor.stripe_account_id &&
             !!mentor.user &&
             !mentor.user.is_suspended &&
             mentor.user.is_verified;
-        if (!isPubliclyVisible) return res.status(404).json({ error: 'Tutor not found' });
+        if (!isPubliclyVisible && !isOwner && !isAdmin) {
+            return res.status(404).json({ error: 'Tutor not found' });
+        }
 
         // total_students is denormalized and not maintained, so compute it live:
         // distinct students who have a non-cancelled lesson with this tutor.

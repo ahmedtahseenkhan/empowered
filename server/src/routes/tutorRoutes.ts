@@ -14,14 +14,16 @@ import {
     getMarketingVideoSubmission,
     upsertMarketingVideoSubmission
 } from '../controllers/tutorController';
-import { authenticateToken } from '../middleware/authMiddleware'; // Assuming mock or real middleware
+import { authenticateToken, optionalAuth } from '../middleware/authMiddleware'; // Assuming mock or real middleware
 
 const router = express.Router();
 
 // Public
 router.get('/categories', getCategories);
 router.get('/public', listPublicTutors);
-router.get('/public/:id', getPublicTutorById);
+// optionalAuth: public viewers get the visibility gate; the profile owner and admins
+// (identified from their token when present) can always view their own/any profile.
+router.get('/public/:id', optionalAuth, getPublicTutorById);
 
 // Protected (Tutor)
 router.get('/me', authenticateToken, getProfile);
