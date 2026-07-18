@@ -61,7 +61,7 @@ const openDocument = (url: string) => {
             bytes = new TextEncoder().encode(decodeURIComponent(data));
         }
 
-        const blob = new Blob([bytes], { type: mime });
+        const blob = new Blob([bytes as unknown as BlobPart], { type: mime });
         const objectUrl = URL.createObjectURL(blob);
         const win = window.open(objectUrl, '_blank');
         if (!win) {
