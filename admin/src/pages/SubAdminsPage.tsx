@@ -134,7 +134,7 @@ const SubAdminsPage: React.FC = () => {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
                         <ShieldCheck className="w-6 h-6 text-primary-700" /> Sub-Admins
@@ -143,7 +143,7 @@ const SubAdminsPage: React.FC = () => {
                 </div>
                 <button
                     onClick={openCreate}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors self-start sm:self-auto shrink-0"
                 >
                     <Plus className="w-4 h-4" /> Add Sub-Admin
                 </button>
@@ -155,6 +155,7 @@ const SubAdminsPage: React.FC = () => {
                 ) : subAdmins.length === 0 ? (
                     <div className="text-center py-12 text-gray-500">No sub-admins yet. Create one to get started.</div>
                 ) : (
+                    <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                             <tr>
@@ -212,6 +213,7 @@ const SubAdminsPage: React.FC = () => {
                             ))}
                         </tbody>
                     </table>
+                    </div>
                 )}
             </div>
 

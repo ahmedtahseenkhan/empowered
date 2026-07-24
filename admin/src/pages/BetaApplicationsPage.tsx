@@ -126,7 +126,7 @@ const BetaApplicationsPage: React.FC = () => {
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">Beta Applications</h1>
                     <p className="text-sm text-gray-500 mt-1">
-                        Founding Mentor Programme — First 50 spots
+                        Founding Mentor Programme
                         {pendingCount > 0 && (
                             <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800">
                                 {pendingCount} pending
@@ -137,7 +137,7 @@ const BetaApplicationsPage: React.FC = () => {
             </div>
 
             {/* Filter Tabs */}
-            <div className="flex gap-2 mb-6">
+            <div className="flex flex-wrap gap-2 mb-6">
                 {STATUS_FILTERS.map(f => (
                     <button
                         key={f.value}
@@ -163,6 +163,7 @@ const BetaApplicationsPage: React.FC = () => {
                 <div className="text-center py-24 text-gray-400 text-sm">No applications found.</div>
             ) : (
                 <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                    <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                         <thead className="bg-gray-50 border-b border-gray-200">
                             <tr>
@@ -281,6 +282,7 @@ const BetaApplicationsPage: React.FC = () => {
                             ))}
                         </tbody>
                     </table>
+                    </div>
                 </div>
             )}
         </div>

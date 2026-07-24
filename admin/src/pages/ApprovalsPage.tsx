@@ -158,12 +158,12 @@ const ApprovalsPage: React.FC = () => {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">Pending Approvals</h1>
                     <p className="text-gray-600 mt-1">Review and verify tutor credentials and external proofs.</p>
                 </div>
-                <div className="flex bg-gray-100 p-1 rounded-lg">
+                <div className="flex bg-gray-100 p-1 rounded-lg self-start sm:self-auto">
                     <button
                         onClick={() => setActiveTab('certifications')}
                         className={cn("px-4 py-2 rounded-md text-sm font-medium transition-all", activeTab === 'certifications' ? "bg-white text-primary-700 shadow-sm" : "text-gray-600 hover:text-gray-900")}
@@ -187,6 +187,7 @@ const ApprovalsPage: React.FC = () => {
                         certifications.length === 0 ? (
                             <div className="text-center py-12 text-gray-500">No pending certification requests.</div>
                         ) : (
+                            <div className="overflow-x-auto">
                             <table className="min-w-full divide-y divide-gray-200">
                                 <thead className="bg-gray-50">
                                     <tr>
@@ -244,6 +245,7 @@ const ApprovalsPage: React.FC = () => {
                                     ))}
                                 </tbody>
                             </table>
+                            </div>
                         )
                     )}
 
@@ -251,6 +253,7 @@ const ApprovalsPage: React.FC = () => {
                         reviews.length === 0 ? (
                             <div className="text-center py-12 text-gray-500">No pending external review requests.</div>
                         ) : (
+                            <div className="overflow-x-auto">
                             <table className="min-w-full divide-y divide-gray-200">
                                 <thead className="bg-gray-50">
                                     <tr>
@@ -311,6 +314,7 @@ const ApprovalsPage: React.FC = () => {
                                     ))}
                                 </tbody>
                             </table>
+                            </div>
                         )
                     )}
                 </div>

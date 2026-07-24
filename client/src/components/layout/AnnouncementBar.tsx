@@ -4,7 +4,7 @@ import { Zap } from 'lucide-react';
 
 export const AnnouncementBar: React.FC = () => {
     const message =
-        '🚀 Join the First 50 Founding Mentors — Apply for Beta';
+        '🚀 Join Our Founding Mentors — Apply for Beta';
 
     return (
         <div className="bg-primary-900 text-white text-xs font-medium py-2 overflow-hidden select-none">

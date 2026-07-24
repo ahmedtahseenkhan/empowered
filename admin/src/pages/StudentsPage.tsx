@@ -76,6 +76,7 @@ const StudentsPage: React.FC = () => {
                 ) : students.length === 0 ? (
                     <div className="text-center py-12 text-gray-500">No students found.</div>
                 ) : (
+                    <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                             <tr>
@@ -138,6 +139,7 @@ const StudentsPage: React.FC = () => {
                             ))}
                         </tbody>
                     </table>
+                    </div>
                 )}
             </div>
         </div>

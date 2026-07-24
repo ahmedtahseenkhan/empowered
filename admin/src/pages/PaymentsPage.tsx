@@ -47,8 +47,8 @@ const PaymentsPage: React.FC = () => {
             </div>
 
             {/* Tabs */}
-            <div className="border-b border-gray-200">
-                <nav className="flex space-x-8">
+            <div className="border-b border-gray-200 overflow-x-auto">
+                <nav className="flex space-x-8 whitespace-nowrap">
                     {['ALL', 'SUBSCRIPTION', 'COURSE_SALE'].map((tab) => (
                         <button
                             key={tab}

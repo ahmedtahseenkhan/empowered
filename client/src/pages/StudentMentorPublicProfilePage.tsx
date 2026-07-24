@@ -451,6 +451,8 @@ const StudentMentorPublicProfilePage: React.FC = () => {
                                                     : 'No reviews yet'}
                                             </span>
                                         </div>
+                                        {/* Social media links */}
+                                        <MentorSocialLinks mentor={mentor} className="mt-3" />
                                         </div>
                                     </div>
 
@@ -533,8 +535,6 @@ const StudentMentorPublicProfilePage: React.FC = () => {
                                             </div>
                                         </div>
                                     )}
-
-                                    <MentorSocialLinks mentor={mentor} className="mt-5" />
                                 </Card>
 
                                 <Card className="p-6">

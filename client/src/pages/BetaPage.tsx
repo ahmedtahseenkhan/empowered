@@ -212,18 +212,18 @@ const BetaPage: React.FC = () => {
                     </div>
                 </section>
 
-                {/* ── ONLY 50 SPOTS ── */}
+                {/* ── LIMITED SPOTS ── */}
                 <section className="py-20 px-4 bg-gradient-to-br from-[#4A148C] to-[#8B55CC] text-white">
                     <div className="max-w-2xl mx-auto text-center">
                         <h2 className="text-3xl md:text-4xl font-bold font-poppins mb-6">
-                            Only 50 mentors will be accepted
+                            Only a limited number of mentors will be accepted
                         </h2>
                         <p className="text-white/85 text-lg leading-relaxed mb-4">
                             We are keeping this beta small so we can work closely with early users and improve the platform
                             based on real usage.
                         </p>
                         <p className="text-white/70 mb-10">
-                            Once these 50 spots are filled, access will close.
+                            Once these spots are filled, access will close.
                         </p>
                         <button
                             onClick={scrollToForm}

@@ -110,7 +110,7 @@ const DemoRequestsPage: React.FC = () => {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">Demo Requests</h1>
                     <p className="text-gray-600 mt-1">All demo call bookings. Manage availability in Demo Availability.</p>
@@ -158,7 +158,8 @@ const DemoRequestsPage: React.FC = () => {
                     {loading ? (
                         <div className="bg-white rounded-lg border border-gray-200 p-8 text-center text-gray-500">Loading...</div>
                     ) : (
-                        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                        <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto">
+                            <div className="min-w-[640px]">
                             <div className="grid grid-cols-8 border-b border-gray-200 bg-gray-50">
                                 <div className="p-2 text-xs font-medium text-gray-500">Time</div>
                                 {weekDays.map((d) => (
@@ -199,6 +200,7 @@ const DemoRequestsPage: React.FC = () => {
                                         </React.Fragment>
                                     );
                                 })}
+                            </div>
                             </div>
                         </div>
                     )}

@@ -872,7 +872,7 @@ class EmailService {
 <body style="font-family:Arial,sans-serif;color:#222;max-width:600px;margin:0 auto;padding:32px 24px;background:#fff">
   <p style="margin:0 0 16px 0">Hi ${firstName},</p>
   <p style="margin:0 0 16px 0">We're excited to let you know that you've been accepted into the EmpowerEd Learnings Founding Mentor Beta.</p>
-  <p style="margin:0 0 8px 0">As one of our first 50 founding mentors, you'll receive:</p>
+  <p style="margin:0 0 8px 0">As one of our founding mentors, you'll receive:</p>
   <ul style="margin:0 0 24px 0;padding-left:20px;line-height:1.7">
     ${perks}
   </ul>

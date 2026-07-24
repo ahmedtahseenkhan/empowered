@@ -46,12 +46,12 @@ const SubscriptionsPage: React.FC = () => {
             </div>
 
             {/* Filters */}
-            <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm flex items-center gap-4">
+            <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm flex flex-wrap items-center gap-4">
                 <div className="flex items-center gap-2 text-gray-500">
                     <Filter className="w-4 h-4" />
                     <span className="text-sm font-medium">Filter by Tier:</span>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                     {['STANDARD', 'PRO', 'PREMIUM'].map((tier) => (
                         <button
                             key={tier}

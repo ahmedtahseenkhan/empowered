@@ -79,7 +79,7 @@ const StudentDetailPage: React.FC = () => {
                         className="w-24 h-24 rounded-full object-cover border-4 border-gray-50"
                     />
                     <div className="flex-1">
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
                             <div>
                                 <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
                                     {student.username}
@@ -113,7 +113,7 @@ const StudentDetailPage: React.FC = () => {
                     </div>
                 </div>
 
-                <div className="mt-8 flex gap-3 border-t border-gray-100 pt-6">
+                <div className="mt-8 flex flex-wrap gap-3 border-t border-gray-100 pt-6">
                     <button
                         onClick={handleSuspendToggle}
                         disabled={actionLoading}
