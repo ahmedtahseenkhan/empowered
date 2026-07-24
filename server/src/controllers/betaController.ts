@@ -41,6 +41,28 @@ export const submitBetaApplication = async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'Please indicate whether you have active clients.' });
         }
 
+        // The beta flow assumes a brand-new mentor: on approval the applicant is
+        // told to *create* an account. If the email already belongs to a user,
+        // that signup step would fail with "User already exists" — so block here.
+        const existingUser = await prisma.user.findUnique({ where: { email } });
+        if (existingUser) {
+            return res.status(409).json({
+                error: 'An account with this email already exists. Please log in instead of applying.',
+            });
+        }
+
+        // Prevent duplicate applications while an earlier one is still open.
+        const existingApplication = await prisma.betaApplication.findFirst({
+            where: { email, status: { in: ['PENDING', 'APPROVED'] } },
+        });
+        if (existingApplication) {
+            return res.status(409).json({
+                error: existingApplication.status === 'APPROVED'
+                    ? 'This email has already been approved. Please check your inbox to create your account.'
+                    : 'You have already applied with this email. We\'ll be in touch soon.',
+            });
+        }
+
         const application = await prisma.betaApplication.create({
             data: {
                 full_name,
