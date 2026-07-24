@@ -4,7 +4,7 @@ import { Button } from '../components/ui/Button';
 import {
     ChevronLeft, ChevronRight,
     CheckCircle2, Circle, ArrowRight, Zap,
-    FileText, BookOpen, Upload, CreditCard, ExternalLink
+    FileText, BookOpen, Upload, CreditCard, ExternalLink, AlertTriangle
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -55,6 +55,9 @@ const TutorDashboard: React.FC = () => {
 
     const [profile, setProfile] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const [connectStatus, setConnectStatus] = useState<{
+        hasAccount: boolean; detailsSubmitted?: boolean; chargesEnabled?: boolean; payoutsEnabled?: boolean;
+    } | null>(null);
     const [availabilitySlots, setAvailabilitySlots] = useState<Array<{ start: string; end: string }>>([]);
     const [calendarBusy, setCalendarBusy] = useState(false);
     const [lessonsBusy, setLessonsBusy] = useState(false);
@@ -118,6 +121,12 @@ const TutorDashboard: React.FC = () => {
     }, []);
 
     useEffect(() => {
+        api.get('/payments/mentor/connect-status')
+            .then(res => setConnectStatus(res.data))
+            .catch(() => setConnectStatus(null));
+    }, []);
+
+    useEffect(() => {
         setStudentsBusy(true);
         api.get('/tutor/me/students')
             .then(res => setStudents(Array.isArray(res.data?.students) ? res.data.students : []))
@@ -178,6 +187,14 @@ const TutorDashboard: React.FC = () => {
     const completedCount = Object.values(checklist).filter(Boolean).length;
     const totalCount = Object.keys(checklist).length;
     const completionPct = Math.round((completedCount / totalCount) * 100);
+
+    // A mentor is only visible/bookable to students once their Stripe Connect
+    // payout account is fully onboarded. Show a disclaimer until then.
+    const paymentsReady = !!(connectStatus?.hasAccount
+        && connectStatus?.detailsSubmitted
+        && connectStatus?.chargesEnabled
+        && connectStatus?.payoutsEnabled);
+    const showConnectDisclaimer = connectStatus !== null && !paymentsReady;
 
     const checklistItems = [
         { label: 'Upload a profile photo', done: checklist.photo, link: '/tutor-onboarding?section=bio', icon: Upload },
@@ -378,6 +395,36 @@ const TutorDashboard: React.FC = () => {
                         </Button>
                     </div>
                 </div>
+
+                {/* ── Stripe Connect disclaimer ────────────────────────────────── */}
+                {showConnectDisclaimer && (
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                            <div className="flex items-start gap-3 flex-1 min-w-0">
+                                <div className="shrink-0 w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center">
+                                    <AlertTriangle className="w-5 h-5 text-amber-600" />
+                                </div>
+                                <div className="min-w-0">
+                                    <h3 className="text-sm font-bold text-amber-900">
+                                        {connectStatus?.hasAccount ? 'Finish setting up payments' : 'Set up your payout account to go live'}
+                                    </h3>
+                                    <p className="text-xs text-amber-800 mt-1 leading-relaxed">
+                                        Your profile stays hidden from students until you connect your Stripe payout account.
+                                        Complete Stripe Connect so students can find you, book sessions, and you can get paid.
+                                    </p>
+                                </div>
+                            </div>
+                            <Button
+                                size="sm"
+                                className="shrink-0 self-start sm:self-auto"
+                                onClick={() => navigate('/connect-account')}
+                            >
+                                <CreditCard className="w-3.5 h-3.5 mr-1.5" />
+                                {connectStatus?.hasAccount ? 'Complete setup' : 'Set up payments'}
+                            </Button>
+                        </div>
+                    </div>
+                )}
 
                 {/* ── Stats row ────────────────────────────────────────────────── */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -733,8 +780,8 @@ const TutorDashboard: React.FC = () => {
                         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                             <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
                                 <h3 className="text-sm font-semibold text-gray-900">Profile Status</h3>
-                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${completionPct === 100 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-                                    {completionPct === 100 ? 'Live ✓' : 'Incomplete'}
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${completionPct === 100 && paymentsReady ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                                    {completionPct === 100 && paymentsReady ? 'Live ✓' : !paymentsReady ? 'Payments needed' : 'Incomplete'}
                                 </span>
                             </div>
                             <div className="p-4">
