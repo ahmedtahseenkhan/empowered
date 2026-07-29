@@ -854,37 +854,20 @@ class EmailService {
         const createAccountUrl = `${baseUrl}/tutor-register`;
         const bookDemoUrl = `${baseUrl}/book-demo`;
 
-        const perks = [
-            '2 months free beta access',
-            'No credit card required to get started',
-            'Featured Founding Mentor badge',
-            'Priority placement in the marketplace',
-            'Access to premium beta features',
-            'Optional onboarding support if you\'d like help setting up your profile',
-        ]
-            .map(p => `<li style="margin-bottom:8px">${p}</li>`)
-            .join('');
-
         const html = `
 <!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"></head>
 <body style="font-family:Arial,sans-serif;color:#222;max-width:600px;margin:0 auto;padding:32px 24px;background:#fff">
   <p style="margin:0 0 16px 0">Hi ${firstName},</p>
-  <p style="margin:0 0 16px 0">We're excited to let you know that you've been accepted into the EmpowerEd Learnings Founding Mentor Beta.</p>
-  <p style="margin:0 0 8px 0">As one of our founding mentors, you'll receive:</p>
-  <ul style="margin:0 0 24px 0;padding-left:20px;line-height:1.7">
-    ${perks}
-  </ul>
-  <p style="margin:0 0 16px 0">To get started, create your account here:</p>
+  <p style="margin:0 0 16px 0">We're excited to let you know that your application to join the EmpowerEd Learnings Founding Mentor Beta has been approved.</p>
+  <p style="margin:0 0 16px 0">You can now create your mentor account and complete your profile using the link below:</p>
   <p style="margin:0 0 24px 0">
     <a href="${createAccountUrl}" style="display:inline-block;background:#4A148C;color:#fff;text-decoration:none;padding:12px 28px;border-radius:9999px;font-weight:600;font-size:15px">Create My Mentor Account</a>
   </p>
-  <p style="margin:0 0 16px 0">If you'd prefer a more personalised setup experience, you can also book a quick demo call with our team here:</p>
-  <p style="margin:0 0 32px 0">
-    <a href="${bookDemoUrl}" style="display:inline-block;background:#DD5D00;color:#fff;text-decoration:none;padding:12px 28px;border-radius:9999px;font-weight:600;font-size:15px">Book a Demo Call</a>
-  </p>
-  <p style="margin:0 0 32px 0">We're excited to have you join us.</p>
+  <p style="margin:0 0 16px 0">Once your profile is complete, our team will review it and help you get ready to start using the platform.</p>
+  <p style="margin:0 0 16px 0">If you would like assistance with onboarding or setting up your profile, you can <a href="${bookDemoUrl}" style="color:#4A148C">book a demo call</a> through our website or simply reply to this email. We'll be happy to guide you through the process.</p>
+  <p style="margin:0 0 32px 0">We're excited to have you join the EmpowerEd Learnings community and look forward to seeing you on the platform.</p>
   <p style="margin:0">Team EmpowerEd Learnings</p>
 </body>
 </html>`;
