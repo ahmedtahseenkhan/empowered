@@ -11,6 +11,17 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder'
     apiVersion: '2024-12-18.acacia' as any, // Use latest or matching version
 });
 
+// Countries where Stripe supports full-service accounts (card_payments + transfers).
+// Every other Express-eligible country (OM, PK, LK, EG, KE, CO, PH, ...) is a
+// cross-border payout recipient: transfers capability only, under the recipient
+// service agreement. https://docs.stripe.com/connect/cross-border-payouts
+const FULL_SERVICE_COUNTRIES = new Set([
+    'AE', 'AT', 'AU', 'BE', 'BG', 'BR', 'CA', 'CH', 'CY', 'CZ', 'DE', 'DK',
+    'EE', 'ES', 'FI', 'FR', 'GB', 'GI', 'GR', 'HK', 'HR', 'HU', 'IE', 'IT',
+    'JP', 'LI', 'LT', 'LU', 'LV', 'MT', 'MX', 'MY', 'NL', 'NO', 'NZ', 'PL',
+    'PT', 'RO', 'SE', 'SG', 'SI', 'SK', 'TH', 'US',
+]);
+
 export class StripeService {
 
     /**
@@ -20,26 +31,24 @@ export class StripeService {
      */
     static async createConnectAccount(email: string, country: string = 'US') {
         try {
+            const countryCode = country.toUpperCase();
+            const isRecipientOnly = !FULL_SERVICE_COUNTRIES.has(countryCode);
+
             const capabilities: Stripe.AccountCreateParams.Capabilities = {
                 transfers: { requested: true },
             };
-
-            // 'card_payments' is not supported for Express accounts in Oman (and some other regions)
-            // They primarily support 'transfers' (payouts) for Cross-Border or local setups.
-            if (country !== 'OM') {
+            if (!isRecipientOnly) {
                 capabilities.card_payments = { requested: true };
             }
 
             const accountCreateParams: Stripe.AccountCreateParams = {
                 type: 'express',
-                country,
+                country: countryCode,
                 email,
                 capabilities,
             };
 
-            // Oman requires the recipient service agreement when requesting transfers capability.
-            // https://stripe.com/docs/connect/service-agreement-types#choosing-type-with-api
-            if (country === 'OM') {
+            if (isRecipientOnly) {
                 accountCreateParams.tos_acceptance = {
                     service_agreement: 'recipient',
                 };
