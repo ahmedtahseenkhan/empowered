@@ -505,6 +505,25 @@ class EmailService {
         });
     }
 
+    async sendMentorSessionCancelledByStudent(data: {
+        mentorName: string;
+        mentorEmail: string;
+        studentName: string;
+        sessionDate: string;
+        sessionTime: string;
+        timezone?: string;
+    }): Promise<void> {
+        const html = this.renderTemplate('mentor/session-cancelled-by-student', {
+            ...data,
+            year: new Date().getFullYear(),
+        });
+        await this.sendEmail({
+            to: data.mentorEmail,
+            subject: 'Session Cancelled by Student',
+            html,
+        });
+    }
+
     async sendStudentSessionCancelledUnpaid(data: {
         studentName: string;
         studentEmail: string;

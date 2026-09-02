@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     Calendar, CheckCircle, BookOpen, ChevronLeft, ChevronRight,
-    ArrowRight, CreditCard, Users, Video, ExternalLink,
+    ArrowRight, CreditCard, Users, Video, ExternalLink, Wallet,
 } from 'lucide-react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { Button } from '../components/ui/Button';
@@ -75,6 +75,7 @@ const StudentDashboard: React.FC = () => {
     const [statsLoading, setStatsLoading] = useState(true);
     const [courses, setCourses] = useState<CoursePurchase[]>([]);
     const [mentors, setMentors] = useState<MentorEntry[]>([]);
+    const [credits, setCredits] = useState<{ available: number; reserved: number } | null>(null);
 
     const [monthCursor, setMonthCursor] = useState<Date>(() => {
         const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); return d;
@@ -106,6 +107,12 @@ const StudentDashboard: React.FC = () => {
         api.get('/courses/student/purchased')
             .then(res => setCourses(res.data || []))
             .catch(() => setCourses([]));
+    }, []);
+
+    useEffect(() => {
+        api.get('/wallet/me')
+            .then(res => setCredits({ available: Number(res.data?.available || 0), reserved: Number(res.data?.reserved || 0) }))
+            .catch(() => setCredits(null));
     }, []);
 
     useEffect(() => {
@@ -238,10 +245,13 @@ const StudentDashboard: React.FC = () => {
                 </div>
 
                 {/* ── Stats row ────────────────────────────────────────────────── */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                     <StatCard icon={<CheckCircle className="w-5 h-5" />} label="Sessions Completed" value={statsLoading ? '…' : completedSessions} accent="bg-green-500" />
                     <StatCard icon={<Calendar className="w-5 h-5" />} label="Upcoming Sessions" value={statsLoading ? '…' : upcomingSessions.length} accent="bg-purple-500" />
                     <StatCard icon={<BookOpen className="w-5 h-5" />} label="Courses" value={courses.length} accent="bg-blue-500" />
+                    <button type="button" onClick={() => navigate('/student/wallet')} className="text-left">
+                        <StatCard icon={<Wallet className="w-5 h-5" />} label="Learning Credits" value={credits ? credits.available : '…'} accent="bg-amber-500" />
+                    </button>
                 </div>
 
                 {/* ── Main layout ───────────────────────────────────────────────── */}

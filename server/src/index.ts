@@ -47,8 +47,10 @@ import supportRoutes from './routes/supportRoutes';
 import betaRoutes from './routes/betaRoutes';
 import aiRoutes from './routes/aiRoutes';
 import whiteboardRoutes from './routes/whiteboardRoutes';
+import walletRoutes from './routes/walletRoutes';
 import { startEmailOutboxProcessor } from './services/emailOutboxProcessor';
 import { startEmailScheduler } from './services/emailScheduler';
+import { startWalletScheduler } from './services/walletScheduler';
 import { initWhiteboardSocket } from './services/whiteboardSocket';
 
 // Middleware
@@ -102,6 +104,7 @@ app.use('/api/support', supportRoutes);
 app.use('/api/beta', betaRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/whiteboards', whiteboardRoutes);
+app.use('/api/wallet', walletRoutes);
 
 // Health Check
 app.get('/', (req, res) => {
@@ -116,4 +119,5 @@ httpServer.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     startEmailOutboxProcessor();
     startEmailScheduler();
+    startWalletScheduler();
 });

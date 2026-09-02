@@ -382,6 +382,34 @@ async function sendOutboxRow(row: OutboxRow) {
         return;
     }
 
+    if (row.type === 'SESSION_CANCELLED_BY_STUDENT_TUTOR') {
+        const lessonId = row.payload?.lessonId as string | undefined;
+        if (!lessonId) throw new Error('Missing lessonId in payload');
+
+        const lesson = await prisma.lesson.findUnique({
+            where: { id: lessonId },
+            include: {
+                student: { select: { username: true } },
+                tutor: { select: { username: true, timezone: true } },
+            },
+        });
+
+        if (!lesson) throw new Error(`Lesson not found: ${lessonId}`);
+
+        const timeZone = lesson.tutor?.timezone || 'UTC';
+        const studentName = (row.payload?.studentName as string | undefined) || lesson.student?.username || 'A student';
+
+        await emailService.sendMentorSessionCancelledByStudent({
+            mentorName: lesson.tutor?.username || 'Mentor',
+            mentorEmail: row.to_email,
+            studentName,
+            sessionDate: formatDatePart(lesson.start_time, timeZone),
+            sessionTime: formatTimePart(lesson.start_time, timeZone),
+            timezone: timeZone,
+        });
+        return;
+    }
+
     if (row.type === 'SESSION_PAYMENT_CONFIRMED_STUDENT') {
         const p = row.payload as { tutorName?: string; studentName?: string; lessonStart?: string; lessonId?: string; amount?: number };
         const lessonStart = p.lessonStart ? new Date(p.lessonStart) : null;

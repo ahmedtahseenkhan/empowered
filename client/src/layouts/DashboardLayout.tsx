@@ -17,6 +17,7 @@ import {
     Menu,
     X,
     Monitor,
+    Wallet,
 } from 'lucide-react';
 
 export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -61,6 +62,7 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
         ? [
             { icon: <User className="w-5 h-5" />, label: 'Dashboard', path: '/dashboard' },
             { icon: <Calendar className="w-5 h-5" />, label: 'Sessions', path: '/student/sessions' },
+            { icon: <Wallet className="w-5 h-5" />, label: 'My Credits', path: '/student/wallet' },
             { icon: <BookOpen className="w-5 h-5" />, label: 'My Courses', path: '/student/my-courses' },
             { icon: <Users className="w-5 h-5" />, label: 'My Mentors', path: '/student/my-mentors' },
             { icon: <BookOpen className="w-5 h-5" />, label: 'Notes from Mentor', path: '/student/notes' },

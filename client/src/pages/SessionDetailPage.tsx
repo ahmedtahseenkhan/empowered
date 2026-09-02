@@ -8,6 +8,9 @@ import { Modal } from '../components/ui/Modal';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/axios';
 
+const apiError = (e: unknown, fallback: string) =>
+    (e as { response?: { data?: { error?: string } } })?.response?.data?.error || fallback;
+
 type LessonDetail = {
     id: string;
     tutor_id: string;
@@ -27,7 +30,11 @@ type LessonDetail = {
         id: string;
         frequency?: string;
         created_at?: string;
+        funding?: string | null;
     } | null;
+    reservation?: { status: string; credits: number } | null;
+    earning?: { status: string; available_at: string } | null;
+    dispute?: { status: string } | null;
     student?: { username?: string | null };
     tutor?: { username?: string | null; timezone?: string | null };
 };
@@ -48,6 +55,15 @@ const SessionDetailPage: React.FC = () => {
     const [joinBusy, setJoinBusy] = useState(false);
     const [joinError, setJoinError] = useState('');
     const [errorModalOpen, setErrorModalOpen] = useState(false);
+
+    // Learning Credits actions
+    const [cancelOpen, setCancelOpen] = useState(false);
+    const [cancelBusy, setCancelBusy] = useState(false);
+    const [reportOpen, setReportOpen] = useState(false);
+    const [reportReason, setReportReason] = useState('');
+    const [reportBusy, setReportBusy] = useState(false);
+    const [actionError, setActionError] = useState('');
+    const [actionNotice, setActionNotice] = useState('');
 
     const [searchParams, setSearchParams] = useSearchParams();
     const [finalizeStatus, setFinalizeStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -131,6 +147,12 @@ const SessionDetailPage: React.FC = () => {
         const bt = lesson.billing_type.toUpperCase();
 
         if (ls === 'CANCELLED') return <span className="px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-600 border border-gray-200">Cancelled</span>;
+        if (lesson.booking?.funding === 'CREDITS') {
+            const ds = lesson.dispute?.status;
+            if (ds === 'OPEN') return <span className="px-3 py-1 rounded-full text-sm font-medium bg-amber-50 text-amber-700 border border-amber-200">Under review</span>;
+            if (ds === 'RESOLVED_REFUNDED') return <span className="px-3 py-1 rounded-full text-sm font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">Credits refunded</span>;
+            if (ls === 'BOOKED') return <span className="px-3 py-1 rounded-full text-sm font-medium bg-purple-50 text-purple-700 border border-purple-200">Reserved with credits</span>;
+        }
         if (ls === 'COMPLETED') return <span className="px-3 py-1 rounded-full text-sm font-medium bg-green-50 text-green-700 border border-green-200">Completed</span>;
         if (ls === 'MISSED') return <span className="px-3 py-1 rounded-full text-sm font-medium bg-red-50 text-red-700 border border-red-200">Missed</span>;
         if (bt === 'FREE_INTRO') return <span className="px-3 py-1 rounded-full text-sm font-medium bg-green-50 text-green-700 border border-green-200">Free Intro</span>;
@@ -184,6 +206,48 @@ const SessionDetailPage: React.FC = () => {
             setErrorModalOpen(true);
         } finally {
             setJoinBusy(false);
+        }
+    };
+
+    const isCreditsFunded = !!lesson && lesson.booking?.funding === 'CREDITS';
+    const canCancelCredits = !!lesson && isStudent && isCreditsFunded
+        && lesson.status.toUpperCase() === 'BOOKED'
+        && new Date(lesson.start_time).getTime() - Date.now() > 24 * 60 * 60 * 1000;
+    const canReportCredits = !!lesson && isStudent && isCreditsFunded
+        && lesson.status.toUpperCase() === 'COMPLETED'
+        && lesson.earning?.status === 'PENDING'
+        && !lesson.dispute;
+
+    const handleCancelCredits = async () => {
+        if (!lesson) return;
+        try {
+            setCancelBusy(true);
+            setActionError('');
+            const res = await api.post(`/wallet/lessons/${lesson.id}/cancel`);
+            setLesson({ ...lesson, status: 'CANCELLED', reservation: lesson.reservation ? { ...lesson.reservation, status: 'RETURNED' } : lesson.reservation });
+            setCancelOpen(false);
+            setActionNotice(`Session cancelled. ${Number(res.data?.credits_returned || 0)} credits are back in your wallet.`);
+        } catch (e) {
+            setActionError(apiError(e, 'Unable to cancel this session.'));
+        } finally {
+            setCancelBusy(false);
+        }
+    };
+
+    const handleReportCredits = async () => {
+        if (!lesson) return;
+        try {
+            setReportBusy(true);
+            setActionError('');
+            await api.post(`/wallet/lessons/${lesson.id}/report`, { reason: reportReason });
+            setLesson({ ...lesson, dispute: { status: 'OPEN' }, earning: lesson.earning ? { ...lesson.earning, status: 'ON_HOLD' } : lesson.earning });
+            setReportOpen(false);
+            setReportReason('');
+            setActionNotice('Thanks — your report has been sent to the EmpowerEd team for review.');
+        } catch (e) {
+            setActionError(apiError(e, 'Unable to send your report.'));
+        } finally {
+            setReportBusy(false);
         }
     };
 
@@ -324,6 +388,24 @@ const SessionDetailPage: React.FC = () => {
                             <p className="text-xs text-gray-500">Booked on {formatBookedOn(lesson.created_at || lesson.booking?.created_at)}</p>
                         )}
 
+                        {actionNotice && (
+                            <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-lg text-sm">{actionNotice}</div>
+                        )}
+
+                        {isCreditsFunded && lesson.reservation && (
+                            <div className="bg-purple-50 border border-purple-100 rounded-xl px-4 py-3 text-sm text-purple-900">
+                                {lesson.reservation.status === 'RESERVED' && (
+                                    <>{lesson.reservation.credits} Learning Credits are reserved for this session. They are released to {isStudent ? 'your mentor' : 'you'} only after the session is completed.</>
+                                )}
+                                {lesson.reservation.status === 'RELEASED' && (
+                                    <>{lesson.reservation.credits} Learning Credits were released for this completed session{lesson.earning?.status === 'PENDING' && lesson.earning?.available_at ? ` (in review until ${formatDate(lesson.earning.available_at)})` : ''}.</>
+                                )}
+                                {lesson.reservation.status === 'RETURNED' && (
+                                    <>{lesson.reservation.credits} Learning Credits were returned to the student's wallet.</>
+                                )}
+                            </div>
+                        )}
+
                         {/* Action buttons */}
                         <div className="flex flex-wrap gap-3 pt-2">
                             {isStudent && !needsPayment && isJoinable && (
@@ -334,6 +416,17 @@ const SessionDetailPage: React.FC = () => {
                                 >
                                     <ExternalLink className="w-4 h-4" />
                                     {joinBusy ? 'Joining…' : 'Join Session'}
+                                </Button>
+                            )}
+
+                            {canCancelCredits && (
+                                <Button variant="outline" className="text-red-700 border-red-200 hover:bg-red-50" onClick={() => { setActionError(''); setCancelOpen(true); }}>
+                                    Cancel session
+                                </Button>
+                            )}
+                            {canReportCredits && (
+                                <Button variant="outline" onClick={() => { setActionError(''); setReportReason(''); setReportOpen(true); }}>
+                                    Report a problem
                                 </Button>
                             )}
 
@@ -364,6 +457,44 @@ const SessionDetailPage: React.FC = () => {
                 title="Error"
             >
                 <p>{payError || joinError}</p>
+            </Modal>
+            <Modal isOpen={cancelOpen} onClose={() => { if (!cancelBusy) setCancelOpen(false); }} title="Cancel this session?">
+                {lesson && (
+                    <div className="space-y-4">
+                        <p className="text-sm text-gray-700">
+                            This session on <span className="font-medium">{formatDate(lesson.start_time)}</span> will be cancelled and{' '}
+                            <span className="font-medium">{lesson.reservation?.credits ?? ''} Learning Credits</span> will return to your wallet immediately.
+                        </p>
+                        {actionError && <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{actionError}</div>}
+                        <div className="flex gap-3">
+                            <Button variant="outline" className="flex-1" onClick={() => setCancelOpen(false)} disabled={cancelBusy}>Keep session</Button>
+                            <Button className="flex-1 bg-red-600 hover:bg-red-700" onClick={handleCancelCredits} disabled={cancelBusy}>
+                                {cancelBusy ? 'Cancelling…' : 'Yes, cancel session'}
+                            </Button>
+                        </div>
+                    </div>
+                )}
+            </Modal>
+            <Modal isOpen={reportOpen} onClose={() => { if (!reportBusy) setReportOpen(false); }} title="Report a problem with this session">
+                <div className="space-y-4">
+                    <p className="text-sm text-gray-700">
+                        Tell us what went wrong. The mentor's payment for this session is paused while the EmpowerEd team reviews your report.
+                    </p>
+                    <textarea
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 min-h-[120px]"
+                        placeholder="e.g. The mentor didn't show up / the session ended after 15 minutes…"
+                        value={reportReason}
+                        onChange={(e) => setReportReason(e.target.value)}
+                        disabled={reportBusy}
+                    />
+                    {actionError && <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{actionError}</div>}
+                    <div className="flex gap-3">
+                        <Button variant="outline" className="flex-1" onClick={() => setReportOpen(false)} disabled={reportBusy}>Back</Button>
+                        <Button className="flex-1" onClick={handleReportCredits} disabled={reportBusy || reportReason.trim().length < 10}>
+                            {reportBusy ? 'Sending…' : 'Send report'}
+                        </Button>
+                    </div>
+                </div>
             </Modal>
         </DashboardLayout>
     );

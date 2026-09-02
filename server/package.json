@@ -15,7 +15,8 @@
     "recalc:reviews": "ts-node scripts/recalc-review-stats.ts",
     "migrate:photos": "ts-node scripts/migrate-photos-to-files.ts",
     "clear:photos": "ts-node scripts/clear-photos.ts",
-    "approve:existing-mentors": "ts-node scripts/approve-existing-mentors.ts"
+    "approve:existing-mentors": "ts-node scripts/approve-existing-mentors.ts",
+    "wallet:smoke": "ts-node scripts/wallet-smoke-test.ts"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

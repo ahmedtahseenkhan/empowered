@@ -62,6 +62,12 @@ enum LessonBillingType {
   PAID
 }
 
+enum BookingFunding {
+  CARD
+  CREDITS
+  FREE
+}
+
 enum BookingFrequency {
   ONCE
   WEEKLY
@@ -112,10 +118,15 @@ model StudentProfile {
 
   progress_notes ProgressNote[]
 
-  // Stripe & Credits
-  stripe_customer_id String?
-  credits_balance    Int            @default(0)
-  credit_history     CreditLedger[]
+  // Stripe & Credits (Learning Credits wallet — 1 credit = 1 USD)
+  stripe_customer_id    String?
+  credits_balance       Int                  @default(0) // Available credits (purchased + promotional)
+  promo_credits_balance Int                  @default(0) // Portion of credits_balance that is promotional (spent first)
+  reserved_credits      Int                  @default(0) // Credits held for booked-but-not-completed sessions
+  credit_history        CreditLedger[]
+  reservations          SessionReservation[]
+  mentor_earnings       MentorEarning[]
+  disputes              SessionDispute[]
 
   homework_tasks HomeworkTask[]
 
@@ -133,11 +144,11 @@ model TutorProfile {
   profile_photo    String?
   tagline          String?
   about            String?
-  hourly_rate      Int      @default(0)
-  experience_years Int      @default(0)
+  hourly_rate      Int     @default(0)
+  experience_years Int     @default(0)
   video_url        String?
   country          String?
-  timezone         String   @default("UTC")
+  timezone         String  @default("UTC")
   key_strengths    String? // Stored as comma-separated or JSON string
 
   // Optional social links, shown on the public mentor profile.
@@ -149,8 +160,8 @@ model TutorProfile {
   tiktok_url    String?
   website_url   String?
 
-  is_verified      Boolean  @default(false) // Admin verification
-  student_levels   String[] @default([]) // ELEMENTARY_SCHOOL, MIDDLE_SCHOOL, HIGH_SCHOOL, COLLEGE_ADULT
+  is_verified    Boolean  @default(false) // Admin verification
+  student_levels String[] @default([]) // ELEMENTARY_SCHOOL, MIDDLE_SCHOOL, HIGH_SCHOOL, COLLEGE_ADULT
 
   tier TutorTier @default(STANDARD) // Subscription plan
 
@@ -194,6 +205,8 @@ model TutorProfile {
 
   marketing_video_submission TutorMarketingVideoSubmission?
   whiteboards                Whiteboard[]
+  wallet_earnings            MentorEarning[]
+  wallet_disputes            SessionDispute[]
 
   @@index([stripe_subscription_id])
   @@index([stripe_customer_id])
@@ -442,11 +455,16 @@ model Booking {
 
   client_timezone String @default("UTC") // Student's IANA timezone at booking time
 
+  /// How the sessions in this booking are paid: CARD (per-session Stripe checkout), CREDITS (Learning Credits wallet), FREE.
+  funding BookingFunding @default(CARD)
+
   status     String // pending, active, completed, cancelled
   created_at DateTime @default(now())
 
   lessons          Lesson[]
   payment_schedule PaymentSchedule[]
+  reservations     SessionReservation[]
+  mentor_earnings  MentorEarning[]
 
   @@index([student_id])
   @@index([tutor_id])
@@ -473,6 +491,9 @@ model Lesson {
   google_calendar_html_link String?
   category                  String?
 
+  completed_at  DateTime? // Set when the session is marked COMPLETED (auto or admin)
+  cancel_reason String?
+
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
@@ -480,6 +501,9 @@ model Lesson {
 
   progress_notes ProgressNote[]
   whiteboard     Whiteboard?
+  reservation    SessionReservation?
+  earning        MentorEarning?
+  dispute        SessionDispute?
 
   @@index([tutor_id])
   @@index([student_id])
@@ -786,25 +810,151 @@ model AdminReply {
 }
 
 enum CreditTransactionType {
-  PURCHASE
-  CANCELLATION_REFUND
-  MANUAL_ADJUSTMENT
-  USAGE
+  PURCHASE // Credits bought with real money (Phase 2)
+  PROMO_GRANT // Promotional / beta credits granted by admin
+  MANUAL_ADJUSTMENT // Admin correction (positive or negative)
+  RESERVE // Credits moved Available -> Reserved when sessions are booked
+  UNRESERVE // Reserved credits returned to Available (cancellation within policy)
+  RELEASE // Reserved credits released to the mentor after a completed session
+  REVERSAL // Credits returned to student after an approved dispute
+  CANCELLATION_REFUND // Legacy
+  USAGE // Legacy
 }
 
+enum CreditSource {
+  PURCHASED
+  PROMOTIONAL
+}
+
+enum ReservationStatus {
+  RESERVED
+  RELEASED
+  RETURNED
+}
+
+enum MentorEarningStatus {
+  PENDING // Session completed; inside the settlement / risk window
+  ON_HOLD // A dispute is open against this session
+  AVAILABLE // Settlement window passed; payout-ready
+  TRANSFERRED // Stripe transfer created (Phase 2)
+  PAID // Paid out to the mentor's bank
+  REVERSED // Dispute resolved in the student's favour; credits returned
+}
+
+enum DisputeStatus {
+  OPEN
+  RESOLVED_REFUNDED
+  RESOLVED_RELEASED
+}
+
+/// Immutable, append-only record of every Learning Credit movement for a student.
 model CreditLedger {
   id         String         @id @default(uuid())
   student_id String
   student    StudentProfile @relation(fields: [student_id], references: [id])
 
-  amount      Int // Positive for credit added, negative for used
-  type        CreditTransactionType
-  description String?
-  metadata    Json? // Store booking_id, stripe_charge_id etc
+  amount        Int // Positive = credits added to Available, negative = removed from Available
+  type          CreditTransactionType
+  source        CreditSource? // Which pool the credits came from / went to
+  balance_after Int? // Available balance after this entry (audit)
+  description   String?
+  metadata      Json? // booking_id, lesson_id, reservation_id, stripe ids, admin user id, etc.
+
+  booking_id         String?
+  lesson_id          String?
+  reservation_id     String?
+  created_by_user_id String? // Admin who performed a grant / adjustment
 
   created_at DateTime @default(now())
 
   @@index([student_id])
+  @@index([student_id, created_at])
+  @@index([lesson_id])
+}
+
+/// Credits held for one booked session. Available -> Reserved at booking; Released on completion; Returned on cancellation.
+model SessionReservation {
+  id         String         @id @default(uuid())
+  student_id String
+  student    StudentProfile @relation(fields: [student_id], references: [id])
+  booking_id String
+  booking    Booking        @relation(fields: [booking_id], references: [id])
+  lesson_id  String         @unique
+  lesson     Lesson         @relation(fields: [lesson_id], references: [id])
+
+  credits       Int // Total credits reserved for this session (= mentor rate)
+  promo_credits Int               @default(0) // Portion funded by promotional credits
+  status        ReservationStatus @default(RESERVED)
+  return_reason String?
+
+  created_at  DateTime  @default(now())
+  released_at DateTime?
+  returned_at DateTime?
+
+  @@index([student_id])
+  @@index([booking_id])
+  @@index([status])
+}
+
+/// A mentor's earning for one completed session. Amounts in cents (USD).
+model MentorEarning {
+  id             String         @id @default(uuid())
+  tutor_id       String
+  tutor          TutorProfile   @relation(fields: [tutor_id], references: [id])
+  student_id     String
+  student        StudentProfile @relation(fields: [student_id], references: [id])
+  booking_id     String
+  booking        Booking        @relation(fields: [booking_id], references: [id])
+  lesson_id      String         @unique
+  lesson         Lesson         @relation(fields: [lesson_id], references: [id])
+  reservation_id String?
+
+  gross_cents Int // Session price (credits * 100)
+  fee_cents   Int // Payment & Settlement Fee
+  net_cents   Int // What the mentor receives
+  fee_percent Float // Fee rate applied at release time (e.g. 5)
+  promo_cents Int   @default(0) // Portion of gross funded by promotional credits (platform liability)
+
+  status       MentorEarningStatus @default(PENDING)
+  available_at DateTime // When the settlement / risk window ends
+  settled_at   DateTime? // When status moved to AVAILABLE
+  paid_at      DateTime?
+  reversed_at  DateTime?
+
+  stripe_transfer_id String? // Phase 2
+  stripe_payout_id   String? // Phase 2
+  payout_note        String? // Phase 1 manual payout reference
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([tutor_id])
+  @@index([tutor_id, status])
+  @@index([student_id])
+  @@index([status, available_at])
+}
+
+/// A student's complaint about a completed session, raised inside the settlement window.
+model SessionDispute {
+  id         String         @id @default(uuid())
+  lesson_id  String         @unique
+  lesson     Lesson         @relation(fields: [lesson_id], references: [id])
+  student_id String
+  student    StudentProfile @relation(fields: [student_id], references: [id])
+  tutor_id   String
+  tutor      TutorProfile   @relation(fields: [tutor_id], references: [id])
+
+  reason              String
+  status              DisputeStatus @default(OPEN)
+  resolution_note     String?
+  resolved_by_user_id String?
+
+  created_at  DateTime  @default(now())
+  resolved_at DateTime?
+
+  @@index([status])
+  @@index([student_id])
+  @@index([tutor_id])
 }
 
 model StripeEvent {

@@ -70,8 +70,12 @@ export const getMyLessons = async (req: AuthRequest, res: Response) => {
                         id: true,
                         frequency: true,
                         created_at: true,
+                        funding: true,
                     },
                 },
+                reservation: { select: { status: true, credits: true } },
+                earning: { select: { status: true, available_at: true } },
+                dispute: { select: { status: true } },
                 student: { select: { username: true } },
                 tutor: { select: { username: true } },
             }
@@ -82,6 +86,11 @@ export const getMyLessons = async (req: AuthRequest, res: Response) => {
             lessons.map(async (lesson) => {
                 if (lesson.billing_type === 'FREE_INTRO' || lesson.billing_type === 'FREE_TRIAL') {
                     return { ...lesson, payment_status: 'not_required' as const };
+                }
+
+                // Sessions reserved with Learning Credits are paid up front — no PaymentSchedule rows exist.
+                if (lesson.booking?.funding === 'CREDITS') {
+                    return { ...lesson, payment_status: 'paid' as const };
                 }
 
                 if (!lesson.booking_id) {
@@ -146,8 +155,12 @@ export const getLessonDetail = async (req: AuthRequest, res: Response) => {
                         id: true,
                         frequency: true,
                         created_at: true,
+                        funding: true,
                     },
                 },
+                reservation: { select: { status: true, credits: true } },
+                earning: { select: { status: true, available_at: true } },
+                dispute: { select: { status: true } },
                 student: { select: { username: true } },
                 tutor: { select: { username: true, timezone: true } },
             },
@@ -171,6 +184,8 @@ export const getLessonDetail = async (req: AuthRequest, res: Response) => {
 
         if (lesson.billing_type === 'FREE_INTRO' || lesson.billing_type === 'FREE_TRIAL') {
             payment_status = 'not_required';
+        } else if (lesson.booking?.funding === 'CREDITS') {
+            payment_status = 'paid';
         } else if (lesson.booking_id) {
             const dueDate = new Date(lesson.start_time.getTime() - 48 * 60 * 60 * 1000);
             const dueStart = new Date(dueDate.getTime() - 2 * 60 * 60 * 1000);
@@ -217,6 +232,7 @@ export const joinLesson = async (req: AuthRequest, res: Response) => {
                 start_time: true,
                 meeting_link: true,
                 google_calendar_html_link: true,
+                booking: { select: { funding: true } },
             },
         });
 
@@ -244,8 +260,9 @@ export const joinLesson = async (req: AuthRequest, res: Response) => {
             return res.status(403).json({ error: 'Forbidden' });
         }
 
-        // For students: enforce payment check only while session is still joinable
-        if (role === 'STUDENT') {
+        // For students: enforce payment check only while session is still joinable.
+        // Credit-funded sessions were paid (reserved) at booking time — no per-session payment exists.
+        if (role === 'STUDENT' && lesson.booking?.funding !== 'CREDITS') {
             const now = new Date();
             const sessionEnd = new Date(lesson.start_time.getTime() + 50 * 60 * 1000); // 50 min window
 

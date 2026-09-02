@@ -9,6 +9,7 @@ const StudentBookingConfirmationPage: React.FC = () => {
     const [searchParams] = useSearchParams();
     const bookingId = searchParams.get('bookingId');
     const sessionId = searchParams.get('session_id');
+    const withCredits = searchParams.get('credits') === '1';
     const [status, setStatus] = useState<'processing' | 'success' | 'error'>('processing');
     const [error, setError] = useState('');
 
@@ -40,7 +41,9 @@ const StudentBookingConfirmationPage: React.FC = () => {
                         {status === 'processing'
                             ? 'Please wait while we confirm your payment and create your session(s).'
                             : status === 'success'
-                                ? 'Your booking has been created successfully.'
+                                ? (withCredits
+                                    ? 'Your sessions are reserved with Learning Credits. Credits are released to your mentor only after each session is completed.'
+                                    : 'Your booking has been created successfully.')
                                 : error}
                     </p>
                     {bookingId && (

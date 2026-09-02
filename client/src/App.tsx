@@ -57,6 +57,7 @@ import StudentMentorPublicProfilePage from './pages/StudentMentorPublicProfilePa
 import StudentBookMentorPage from './pages/StudentBookMentorPage';
 import StudentBookingConfirmationPage from './pages/StudentBookingConfirmationPage';
 import StudentBookingPaymentReviewPage from './pages/StudentBookingPaymentReviewPage';
+import StudentWalletPage from './pages/StudentWalletPage';
 import TutorAIAssistPage from './pages/TutorAIAssistPage';
 import TutorWhiteboardPage from './pages/TutorWhiteboardPage';
 import StudentSessionsPage from './pages/StudentSessionsPage';
@@ -382,6 +383,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <SessionDetailPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/student/wallet"
+            element={
+              <ProtectedRoute>
+                <StudentWalletPage />
               </ProtectedRoute>
             }
           />

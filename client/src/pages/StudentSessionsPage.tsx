@@ -8,6 +8,9 @@ import { Modal } from '../components/ui/Modal';
 import SessionListCard from '../components/sessions/SessionListCard';
 import api from '../api/axios';
 
+const apiError = (e: unknown, fallback: string) =>
+    (e as { response?: { data?: { error?: string } } })?.response?.data?.error || fallback;
+
 type Lesson = {
     id: string;
     tutor_id?: string;
@@ -24,7 +27,11 @@ type Lesson = {
         id?: string;
         frequency?: 'ONCE' | 'WEEKLY' | 'TWICE_WEEKLY' | 'THRICE_WEEKLY' | string | null;
         created_at?: string;
+        funding?: 'CARD' | 'CREDITS' | 'FREE' | string | null;
     } | null;
+    reservation?: { status: string; credits: number } | null;
+    earning?: { status: string; available_at: string } | null;
+    dispute?: { status: string } | null;
     meeting_link?: string | null;
     google_calendar_html_link?: string | null;
     tutor?: { username?: string | null };
@@ -155,6 +162,60 @@ const StudentSessionsPage: React.FC = () => {
     const [rescheduleBusy, setRescheduleBusy] = useState(false);
     const [rescheduleError, setRescheduleError] = useState<string>('');
 
+    // Learning Credits actions (cancel a reserved session / report a completed one)
+    const [cancelTarget, setCancelTarget] = useState<Lesson | null>(null);
+    const [cancelBusy, setCancelBusy] = useState(false);
+    const [reportTarget, setReportTarget] = useState<Lesson | null>(null);
+    const [reportReason, setReportReason] = useState('');
+    const [reportBusy, setReportBusy] = useState(false);
+    const [actionError, setActionError] = useState('');
+    const [actionNotice, setActionNotice] = useState('');
+
+    const isCreditsFunded = (l: Lesson) => l.booking?.funding === 'CREDITS';
+    const canCancelCredits = (l: Lesson) =>
+        isCreditsFunded(l)
+        && (l.status || '').toUpperCase() === 'BOOKED'
+        && new Date(l.start_time).getTime() - Date.now() > 24 * 60 * 60 * 1000;
+    const canReportCredits = (l: Lesson) =>
+        isCreditsFunded(l)
+        && (l.status || '').toUpperCase() === 'COMPLETED'
+        && l.earning?.status === 'PENDING'
+        && !l.dispute;
+
+    const submitCancel = async () => {
+        if (!cancelTarget) return;
+        try {
+            setCancelBusy(true);
+            setActionError('');
+            const res = await api.post(`/wallet/lessons/${cancelTarget.id}/cancel`);
+            const returned = Number(res.data?.credits_returned || 0);
+            setLessons((prev) => prev.map((l) => (l.id === cancelTarget.id ? { ...l, status: 'CANCELLED', reservation: l.reservation ? { ...l.reservation, status: 'RETURNED' } : l.reservation } : l)));
+            setCancelTarget(null);
+            setActionNotice(`Session cancelled. ${returned} credits are back in your wallet.`);
+        } catch (e) {
+            setActionError(apiError(e, 'Unable to cancel this session.'));
+        } finally {
+            setCancelBusy(false);
+        }
+    };
+
+    const submitReport = async () => {
+        if (!reportTarget) return;
+        try {
+            setReportBusy(true);
+            setActionError('');
+            await api.post(`/wallet/lessons/${reportTarget.id}/report`, { reason: reportReason });
+            setLessons((prev) => prev.map((l) => (l.id === reportTarget.id ? { ...l, dispute: { status: 'OPEN' }, earning: l.earning ? { ...l.earning, status: 'ON_HOLD' } : l.earning } : l)));
+            setReportTarget(null);
+            setReportReason('');
+            setActionNotice('Thanks — your report has been sent to the EmpowerEd team for review.');
+        } catch (e) {
+            setActionError(apiError(e, 'Unable to send your report.'));
+        } finally {
+            setReportBusy(false);
+        }
+    };
+
     const canReschedule = (l: Lesson) => {
         if (tab !== 'upcoming') return false;
         if ((l.status || '').toUpperCase() !== 'BOOKED') return false;
@@ -246,6 +307,18 @@ const StudentSessionsPage: React.FC = () => {
         const lessonStatus = (lesson.status || '').toUpperCase();
 
         const pill = 'inline-flex items-center px-3 py-1 rounded-full text-xs sm:text-sm font-medium border';
+        if (isCreditsFunded(lesson)) {
+            const ds = lesson.dispute?.status;
+            if (ds === 'OPEN') {
+                return <span className={`${pill} bg-amber-50 text-amber-700 border-amber-200`}>Under review</span>;
+            }
+            if (ds === 'RESOLVED_REFUNDED') {
+                return <span className={`${pill} bg-emerald-50 text-emerald-700 border-emerald-200`}>Credits refunded</span>;
+            }
+            if (lessonStatus === 'BOOKED') {
+                return <span className={`${pill} bg-purple-50 text-purple-700 border-purple-200`}>Reserved with credits</span>;
+            }
+        }
         if (lessonStatus === 'CANCELLED') {
             return <span className={`${pill} bg-gray-50 text-gray-600 border-gray-200`}>Cancelled</span>;
         }
@@ -300,6 +373,13 @@ const StudentSessionsPage: React.FC = () => {
                         Completed & Past
                     </Button>
                 </div>
+
+                {actionNotice && (
+                    <div className="mb-4 bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-lg text-sm flex items-start justify-between gap-3">
+                        <span>{actionNotice}</span>
+                        <button type="button" className="text-emerald-700 text-xs underline" onClick={() => setActionNotice('')}>Dismiss</button>
+                    </div>
+                )}
 
                 {loading ? (
                     <Card className="p-6">
@@ -416,6 +496,33 @@ const StudentSessionsPage: React.FC = () => {
                                                     Reschedule
                                                 </Button>
                                             ) : null}
+                                            {canCancelCredits(l) ? (
+                                                <Button
+                                                    variant="outline"
+                                                    className="flex items-center gap-2 text-red-700 border-red-200 hover:bg-red-50"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setActionError('');
+                                                        setCancelTarget(l);
+                                                    }}
+                                                >
+                                                    Cancel session
+                                                </Button>
+                                            ) : null}
+                                            {canReportCredits(l) ? (
+                                                <Button
+                                                    variant="outline"
+                                                    className="flex items-center gap-2"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setActionError('');
+                                                        setReportReason('');
+                                                        setReportTarget(l);
+                                                    }}
+                                                >
+                                                    Report a problem
+                                                </Button>
+                                            ) : null}
                                             {l.google_calendar_html_link ? (
                                                 <a href={l.google_calendar_html_link} target="_blank" rel="noreferrer">
                                                     <Button variant="outline">Open in Calendar</Button>
@@ -504,6 +611,56 @@ const StudentSessionsPage: React.FC = () => {
                         </div>
                     </div>
                 ) : null}
+            </Modal>
+            <Modal
+                isOpen={!!cancelTarget}
+                onClose={() => { if (!cancelBusy) setCancelTarget(null); }}
+                title="Cancel this session?"
+            >
+                {cancelTarget && (
+                    <div className="space-y-4">
+                        <p className="text-sm text-gray-700">
+                            Your session with <span className="font-medium">{cancelTarget.tutor?.username || 'your mentor'}</span> on{' '}
+                            <span className="font-medium">{formatDateLong(cancelTarget.start_time)}</span> will be cancelled and{' '}
+                            <span className="font-medium">{cancelTarget.reservation?.credits ?? ''} Learning Credits</span> will return to your wallet immediately.
+                        </p>
+                        {actionError && <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{actionError}</div>}
+                        <div className="flex gap-3">
+                            <Button variant="outline" className="flex-1" onClick={() => setCancelTarget(null)} disabled={cancelBusy}>Keep session</Button>
+                            <Button className="flex-1 bg-red-600 hover:bg-red-700" onClick={submitCancel} disabled={cancelBusy}>
+                                {cancelBusy ? 'Cancelling…' : 'Yes, cancel session'}
+                            </Button>
+                        </div>
+                    </div>
+                )}
+            </Modal>
+            <Modal
+                isOpen={!!reportTarget}
+                onClose={() => { if (!reportBusy) setReportTarget(null); }}
+                title="Report a problem with this session"
+            >
+                {reportTarget && (
+                    <div className="space-y-4">
+                        <p className="text-sm text-gray-700">
+                            Tell us what went wrong with your session on <span className="font-medium">{formatDateLong(reportTarget.start_time)}</span>.
+                            The mentor's payment for this session is paused while the EmpowerEd team reviews your report.
+                        </p>
+                        <textarea
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 min-h-[120px]"
+                            placeholder="e.g. The mentor didn't show up / the session ended after 15 minutes…"
+                            value={reportReason}
+                            onChange={(e) => setReportReason(e.target.value)}
+                            disabled={reportBusy}
+                        />
+                        {actionError && <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{actionError}</div>}
+                        <div className="flex gap-3">
+                            <Button variant="outline" className="flex-1" onClick={() => setReportTarget(null)} disabled={reportBusy}>Back</Button>
+                            <Button className="flex-1" onClick={submitReport} disabled={reportBusy || reportReason.trim().length < 10}>
+                                {reportBusy ? 'Sending…' : 'Send report'}
+                            </Button>
+                        </div>
+                    </div>
+                )}
             </Modal>
         </DashboardLayout>
     );

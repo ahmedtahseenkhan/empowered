@@ -23,6 +23,35 @@ interface PaymentHistory {
     status: string;
 }
 
+interface WalletEarning {
+    id: string;
+    lesson_id: string;
+    student_name: string;
+    session_start: string;
+    gross_cents: number;
+    fee_cents: number;
+    net_cents: number;
+    fee_percent: number;
+    status: 'PENDING' | 'ON_HOLD' | 'AVAILABLE' | 'TRANSFERRED' | 'PAID' | 'REVERSED' | string;
+    available_at: string;
+    paid_at?: string | null;
+    dispute_status?: string | null;
+}
+
+interface WalletEarnings {
+    config: { feePercent: number; settlementDays: number; payoutMinimumCents: number };
+    totals: {
+        pending_cents: number;
+        on_hold_cents: number;
+        available_cents: number;
+        paid_cents: number;
+        reversed_cents: number;
+        lifetime_gross_cents: number;
+        lifetime_fee_cents: number;
+    };
+    earnings: WalletEarning[];
+}
+
 interface UpcomingPayment {
     id: string;
     studentName: string;
@@ -37,6 +66,7 @@ const PaymentsPage: React.FC = () => {
     const [overview, setOverview] = useState<EarningsOverview | null>(null);
     const [paymentHistory, setPaymentHistory] = useState<PaymentHistory[]>([]);
     const [upcomingPayments, setUpcomingPayments] = useState<UpcomingPayment[]>([]);
+    const [walletEarnings, setWalletEarnings] = useState<WalletEarnings | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [currentPage, setCurrentPage] = useState(1);
@@ -47,6 +77,11 @@ const PaymentsPage: React.FC = () => {
     }, [currentPage]);
 
     const fetchAllData = async () => {
+        // Learning Credit earnings (independent of the Stripe-based history below)
+        api.get('/wallet/mentor/earnings')
+            .then((r) => setWalletEarnings(r.data || null))
+            .catch(() => setWalletEarnings(null));
+
         try {
             setLoading(true);
             setError(null);
@@ -185,6 +220,84 @@ const PaymentsPage: React.FC = () => {
                                 </div>
                             </div>
                         </div>
+                    </Card>
+                )}
+
+                {/* Learning Credit earnings */}
+                {walletEarnings && (
+                    <Card className="p-6">
+                        <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+                            <div>
+                                <h2 className="text-xl font-semibold text-gray-900">🎓 Learning Credit Earnings</h2>
+                                <p className="text-sm text-gray-500 mt-1">
+                                    Sessions paid with Learning Credits. Earnings become payout-ready after a {walletEarnings.config.settlementDays}-day settlement &amp; review period.
+                                    A {walletEarnings.config.feePercent}% Payment &amp; Settlement Fee is applied to each completed session.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div className="bg-amber-50 p-4 rounded-lg">
+                                <div className="text-sm text-gray-600 mb-1">Pending (in review window)</div>
+                                <div className="text-2xl font-bold text-gray-900">{formatCurrency(walletEarnings.totals.pending_cents / 100)}</div>
+                                {walletEarnings.totals.on_hold_cents > 0 && (
+                                    <div className="text-xs text-amber-700 mt-1">{formatCurrency(walletEarnings.totals.on_hold_cents / 100)} on hold (reported)</div>
+                                )}
+                            </div>
+                            <div className="bg-green-50 p-4 rounded-lg">
+                                <div className="text-sm text-gray-600 mb-1">Payout-ready</div>
+                                <div className="text-2xl font-bold text-gray-900">{formatCurrency(walletEarnings.totals.available_cents / 100)}</div>
+                                <div className="text-xs text-gray-500 mt-1">Paid monthly once you reach {formatCurrency(walletEarnings.config.payoutMinimumCents / 100)}</div>
+                            </div>
+                            <div className="bg-purple-50 p-4 rounded-lg">
+                                <div className="text-sm text-gray-600 mb-1">Paid out</div>
+                                <div className="text-2xl font-bold text-gray-900">{formatCurrency(walletEarnings.totals.paid_cents / 100)}</div>
+                            </div>
+                            <div className="bg-blue-50 p-4 rounded-lg">
+                                <div className="text-sm text-gray-600 mb-1">Lifetime (before fee)</div>
+                                <div className="text-2xl font-bold text-gray-900">{formatCurrency(walletEarnings.totals.lifetime_gross_cents / 100)}</div>
+                                <div className="text-xs text-gray-500 mt-1">Fees: {formatCurrency(walletEarnings.totals.lifetime_fee_cents / 100)}</div>
+                            </div>
+                        </div>
+
+                        {walletEarnings.earnings.length > 0 && (
+                            <div className="mt-6 overflow-x-auto">
+                                <table className="w-full">
+                                    <thead className="bg-gray-50">
+                                        <tr>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Session</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student</th>
+                                            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Session price</th>
+                                            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Fee</th>
+                                            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Your earnings</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="bg-white divide-y divide-gray-200 text-sm">
+                                        {walletEarnings.earnings.map((e) => {
+                                            const statusLabel: Record<string, { text: string; cls: string }> = {
+                                                PENDING: { text: `In review until ${formatDate(e.available_at)}`, cls: 'bg-amber-100 text-amber-800' },
+                                                ON_HOLD: { text: 'On hold — reported by student', cls: 'bg-red-100 text-red-800' },
+                                                AVAILABLE: { text: 'Payout-ready', cls: 'bg-green-100 text-green-800' },
+                                                TRANSFERRED: { text: 'Transferred', cls: 'bg-purple-100 text-purple-800' },
+                                                PAID: { text: e.paid_at ? `Paid ${formatDate(e.paid_at)}` : 'Paid', cls: 'bg-purple-100 text-purple-800' },
+                                                REVERSED: { text: 'Refunded to student', cls: 'bg-gray-100 text-gray-700' },
+                                            };
+                                            const st = statusLabel[e.status] || { text: e.status, cls: 'bg-gray-100 text-gray-700' };
+                                            return (
+                                                <tr key={e.id}>
+                                                    <td className="px-4 py-3 text-gray-900 whitespace-nowrap">{formatDate(e.session_start)}</td>
+                                                    <td className="px-4 py-3 text-gray-700">{e.student_name}</td>
+                                                    <td className="px-4 py-3 text-right text-gray-700">{formatCurrency(e.gross_cents / 100)}</td>
+                                                    <td className="px-4 py-3 text-right text-gray-500">−{formatCurrency(e.fee_cents / 100)}</td>
+                                                    <td className="px-4 py-3 text-right font-semibold text-green-700">{formatCurrency(e.net_cents / 100)}</td>
+                                                    <td className="px-4 py-3"><span className={`px-2 py-1 rounded-full text-xs whitespace-nowrap ${st.cls}`}>{st.text}</span></td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
                     </Card>
                 )}
 
