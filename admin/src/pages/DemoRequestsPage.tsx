@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import api from '../api/axios';
-import { CalendarClock, ChevronLeft, ChevronRight } from 'lucide-react';
+import { CalendarClock, ChevronLeft, ChevronRight, Mail, Phone, Video } from 'lucide-react';
 
 type DemoBooking = {
     id: string;
@@ -377,196 +377,233 @@ const DemoRequestsPage: React.FC = () => {
             )}
 
             {selectedBooking && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={closeModal}>
-                    <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-xl font-bold text-gray-900">Demo booking details</h2>
-                            <button type="button" onClick={closeModal} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
-                        </div>
-                        <dl className="space-y-3 text-sm">
-                            <div>
-                                <dt className="font-medium text-gray-500">Full name</dt>
-                                <dd className="text-gray-900">{selectedBooking.full_name}</dd>
-                            </div>
-                            <div>
-                                <dt className="font-medium text-gray-500">Email</dt>
-                                <dd className="text-gray-900"><a href={`mailto:${selectedBooking.email}`} className="text-purple-600 hover:underline">{selectedBooking.email}</a></dd>
-                            </div>
-                            {selectedBooking.phone && (
-                                <div>
-                                    <dt className="font-medium text-gray-500">Phone</dt>
-                                    <dd className="text-gray-900"><a href={`tel:${selectedBooking.phone}`} className="text-purple-600 hover:underline">{selectedBooking.phone}</a></dd>
-                                </div>
-                            )}
-                            <div>
-                                <dt className="font-medium text-gray-500">Category alignment</dt>
-                                <dd className="text-gray-900">{selectedBooking.category_alignment || '—'}</dd>
-                            </div>
-                            <div>
-                                <dt className="font-medium text-gray-500">Experience</dt>
-                                <dd className="text-gray-900">{selectedBooking.experience_years || '—'}</dd>
-                            </div>
-                            <div>
-                                <dt className="font-medium text-gray-500">Income status</dt>
-                                <dd className="text-gray-900">{selectedBooking.income_status || '—'}</dd>
-                            </div>
-                            <div>
-                                <dt className="font-medium text-gray-500">What they're looking for</dt>
-                                <dd className="text-gray-900">
-                                    {parseLookingFor(selectedBooking.looking_for).length > 0 ? (
-                                        <ul className="list-disc list-inside mt-1">{parseLookingFor(selectedBooking.looking_for).map((item, i) => <li key={i}>{item}</li>)}</ul>
-                                    ) : (
-                                        '—'
-                                    )}
-                                </dd>
-                            </div>
-                            <div>
-                                <dt className="font-medium text-gray-500">Demo time (Dallas, TX)</dt>
-                                <dd className="text-gray-900">
-                                    {formatInDallas(selectedBooking.slot_start_time)} – 20 min
+                <div className="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center sm:p-6 bg-black/50" onClick={closeModal}>
+                    <div
+                        className="bg-white w-full h-full sm:h-auto sm:rounded-2xl sm:shadow-2xl sm:max-w-4xl sm:max-h-[88vh] flex flex-col overflow-hidden"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {/* Header — stays put while either column scrolls */}
+                        <div className="shrink-0 flex items-start justify-between gap-4 px-5 sm:px-6 py-4 border-b border-gray-200">
+                            <div className="min-w-0">
+                                <h2 className="text-lg font-bold text-gray-900 truncate">{selectedBooking.full_name}</h2>
+                                <p className="text-sm text-gray-500 mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                                    <span>{formatInDallas(selectedBooking.slot_start_time)} · 20 min · Dallas, TX</span>
                                     {selectedBooking.rescheduled_at && (
-                                        <span className="ml-2 text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded">
+                                        <span className="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded">
                                             Rescheduled {new Date(selectedBooking.rescheduled_at).toLocaleDateString()}
                                         </span>
                                     )}
-                                </dd>
+                                </p>
                             </div>
-                            {!!selectedBooking.meeting_link && (
-                                <div>
-                                    <dt className="font-medium text-gray-500">Demo call link</dt>
-                                    <dd className="text-gray-900">
-                                        <a
-                                            href={selectedBooking.meeting_link}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="inline-flex items-center justify-center px-3 py-2 rounded-lg bg-purple-600 text-white hover:bg-purple-700 transition-colors"
-                                        >
-                                            Join Demo Call
+                            <button
+                                type="button"
+                                onClick={closeModal}
+                                aria-label="Close"
+                                className="shrink-0 text-gray-400 hover:text-gray-600 text-2xl leading-none -mt-1"
+                            >
+                                &times;
+                            </button>
+                        </div>
+
+                        {/* Body — one scroll on mobile, two independent columns from md up */}
+                        <div className="flex-1 min-h-0 overflow-y-auto md:overflow-hidden md:grid md:grid-cols-2">
+                            {/* Left: who booked */}
+                            <div className="md:h-full md:overflow-y-auto p-5 sm:p-6 md:border-r border-gray-200 space-y-5">
+                                <div className="space-y-1.5">
+                                    <a href={`mailto:${selectedBooking.email}`} className="flex items-center gap-2 text-sm text-purple-600 hover:underline break-all">
+                                        <Mail className="w-4 h-4 shrink-0" />
+                                        {selectedBooking.email}
+                                    </a>
+                                    {selectedBooking.phone && (
+                                        <a href={`tel:${selectedBooking.phone}`} className="flex items-center gap-2 text-sm text-purple-600 hover:underline">
+                                            <Phone className="w-4 h-4 shrink-0" />
+                                            {selectedBooking.phone}
                                         </a>
-                                    </dd>
+                                    )}
                                 </div>
-                            )}
-                            <div>
-                                <dt className="font-medium text-gray-500">Booked on</dt>
-                                <dd className="text-gray-900">{new Date(selectedBooking.created_at).toLocaleString()}</dd>
-                            </div>
-                        </dl>
 
-                        <div className="mt-6 pt-5 border-t border-gray-200">
-                            {rescheduledMsg && (
-                                <div className="mb-4 rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-800">
-                                    {rescheduledMsg}
-                                </div>
-                            )}
-
-                            {!rescheduleOpen ? (
-                                <button
-                                    type="button"
-                                    onClick={() => { setRescheduleOpen(true); setRescheduledMsg(null); }}
-                                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-purple-200 bg-purple-50 text-purple-700 text-sm font-medium hover:bg-purple-100"
-                                >
-                                    <CalendarClock className="w-4 h-4" />
-                                    Reschedule demo call
-                                </button>
-                            ) : (
-                                <div className="space-y-4">
-                                    <div className="flex items-center justify-between">
-                                        <h3 className="font-semibold text-gray-900">Pick a new time</h3>
-                                        <button
-                                            type="button"
-                                            onClick={() => { setRescheduleOpen(false); setRescheduleError(null); }}
-                                            className="text-sm text-gray-500 hover:text-gray-700"
-                                        >
-                                            Cancel
-                                        </button>
+                                <dl className="grid grid-cols-2 gap-x-4 gap-y-4 text-sm">
+                                    <div>
+                                        <dt className="text-xs font-medium uppercase tracking-wide text-gray-400">Category</dt>
+                                        <dd className="text-gray-900 mt-0.5">{selectedBooking.category_alignment || '—'}</dd>
                                     </div>
+                                    <div>
+                                        <dt className="text-xs font-medium uppercase tracking-wide text-gray-400">Experience</dt>
+                                        <dd className="text-gray-900 mt-0.5">{selectedBooking.experience_years || '—'}</dd>
+                                    </div>
+                                    <div className="col-span-2">
+                                        <dt className="text-xs font-medium uppercase tracking-wide text-gray-400">Income status</dt>
+                                        <dd className="text-gray-900 mt-0.5">{selectedBooking.income_status || '—'}</dd>
+                                    </div>
+                                    <div className="col-span-2">
+                                        <dt className="text-xs font-medium uppercase tracking-wide text-gray-400">What they're looking for</dt>
+                                        <dd className="text-gray-900 mt-1">
+                                            {parseLookingFor(selectedBooking.looking_for).length > 0 ? (
+                                                <ul className="space-y-1">
+                                                    {parseLookingFor(selectedBooking.looking_for).map((item, i) => (
+                                                        <li key={i} className="flex gap-2">
+                                                            <span className="text-purple-400">•</span>
+                                                            <span>{item}</span>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            ) : (
+                                                '—'
+                                            )}
+                                        </dd>
+                                    </div>
+                                </dl>
 
-                                    {!outsideHours ? (
-                                        slotsLoading ? (
-                                            <div className="text-sm text-gray-500">Loading open slots...</div>
-                                        ) : slotDays.length === 0 ? (
-                                            <div className="text-sm text-gray-500">
-                                                No open slots in the next 28 days. Add hours in Demo Availability, or tick the box below to set any time.
-                                            </div>
-                                        ) : (
-                                            <>
-                                                <div className="flex gap-2 overflow-x-auto pb-1">
-                                                    {slotDays.map((day) => (
-                                                        <button
-                                                            key={day}
-                                                            type="button"
-                                                            onClick={() => { setSlotDay(day); setChosenSlot(''); }}
-                                                            className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium border ${day === slotDay ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}
-                                                        >
-                                                            {day}
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                                <div className="grid grid-cols-3 gap-2">
-                                                    {(slotsByDay.get(slotDay) || []).map((slot) => (
-                                                        <button
-                                                            key={slot.start}
-                                                            type="button"
-                                                            onClick={() => setChosenSlot(slot.start)}
-                                                            className={`px-2 py-2 rounded-lg text-sm border ${chosenSlot === slot.start ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}
-                                                        >
-                                                            {formatTimeInDallas(slot.start)}
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </>
-                                        )
-                                    ) : (
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">New date &amp; time (Dallas, TX)</label>
-                                            <input
-                                                type="datetime-local"
-                                                value={customTime}
-                                                onChange={(e) => setCustomTime(e.target.value)}
-                                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                                            />
+                                <p className="text-xs text-gray-400 pt-1 border-t border-gray-100">
+                                    Booked {new Date(selectedBooking.created_at).toLocaleString()}
+                                </p>
+                            </div>
+
+                            {/* Right: the call itself — details, join link, reschedule */}
+                            <div className="md:h-full md:min-h-0 flex flex-col border-t md:border-t-0 border-gray-200 bg-gray-50/60">
+                                <div className="flex-1 md:overflow-y-auto p-5 sm:p-6 space-y-4">
+                                    {rescheduledMsg && (
+                                        <div className="rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-800">
+                                            {rescheduledMsg}
                                         </div>
                                     )}
 
-                                    <label className="flex items-start gap-2 text-sm text-gray-600">
-                                        <input
-                                            type="checkbox"
-                                            checked={outsideHours}
-                                            onChange={(e) => { setOutsideHours(e.target.checked); setChosenSlot(''); setRescheduleError(null); }}
-                                            className="mt-0.5"
-                                        />
-                                        <span>Allow a time outside availability hours (still blocked if it clashes with another demo or a time block)</span>
-                                    </label>
+                                    {!rescheduleOpen ? (
+                                        <>
+                                            <div className="rounded-xl bg-white border border-gray-200 p-4">
+                                                <div className="text-xs font-medium uppercase tracking-wide text-gray-400">Scheduled for</div>
+                                                <div className="mt-1 text-lg font-semibold text-gray-900">
+                                                    {formatDayInDallas(selectedBooking.slot_start_time)}
+                                                </div>
+                                                <div className="text-gray-600">
+                                                    {formatTimeInDallas(selectedBooking.slot_start_time)} · 20 min (Dallas, TX)
+                                                </div>
+                                                {!!selectedBooking.meeting_link && (
+                                                    <a
+                                                        href={selectedBooking.meeting_link}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        className="mt-4 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-medium hover:bg-purple-700 transition-colors"
+                                                    >
+                                                        <Video className="w-4 h-4" />
+                                                        Join Demo Call
+                                                    </a>
+                                                )}
+                                            </div>
 
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Note for the mentor (optional)</label>
-                                        <textarea
-                                            value={note}
-                                            onChange={(e) => setNote(e.target.value)}
-                                            rows={2}
-                                            placeholder="e.g. Moved at your request — see you then!"
-                                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                                        />
-                                    </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => { setRescheduleOpen(true); setRescheduledMsg(null); }}
+                                                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-purple-200 bg-purple-50 text-purple-700 text-sm font-medium hover:bg-purple-100"
+                                            >
+                                                <CalendarClock className="w-4 h-4" />
+                                                Reschedule demo call
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div className="flex items-center justify-between">
+                                                <h3 className="font-semibold text-gray-900">Pick a new time</h3>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => { setRescheduleOpen(false); setRescheduleError(null); }}
+                                                    className="text-sm text-gray-500 hover:text-gray-700"
+                                                >
+                                                    Cancel
+                                                </button>
+                                            </div>
 
-                                    {rescheduleError && (
-                                        <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">{rescheduleError}</div>
+                                            {!outsideHours ? (
+                                                slotsLoading ? (
+                                                    <div className="text-sm text-gray-500">Loading open slots...</div>
+                                                ) : slotDays.length === 0 ? (
+                                                    <div className="text-sm text-gray-500">
+                                                        No open slots in the next 28 days. Add hours in Demo Availability, or tick the box below to set any time.
+                                                    </div>
+                                                ) : (
+                                                    <>
+                                                        <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+                                                            {slotDays.map((day) => (
+                                                                <button
+                                                                    key={day}
+                                                                    type="button"
+                                                                    onClick={() => { setSlotDay(day); setChosenSlot(''); }}
+                                                                    className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${day === slotDay ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}
+                                                                >
+                                                                    {day}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                        <div className="grid grid-cols-3 gap-2">
+                                                            {(slotsByDay.get(slotDay) || []).map((slot) => (
+                                                                <button
+                                                                    key={slot.start}
+                                                                    type="button"
+                                                                    onClick={() => setChosenSlot(slot.start)}
+                                                                    className={`px-2 py-2 rounded-lg text-sm border transition-colors ${chosenSlot === slot.start ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}
+                                                                >
+                                                                    {formatTimeInDallas(slot.start)}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </>
+                                                )
+                                            ) : (
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 mb-1">New date &amp; time (Dallas, TX)</label>
+                                                    <input
+                                                        type="datetime-local"
+                                                        value={customTime}
+                                                        onChange={(e) => setCustomTime(e.target.value)}
+                                                        className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                                                    />
+                                                </div>
+                                            )}
+
+                                            <label className="flex items-start gap-2 text-sm text-gray-600">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={outsideHours}
+                                                    onChange={(e) => { setOutsideHours(e.target.checked); setChosenSlot(''); setRescheduleError(null); }}
+                                                    className="mt-0.5"
+                                                />
+                                                <span>Allow a time outside availability hours</span>
+                                            </label>
+
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Note for the mentor (optional)</label>
+                                                <textarea
+                                                    value={note}
+                                                    onChange={(e) => setNote(e.target.value)}
+                                                    rows={2}
+                                                    placeholder="e.g. Moved at your request — see you then!"
+                                                    className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                                                />
+                                            </div>
+
+                                            {rescheduleError && (
+                                                <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">{rescheduleError}</div>
+                                            )}
+                                        </>
                                     )}
-
-                                    <p className="text-xs text-gray-500">
-                                        The Google Calendar event moves to the new time and {selectedBooking.full_name} gets an email with the new details. The meeting link stays the same.
-                                    </p>
-
-                                    <button
-                                        type="button"
-                                        onClick={submitReschedule}
-                                        disabled={saving}
-                                        className="w-full px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-medium hover:bg-purple-700 disabled:opacity-60"
-                                    >
-                                        {saving ? 'Rescheduling...' : 'Confirm new time'}
-                                    </button>
                                 </div>
-                            )}
+
+                                {rescheduleOpen && (
+                                    <div className="shrink-0 border-t border-gray-200 bg-white px-5 sm:px-6 py-4 space-y-3">
+                                        <p className="text-xs text-gray-500">
+                                            The calendar event moves and {selectedBooking.full_name} is emailed the new time. The meeting link stays the same.
+                                        </p>
+                                        <button
+                                            type="button"
+                                            onClick={submitReschedule}
+                                            disabled={saving}
+                                            className="w-full px-4 py-2.5 rounded-lg bg-purple-600 text-white text-sm font-medium hover:bg-purple-700 disabled:opacity-60"
+                                        >
+                                            {saving ? 'Rescheduling...' : 'Confirm new time'}
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>
