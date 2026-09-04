@@ -230,7 +230,7 @@ async function checkDemoCallReminders() {
                         type: 'DEMO_CALL_REMINDER_MENTOR',
                         to_email: demo.email,
                         payload: { demoBookingId: demo.id },
-                        idempotency_key: `demo-call-reminder-mentor:${demo.id}`,
+                        idempotency_key: `demo-call-reminder-mentor:${demo.id}:${demo.slot_start_time.getTime()}`,
                     },
                 });
                 console.log(`[EmailScheduler] Queued demo call reminder for: ${demo.email}`);

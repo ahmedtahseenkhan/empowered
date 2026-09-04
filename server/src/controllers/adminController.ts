@@ -4,6 +4,13 @@ import { AuthRequest } from '../middleware/authMiddleware';
 import emailService from '../services/emailService';
 import { hashPassword } from '../utils/auth';
 import { ADMIN_PERMISSION_KEYS, isValidPermissionKey, formatPermissionList } from '../constants/adminPermissions';
+import {
+    ADMIN_TIMEZONE,
+    SLOT_DURATION_MINUTES,
+    checkDemoSlotAvailable,
+    getAvailableDemoSlots,
+} from '../services/demoAvailability';
+import { createDemoMeetEvent, updateDemoMeetEvent } from '../services/googleCalendar';
 
 export const adminListMentors = async (req: AuthRequest, res: Response) => {
     try {
@@ -653,6 +660,150 @@ export const adminListDemoBookings = async (req: AuthRequest, res: Response) => 
         return res.json({ bookings });
     } catch (error) {
         console.error('adminListDemoBookings error:', error);
+        return res.status(500).json({ error: 'Server error' });
+    }
+};
+
+function formatDemoSlotDallas(d: Date): { date: string; time: string } {
+    return {
+        date: d.toLocaleDateString('en-US', { timeZone: ADMIN_TIMEZONE, weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }),
+        time: d.toLocaleTimeString('en-US', { timeZone: ADMIN_TIMEZONE, hour: 'numeric', minute: '2-digit', hour12: true }),
+    };
+}
+
+/**
+ * GET /api/admin/demo-slots?from&to&exclude_booking_id
+ * Open demo slots for the reschedule picker. `exclude_booking_id` keeps the slot the
+ * booking currently occupies in the list instead of hiding it as "taken".
+ */
+export const adminListDemoSlots = async (req: AuthRequest, res: Response) => {
+    try {
+        const fromStr = (req.query.from as string)?.trim();
+        const toStr = (req.query.to as string)?.trim();
+        if (!fromStr || !toStr) {
+            return res.status(400).json({ error: 'from and to (ISO date) are required' });
+        }
+        const from = new Date(fromStr);
+        const to = new Date(toStr);
+        if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+            return res.status(400).json({ error: 'Invalid from or to date' });
+        }
+
+        const excludeBookingId = (req.query.exclude_booking_id as string)?.trim() || undefined;
+        const slots = await getAvailableDemoSlots(from, to, excludeBookingId);
+        return res.json({ slots });
+    } catch (error) {
+        console.error('adminListDemoSlots error:', error);
+        return res.status(500).json({ error: 'Server error' });
+    }
+};
+
+/**
+ * PATCH /api/admin/demo-bookings/:id/reschedule
+ * Moves a demo call to a new slot: validates the slot, moves the Google Calendar event
+ * (keeping the existing Meet link) and emails the mentor the new time.
+ */
+export const adminRescheduleDemoBooking = async (req: AuthRequest, res: Response) => {
+    try {
+        const { id } = req.params;
+        const slotStartStr = (req.body?.slot_start_time as string | undefined)?.trim();
+        const allowOutsideHours = req.body?.allow_outside_hours === true;
+        const note = (req.body?.note as string | undefined)?.trim() || '';
+
+        if (!id) return res.status(400).json({ error: 'Booking id is required' });
+        if (!slotStartStr) return res.status(400).json({ error: 'Pick a new time for the demo call' });
+
+        const start = new Date(slotStartStr);
+        if (Number.isNaN(start.getTime())) return res.status(400).json({ error: 'Invalid slot time' });
+        const end = new Date(start.getTime() + SLOT_DURATION_MINUTES * 60 * 1000);
+
+        const booking = await prisma.demoBooking.findUnique({ where: { id } });
+        if (!booking) return res.status(404).json({ error: 'Demo booking not found' });
+
+        if (booking.slot_start_time.getTime() === start.getTime()) {
+            return res.status(400).json({ error: 'That is the time the demo is already booked for.' });
+        }
+
+        const check = await checkDemoSlotAvailable({
+            start,
+            end,
+            excludeBookingId: id,
+            allowOutsideHours,
+        });
+        if (!check.ok) return res.status(409).json({ error: check.error });
+
+        const previousStart = booking.slot_start_time;
+
+        // Move the calendar event so the Meet link stays valid. Bookings made before
+        // event ids were stored (or whose event was deleted) get a fresh event.
+        let meetingLink = booking.meeting_link;
+        let googleEventId = booking.google_event_id;
+        try {
+            const moved = booking.google_event_id
+                ? await updateDemoMeetEvent({
+                    eventId: booking.google_event_id,
+                    prospectName: booking.full_name,
+                    start,
+                    end,
+                })
+                : null;
+
+            if (moved) {
+                meetingLink = moved.meetLink || booking.meeting_link;
+                googleEventId = moved.eventId || booking.google_event_id;
+            } else {
+                const created = await createDemoMeetEvent({
+                    prospectEmail: booking.email,
+                    prospectName: booking.full_name,
+                    start,
+                    end,
+                });
+                meetingLink = created.meetLink;
+                googleEventId = created.eventId;
+            }
+        } catch (e) {
+            console.error('Demo Meet reschedule failed:', e);
+            return res.status(503).json({
+                error: 'Could not move the Google Calendar event. Check the demo calendar connection and try again.',
+            });
+        }
+
+        const updated = await prisma.demoBooking.update({
+            where: { id },
+            data: {
+                slot_start_time: start,
+                slot_end_time: end,
+                meeting_link: meetingLink,
+                google_event_id: googleEventId,
+                rescheduled_at: new Date(),
+            },
+        });
+
+        const previous = formatDemoSlotDallas(previousStart);
+        const next = formatDemoSlotDallas(start);
+        const formatForGoogleCalendar = (d: Date) => d.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+
+        await prisma.emailOutbox.create({
+            data: {
+                type: 'DEMO_BOOKING_RESCHEDULED',
+                to_email: updated.email,
+                payload: {
+                    fullName: updated.full_name,
+                    previousDate: previous.date,
+                    previousTime: previous.time,
+                    callDate: next.date,
+                    callTime: next.time,
+                    meetingLink: updated.meeting_link || '',
+                    note,
+                    addToCalendarUrl: `https://calendar.google.com/calendar/render?action=TEMPLATE&text=EmpowerEd+Demo&dates=${formatForGoogleCalendar(updated.slot_start_time)}/${formatForGoogleCalendar(updated.slot_end_time)}`,
+                },
+                status: 'PENDING',
+            },
+        });
+
+        return res.json({ booking: updated });
+    } catch (error) {
+        console.error('adminRescheduleDemoBooking error:', error);
         return res.status(500).json({ error: 'Server error' });
     }
 };

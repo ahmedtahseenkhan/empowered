@@ -978,6 +978,8 @@ model DemoBooking {
   slot_end_time      DateTime
   timezone           String   @default("America/Chicago")
   meeting_link       String? // Google Meet link (set for new bookings; optional for backwards compatibility so admin list works)
+  google_event_id    String? // Google Calendar event id, so the event can be moved when a demo is rescheduled
+  rescheduled_at     DateTime? // Set when an admin moves the demo to a new slot
   created_at         DateTime @default(now())
 
   @@index([slot_start_time])

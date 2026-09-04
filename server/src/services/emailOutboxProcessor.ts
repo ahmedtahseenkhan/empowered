@@ -549,6 +549,31 @@ async function sendOutboxRow(row: OutboxRow) {
         return;
     }
 
+    if (row.type === 'DEMO_BOOKING_RESCHEDULED') {
+        const p = row.payload as {
+            fullName?: string;
+            callDate?: string;
+            callTime?: string;
+            previousDate?: string;
+            previousTime?: string;
+            meetingLink?: string;
+            note?: string;
+            addToCalendarUrl?: string;
+        };
+        await emailService.sendDemoCallRescheduled({
+            mentorName: p.fullName || 'there',
+            mentorEmail: row.to_email,
+            callDate: p.callDate || '',
+            callTime: p.callTime || '',
+            previousDate: p.previousDate,
+            previousTime: p.previousTime,
+            meetingLink: p.meetingLink || '',
+            note: p.note,
+            addToCalendarUrl: p.addToCalendarUrl,
+        });
+        return;
+    }
+
     if (row.type === 'DEMO_CALL_REMINDER_MENTOR') {
         const demoBookingId = row.payload?.demoBookingId as string | undefined;
         if (!demoBookingId) throw new Error('Missing demoBookingId in payload');

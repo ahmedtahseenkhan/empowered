@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import api from '../api/axios';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { CalendarClock, ChevronLeft, ChevronRight } from 'lucide-react';
 
 type DemoBooking = {
     id: string;
@@ -16,6 +16,7 @@ type DemoBooking = {
     timezone: string;
     created_at: string;
     meeting_link?: string | null;
+    rescheduled_at?: string | null;
 };
 
 const DALLAS_TZ = 'America/Chicago';
@@ -37,6 +38,46 @@ function getDallasHour(iso: string): number {
     const d = new Date(iso);
     const hour = d.toLocaleString('en-US', { timeZone: DALLAS_TZ, hour: 'numeric', hour12: false });
     return parseInt(hour, 10);
+}
+
+type DemoSlot = { start: string; end: string };
+
+function formatDayInDallas(iso: string): string {
+    return new Date(iso).toLocaleDateString('en-US', { timeZone: DALLAS_TZ, weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+function formatTimeInDallas(iso: string): string {
+    return new Date(iso).toLocaleTimeString('en-US', { timeZone: DALLAS_TZ, hour: 'numeric', minute: '2-digit', hour12: true });
+}
+
+/** Minutes to add to a Dallas wall-clock value (read as UTC) to get the real UTC instant. */
+function dallasOffsetMinutes(at: Date): number {
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: DALLAS_TZ,
+        hour12: false,
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+    }).formatToParts(at).reduce<Record<string, number>>((acc, part) => {
+        if (part.type !== 'literal') acc[part.type] = Number(part.value);
+        return acc;
+    }, {});
+    const asUTC = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour % 24, parts.minute, parts.second);
+    return (at.getTime() - asUTC) / 60000;
+}
+
+/** Convert a datetime-local value the admin typed (Dallas time) into a UTC ISO string. */
+function dallasLocalToISO(local: string): string | null {
+    const [datePart, timePart] = local.split('T');
+    if (!datePart || !timePart) return null;
+    const [y, m, d] = datePart.split('-').map(Number);
+    const [hh, mm] = timePart.split(':').map(Number);
+    if ([y, m, d, hh, mm].some((n) => Number.isNaN(n))) return null;
+    const guess = Date.UTC(y, m - 1, d, hh, mm);
+    const firstOffset = dallasOffsetMinutes(new Date(guess));
+    let ts = guess + firstOffset * 60000;
+    const secondOffset = dallasOffsetMinutes(new Date(ts));
+    if (secondOffset !== firstOffset) ts = guess + secondOffset * 60000;
+    return new Date(ts).toISOString();
 }
 
 function parseLookingFor(looking_for: string): string[] {
@@ -63,6 +104,30 @@ const DemoRequestsPage: React.FC = () => {
         return start;
     });
 
+    const [rescheduleOpen, setRescheduleOpen] = useState(false);
+    const [slots, setSlots] = useState<DemoSlot[]>([]);
+    const [slotsLoading, setSlotsLoading] = useState(false);
+    const [slotDay, setSlotDay] = useState('');
+    const [chosenSlot, setChosenSlot] = useState('');
+    const [outsideHours, setOutsideHours] = useState(false);
+    const [customTime, setCustomTime] = useState('');
+    const [note, setNote] = useState('');
+    const [saving, setSaving] = useState(false);
+    const [rescheduleError, setRescheduleError] = useState<string | null>(null);
+    const [rescheduledMsg, setRescheduledMsg] = useState<string | null>(null);
+    const [reloadKey, setReloadKey] = useState(0);
+
+    const closeModal = () => {
+        setSelectedBooking(null);
+        setRescheduleOpen(false);
+        setRescheduleError(null);
+        setRescheduledMsg(null);
+        setChosenSlot('');
+        setCustomTime('');
+        setNote('');
+        setOutsideHours(false);
+    };
+
     useEffect(() => {
         const from = new Date(weekStart);
         from.setDate(from.getDate() - 14);
@@ -75,7 +140,72 @@ const DemoRequestsPage: React.FC = () => {
             .then((res) => setBookings(res.data?.bookings || []))
             .catch(() => setBookings([]))
             .finally(() => setLoading(false));
-    }, [weekStart]);
+    }, [weekStart, reloadKey]);
+
+    // Open slots for the reschedule picker (next 28 days), keeping this booking's own slot selectable.
+    useEffect(() => {
+        if (!rescheduleOpen || !selectedBooking) return;
+        const from = new Date();
+        from.setHours(0, 0, 0, 0);
+        const to = new Date(from);
+        to.setDate(to.getDate() + 28);
+        setSlotsLoading(true);
+        api.get('/admin/demo-slots', {
+            params: { from: from.toISOString(), to: to.toISOString(), exclude_booking_id: selectedBooking.id },
+        })
+            .then((res) => setSlots(res.data?.slots || []))
+            .catch(() => setSlots([]))
+            .finally(() => setSlotsLoading(false));
+    }, [rescheduleOpen, selectedBooking]);
+
+    const slotsByDay = useMemo(() => {
+        const map = new Map<string, DemoSlot[]>();
+        slots.forEach((slot) => {
+            const key = formatDayInDallas(slot.start);
+            if (!map.has(key)) map.set(key, []);
+            map.get(key)!.push(slot);
+        });
+        return map;
+    }, [slots]);
+
+    const slotDays = useMemo(() => Array.from(slotsByDay.keys()), [slotsByDay]);
+
+    useEffect(() => {
+        if (slotDays.length > 0 && !slotDays.includes(slotDay)) setSlotDay(slotDays[0]);
+    }, [slotDays, slotDay]);
+
+    const submitReschedule = async () => {
+        if (!selectedBooking) return;
+        const slotStart = outsideHours ? dallasLocalToISO(customTime) : chosenSlot;
+        if (!slotStart) {
+            setRescheduleError(outsideHours ? 'Enter a new date and time.' : 'Pick a new slot.');
+            return;
+        }
+        setSaving(true);
+        setRescheduleError(null);
+        try {
+            const res = await api.patch(`/admin/demo-bookings/${selectedBooking.id}/reschedule`, {
+                slot_start_time: slotStart,
+                allow_outside_hours: outsideHours,
+                note: note.trim(),
+            });
+            const updated: DemoBooking = res.data.booking;
+            setBookings((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
+            setSelectedBooking(updated);
+            setRescheduleOpen(false);
+            setChosenSlot('');
+            setCustomTime('');
+            setNote('');
+            setOutsideHours(false);
+            setRescheduledMsg(`Moved to ${formatInDallas(updated.slot_start_time)}. ${updated.full_name} has been emailed the new time.`);
+            setReloadKey((k) => k + 1);
+        } catch (e) {
+            const message = (e as { response?: { data?: { error?: string } } })?.response?.data?.error;
+            setRescheduleError(message || 'Could not reschedule this demo call.');
+        } finally {
+            setSaving(false);
+        }
+    };
 
     const weekDays = useMemo(() => {
         return Array.from({ length: 7 }, (_, i) => {
@@ -247,11 +377,11 @@ const DemoRequestsPage: React.FC = () => {
             )}
 
             {selectedBooking && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setSelectedBooking(null)}>
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={closeModal}>
                     <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-between mb-4">
                             <h2 className="text-xl font-bold text-gray-900">Demo booking details</h2>
-                            <button type="button" onClick={() => setSelectedBooking(null)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+                            <button type="button" onClick={closeModal} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
                         </div>
                         <dl className="space-y-3 text-sm">
                             <div>
@@ -292,7 +422,14 @@ const DemoRequestsPage: React.FC = () => {
                             </div>
                             <div>
                                 <dt className="font-medium text-gray-500">Demo time (Dallas, TX)</dt>
-                                <dd className="text-gray-900">{formatInDallas(selectedBooking.slot_start_time)} – 20 min</dd>
+                                <dd className="text-gray-900">
+                                    {formatInDallas(selectedBooking.slot_start_time)} – 20 min
+                                    {selectedBooking.rescheduled_at && (
+                                        <span className="ml-2 text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded">
+                                            Rescheduled {new Date(selectedBooking.rescheduled_at).toLocaleDateString()}
+                                        </span>
+                                    )}
+                                </dd>
                             </div>
                             {!!selectedBooking.meeting_link && (
                                 <div>
@@ -314,6 +451,123 @@ const DemoRequestsPage: React.FC = () => {
                                 <dd className="text-gray-900">{new Date(selectedBooking.created_at).toLocaleString()}</dd>
                             </div>
                         </dl>
+
+                        <div className="mt-6 pt-5 border-t border-gray-200">
+                            {rescheduledMsg && (
+                                <div className="mb-4 rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-800">
+                                    {rescheduledMsg}
+                                </div>
+                            )}
+
+                            {!rescheduleOpen ? (
+                                <button
+                                    type="button"
+                                    onClick={() => { setRescheduleOpen(true); setRescheduledMsg(null); }}
+                                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-purple-200 bg-purple-50 text-purple-700 text-sm font-medium hover:bg-purple-100"
+                                >
+                                    <CalendarClock className="w-4 h-4" />
+                                    Reschedule demo call
+                                </button>
+                            ) : (
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <h3 className="font-semibold text-gray-900">Pick a new time</h3>
+                                        <button
+                                            type="button"
+                                            onClick={() => { setRescheduleOpen(false); setRescheduleError(null); }}
+                                            className="text-sm text-gray-500 hover:text-gray-700"
+                                        >
+                                            Cancel
+                                        </button>
+                                    </div>
+
+                                    {!outsideHours ? (
+                                        slotsLoading ? (
+                                            <div className="text-sm text-gray-500">Loading open slots...</div>
+                                        ) : slotDays.length === 0 ? (
+                                            <div className="text-sm text-gray-500">
+                                                No open slots in the next 28 days. Add hours in Demo Availability, or tick the box below to set any time.
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <div className="flex gap-2 overflow-x-auto pb-1">
+                                                    {slotDays.map((day) => (
+                                                        <button
+                                                            key={day}
+                                                            type="button"
+                                                            onClick={() => { setSlotDay(day); setChosenSlot(''); }}
+                                                            className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium border ${day === slotDay ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}
+                                                        >
+                                                            {day}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                                <div className="grid grid-cols-3 gap-2">
+                                                    {(slotsByDay.get(slotDay) || []).map((slot) => (
+                                                        <button
+                                                            key={slot.start}
+                                                            type="button"
+                                                            onClick={() => setChosenSlot(slot.start)}
+                                                            className={`px-2 py-2 rounded-lg text-sm border ${chosenSlot === slot.start ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}
+                                                        >
+                                                            {formatTimeInDallas(slot.start)}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </>
+                                        )
+                                    ) : (
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">New date &amp; time (Dallas, TX)</label>
+                                            <input
+                                                type="datetime-local"
+                                                value={customTime}
+                                                onChange={(e) => setCustomTime(e.target.value)}
+                                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                                            />
+                                        </div>
+                                    )}
+
+                                    <label className="flex items-start gap-2 text-sm text-gray-600">
+                                        <input
+                                            type="checkbox"
+                                            checked={outsideHours}
+                                            onChange={(e) => { setOutsideHours(e.target.checked); setChosenSlot(''); setRescheduleError(null); }}
+                                            className="mt-0.5"
+                                        />
+                                        <span>Allow a time outside availability hours (still blocked if it clashes with another demo or a time block)</span>
+                                    </label>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Note for the mentor (optional)</label>
+                                        <textarea
+                                            value={note}
+                                            onChange={(e) => setNote(e.target.value)}
+                                            rows={2}
+                                            placeholder="e.g. Moved at your request — see you then!"
+                                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                                        />
+                                    </div>
+
+                                    {rescheduleError && (
+                                        <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">{rescheduleError}</div>
+                                    )}
+
+                                    <p className="text-xs text-gray-500">
+                                        The Google Calendar event moves to the new time and {selectedBooking.full_name} gets an email with the new details. The meeting link stays the same.
+                                    </p>
+
+                                    <button
+                                        type="button"
+                                        onClick={submitReschedule}
+                                        disabled={saving}
+                                        className="w-full px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-medium hover:bg-purple-700 disabled:opacity-60"
+                                    >
+                                        {saving ? 'Rescheduling...' : 'Confirm new time'}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}

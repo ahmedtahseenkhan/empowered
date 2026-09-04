@@ -1,62 +1,13 @@
 import { Request, Response } from 'express';
 import prisma from '../config/db';
 import { createDemoMeetEvent, getDemoOAuthAuthUrl, exchangeDemoOAuthCode } from '../services/googleCalendar';
-
-const ADMIN_TIMEZONE = 'America/Chicago';
+import { ADMIN_TIMEZONE, SLOT_DURATION_MINUTES, getAvailableDemoSlots } from '../services/demoAvailability';
 
 function formatSlotDallas(iso: string): { date: string; time: string } {
     const d = new Date(iso);
     const date = d.toLocaleDateString('en-US', { timeZone: ADMIN_TIMEZONE, weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
     const time = d.toLocaleTimeString('en-US', { timeZone: ADMIN_TIMEZONE, hour: 'numeric', minute: '2-digit', hour12: true });
     return { date, time };
-}
-const ADMIN_START_HOUR = 9;
-const ADMIN_END_HOUR = 17;
-const SLOT_DURATION_MINUTES = 20;
-
-function secondSundayMarch(year: number): Date {
-    const march1 = new Date(Date.UTC(year, 2, 1));
-    const day = march1.getUTCDay();
-    const firstSunday = 1 + (7 - day) % 7;
-    const secondSunday = firstSunday + 7;
-    return new Date(Date.UTC(year, 2, secondSunday, 10, 0, 0));
-}
-
-function firstSundayNovember(year: number): Date {
-    const nov1 = new Date(Date.UTC(year, 10, 1));
-    const day = nov1.getUTCDay();
-    const firstSunday = 1 + (7 - day) % 7;
-    return new Date(Date.UTC(year, 10, firstSunday, 9, 0, 0));
-}
-
-function isDSTChicago(year: number, month: number, day: number): boolean {
-    const d = new Date(Date.UTC(year, month, day, 12, 0, 0));
-    const startDST = secondSundayMarch(year);
-    const endDST = firstSundayNovember(year);
-    return d >= startDST && d < endDST;
-}
-
-function getChicagoStartUTC(date: Date): Date {
-    const y = date.getUTCFullYear();
-    const m = date.getUTCMonth();
-    const d = date.getUTCDate();
-    const dst = isDSTChicago(y, m, d);
-    const utcHour = ADMIN_START_HOUR + (dst ? 5 : 6);
-    return new Date(Date.UTC(y, m, d, utcHour, 0, 0));
-}
-
-/** Convert Chicago local time (HH:MM) on the given UTC date to a UTC Date. */
-function chicagoTimeToUTC(cursor: Date, timeStr: string): Date {
-    const [h, m] = timeStr.split(':').map(Number);
-    if (Number.isNaN(h) || Number.isNaN(m)) return new Date(0);
-    const nineAmUTC = getChicagoStartUTC(new Date(cursor));
-    const minutesFromMidnight = h * 60 + m;
-    const minutesFromNine = minutesFromMidnight - 9 * 60;
-    return new Date(nineAmUTC.getTime() + minutesFromNine * 60 * 1000);
-}
-
-function overlap(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date): boolean {
-    return aStart < bEnd && bStart < aEnd;
 }
 
 export async function getDemoSlots(req: Request, res: Response) {
@@ -72,56 +23,7 @@ export async function getDemoSlots(req: Request, res: Response) {
             return res.status(400).json({ error: 'Invalid from or to date' });
         }
 
-        const now = new Date();
-        const toEnd = new Date(to.getTime() + 24 * 60 * 60 * 1000);
-
-        const [availabilityRules, blocks, booked] = await Promise.all([
-            prisma.adminDemoAvailability.findMany({ orderBy: [{ day_of_week: 'asc' }, { start_time: 'asc' }] }),
-            prisma.adminDemoTimeBlock.findMany({
-                where: { start_time: { lt: toEnd }, end_time: { gt: from } },
-                select: { start_time: true, end_time: true },
-            }),
-            prisma.demoBooking.findMany({
-                where: { slot_start_time: { gte: from }, slot_end_time: { lte: toEnd } },
-                select: { slot_start_time: true, slot_end_time: true },
-            }),
-        ]);
-
-        const slots: { start: string; end: string }[] = [];
-        const cursor = new Date(from);
-        cursor.setUTCHours(0, 0, 0, 0);
-
-        while (cursor <= to) {
-            const dayOfWeek = cursor.getUTCDay();
-            const windows = availabilityRules.filter((r) => r.day_of_week === dayOfWeek);
-
-            for (const w of windows) {
-                const windowStart = chicagoTimeToUTC(cursor, w.start_time);
-                const windowEnd = chicagoTimeToUTC(cursor, w.end_time);
-                if (windowStart >= windowEnd) continue;
-
-                let slotStart = new Date(windowStart);
-                while (slotStart.getTime() + SLOT_DURATION_MINUTES * 60 * 1000 <= windowEnd.getTime()) {
-                    const slotEnd = new Date(slotStart.getTime() + SLOT_DURATION_MINUTES * 60 * 1000);
-                    const isPast = slotEnd.getTime() <= now.getTime();
-                    const inRange = slotStart >= from && slotEnd <= toEnd;
-                    if (!isPast && inRange) {
-                        const blocked = blocks.some((b) =>
-                            overlap(slotStart, slotEnd, b.start_time, b.end_time)
-                        );
-                        const alreadyBooked = booked.some((b) =>
-                            overlap(slotStart, slotEnd, b.slot_start_time, b.slot_end_time)
-                        );
-                        if (!blocked && !alreadyBooked) {
-                            slots.push({ start: slotStart.toISOString(), end: slotEnd.toISOString() });
-                        }
-                    }
-                    slotStart = slotEnd;
-                }
-            }
-            cursor.setUTCDate(cursor.getUTCDate() + 1);
-        }
-
+        const slots = await getAvailableDemoSlots(from, to);
         return res.json({ slots });
     } catch (e) {
         console.error('getDemoSlots error:', e);
@@ -172,7 +74,7 @@ export async function createDemoBooking(req: Request, res: Response) {
         const looking_for_str = lookingFor.length ? JSON.stringify(lookingFor) : '[]';
 
         // Create Google Meet link first so every demo booking always has a meeting link
-        let meetResult: { meetLink: string; htmlLink: string | null };
+        let meetResult: { meetLink: string; htmlLink: string | null; eventId: string | null };
         try {
             meetResult = await createDemoMeetEvent({
                 prospectEmail: email,
@@ -200,6 +102,7 @@ export async function createDemoBooking(req: Request, res: Response) {
                 slot_end_time: end,
                 timezone: ADMIN_TIMEZONE,
                 meeting_link: meetResult.meetLink,
+                google_event_id: meetResult.eventId,
             },
         });
 

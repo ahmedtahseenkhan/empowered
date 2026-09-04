@@ -395,6 +395,29 @@ class EmailService {
         });
     }
 
+    async sendDemoCallRescheduled(data: {
+        mentorName: string;
+        mentorEmail: string;
+        callDate: string;
+        callTime: string;
+        previousDate?: string;
+        previousTime?: string;
+        meetingLink: string;
+        note?: string;
+        addToCalendarUrl?: string;
+    }): Promise<void> {
+        const html = this.renderTemplate('mentor/demo-call-rescheduled', {
+            ...data,
+            addToCalendarUrl: data.addToCalendarUrl || data.meetingLink,
+            year: new Date().getFullYear(),
+        });
+        await this.sendEmail({
+            to: data.mentorEmail,
+            subject: 'Your EmpowerEd Demo Has Been Rescheduled',
+            html,
+        });
+    }
+
     async sendDemoCallReminder(data: {
         mentorName: string;
         mentorEmail: string;

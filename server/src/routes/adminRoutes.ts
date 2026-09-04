@@ -21,6 +21,8 @@ import {
     adminReplyTicket,
     adminGetAnalytics,
     adminListDemoBookings,
+    adminListDemoSlots,
+    adminRescheduleDemoBooking,
     adminGetDemoAvailability,
     adminPutDemoAvailability,
     adminListDemoBlocks,
@@ -82,6 +84,8 @@ router.get('/support', requirePermission('support'), adminListTickets);
 router.put('/support/:id/reply', requirePermission('support'), adminReplyTicket);
 
 router.get('/demo-bookings', requirePermission('demo-requests'), adminListDemoBookings);
+router.get('/demo-slots', requirePermission('demo-requests'), adminListDemoSlots);
+router.patch('/demo-bookings/:id/reschedule', requirePermission('demo-requests'), adminRescheduleDemoBooking);
 
 router.get('/demo-availability', requirePermission('demo-availability'), adminGetDemoAvailability);
 router.put('/demo-availability', requirePermission('demo-availability'), adminPutDemoAvailability);

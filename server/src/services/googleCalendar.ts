@@ -185,7 +185,7 @@ export const createDemoMeetEvent = async (args: {
     prospectName: string;
     start: Date;
     end: Date;
-}): Promise<{ meetLink: string; htmlLink: string | null }> => {
+}): Promise<{ meetLink: string; htmlLink: string | null; eventId: string | null }> => {
     const refreshToken = process.env.GOOGLE_DEMO_REFRESH_TOKEN;
     if (!refreshToken) {
         throw new Error('GOOGLE_DEMO_REFRESH_TOKEN is required for demo bookings. Set it in .env to enable demo scheduling.');
@@ -231,6 +231,7 @@ export const createDemoMeetEvent = async (args: {
         return {
             meetLink,
             htmlLink: resp.data.htmlLink || null,
+            eventId: resp.data.id || null,
         };
     } catch (e: unknown) {
         const err = e as { response?: { data?: { error?: string }; status?: number }; message?: string };
@@ -253,6 +254,58 @@ export const createDemoMeetEvent = async (args: {
             throw new Error(msg);
         }
 
+        throw e;
+    }
+};
+
+/**
+ * Move an existing demo call's calendar event to a new time (admin reschedule).
+ * The Meet link is preserved, so the mentor's original link keeps working.
+ * Returns null if the event no longer exists (deleted from the calendar) — the caller
+ * should then create a fresh event instead.
+ */
+export const updateDemoMeetEvent = async (args: {
+    eventId: string;
+    prospectName: string;
+    start: Date;
+    end: Date;
+}): Promise<{ meetLink: string | null; htmlLink: string | null; eventId: string | null } | null> => {
+    const refreshToken = process.env.GOOGLE_DEMO_REFRESH_TOKEN;
+    if (!refreshToken) {
+        throw new Error('GOOGLE_DEMO_REFRESH_TOKEN is required for demo bookings. Set it in .env to enable demo scheduling.');
+    }
+
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    if (!clientId || !clientSecret) {
+        throw new Error('GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are required for demo Meet updates.');
+    }
+
+    const oauth2Client = new google.auth.OAuth2(clientId, clientSecret, process.env.GOOGLE_REDIRECT_URI);
+    oauth2Client.setCredentials({ refresh_token: refreshToken });
+    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+    const calendarId = process.env.GOOGLE_DEMO_CALENDAR_ID || 'primary';
+
+    try {
+        const resp = await calendar.events.patch({
+            calendarId,
+            eventId: args.eventId,
+            requestBody: {
+                summary: `EmpowerEd Demo – ${args.prospectName}`,
+                start: { dateTime: args.start.toISOString() },
+                end: { dateTime: args.end.toISOString() },
+            },
+        });
+
+        return {
+            meetLink: resp.data.hangoutLink || null,
+            htmlLink: resp.data.htmlLink || null,
+            eventId: resp.data.id || null,
+        };
+    } catch (e: unknown) {
+        const err = e as { response?: { status?: number } };
+        // 404 (gone) / 410 (cancelled): the event was removed from the calendar.
+        if (err.response?.status === 404 || err.response?.status === 410) return null;
         throw e;
     }
 };
