@@ -493,6 +493,8 @@ model Lesson {
 
   completed_at  DateTime? // Set when the session is marked COMPLETED (auto or admin)
   cancel_reason String?
+  student_confirmed_at DateTime? // Student pressed "Confirm session completed"
+  tutor_confirmed_at   DateTime? // Mentor confirmed after the student (finalizes completion)
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt

@@ -35,6 +35,8 @@ type LessonDetail = {
     reservation?: { status: string; credits: number } | null;
     earning?: { status: string; available_at: string } | null;
     dispute?: { status: string } | null;
+    student_confirmed_at?: string | null;
+    tutor_confirmed_at?: string | null;
     student?: { username?: string | null };
     tutor?: { username?: string | null; timezone?: string | null };
 };
@@ -64,6 +66,7 @@ const SessionDetailPage: React.FC = () => {
     const [reportBusy, setReportBusy] = useState(false);
     const [actionError, setActionError] = useState('');
     const [actionNotice, setActionNotice] = useState('');
+    const [confirmBusy, setConfirmBusy] = useState(false);
 
     const [searchParams, setSearchParams] = useSearchParams();
     const [finalizeStatus, setFinalizeStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -137,7 +140,7 @@ const SessionDetailPage: React.FC = () => {
     const isJoinable = lesson && (() => {
         const start = new Date(lesson.start_time).getTime();
         const now = Date.now();
-        return now >= start - 15 * 60 * 1000 && now <= start + 50 * 60 * 1000 && !['COMPLETED', 'CANCELLED', 'MISSED'].includes(lesson.status.toUpperCase());
+        return now >= start - 15 * 60 * 1000 && now <= new Date(lesson.end_time).getTime() + 15 * 60 * 1000 && !['COMPLETED', 'CANCELLED', 'MISSED'].includes(lesson.status.toUpperCase());
     })();
 
     const paymentBadge = () => {
@@ -146,6 +149,15 @@ const SessionDetailPage: React.FC = () => {
         const ls = lesson.status.toUpperCase();
         const bt = lesson.billing_type.toUpperCase();
 
+        const startMs = new Date(lesson.start_time).getTime();
+        const endMs = new Date(lesson.end_time).getTime();
+        const nowMs = Date.now();
+        if (ls === 'BOOKED' && nowMs >= startMs && nowMs <= endMs + 15 * 60 * 1000) {
+            return <span className="px-3 py-1 rounded-full text-sm font-medium bg-green-600 text-white border border-green-600 animate-pulse">In progress — join now</span>;
+        }
+        if (ls === 'BOOKED' && nowMs > endMs) {
+            return <span className="px-3 py-1 rounded-full text-sm font-medium bg-blue-50 text-blue-700 border border-blue-200">Awaiting completion confirmation</span>;
+        }
         if (ls === 'CANCELLED') return <span className="px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-600 border border-gray-200">Cancelled</span>;
         if (lesson.booking?.funding === 'CREDITS') {
             const ds = lesson.dispute?.status;
@@ -248,6 +260,29 @@ const SessionDetailPage: React.FC = () => {
             setActionError(apiError(e, 'Unable to send your report.'));
         } finally {
             setReportBusy(false);
+        }
+    };
+
+    const handleConfirmComplete = async () => {
+        if (!lesson) return;
+        try {
+            setConfirmBusy(true);
+            setActionError('');
+            const res = await api.post(`/lessons/${lesson.id}/confirm-complete`);
+            const upd = res.data?.lesson;
+            setLesson({
+                ...lesson,
+                status: upd?.status || lesson.status,
+                student_confirmed_at: upd?.student_confirmed_at ?? lesson.student_confirmed_at,
+                tutor_confirmed_at: upd?.tutor_confirmed_at ?? lesson.tutor_confirmed_at,
+            });
+            setActionNotice(isStudent
+                ? 'Thanks! Your confirmation was recorded — your mentor confirms next.'
+                : 'Session confirmed as completed.');
+        } catch (e) {
+            setActionError(apiError(e, 'Unable to confirm completion.'));
+        } finally {
+            setConfirmBusy(false);
         }
     };
 
@@ -406,6 +441,34 @@ const SessionDetailPage: React.FC = () => {
                             </div>
                         )}
 
+                        {lesson.status.toUpperCase() === 'BOOKED' && Date.now() > new Date(lesson.end_time).getTime() && (
+                            <div className="bg-blue-50 border border-blue-200 rounded-xl p-5">
+                                <h3 className="font-semibold text-blue-900">Was this session completed successfully?</h3>
+                                {isStudent ? (
+                                    lesson.student_confirmed_at ? (
+                                        <p className="text-sm text-blue-800 mt-1">You confirmed this session. Waiting for your mentor to confirm as well.</p>
+                                    ) : (
+                                        <>
+                                            <p className="text-sm text-blue-800 mt-1">Please confirm that this session took place successfully. Your mentor confirms after you.</p>
+                                            <Button className="mt-3 bg-green-600 hover:bg-green-700 text-white" disabled={confirmBusy} onClick={handleConfirmComplete}>
+                                                {confirmBusy ? 'Confirming…' : 'Confirm session completed'}
+                                            </Button>
+                                        </>
+                                    )
+                                ) : lesson.student_confirmed_at ? (
+                                    <>
+                                        <p className="text-sm text-blue-800 mt-1">The student confirmed this session. Confirm to finalize it{isCreditsFunded ? ' and move your earnings into the review period' : ''}.</p>
+                                        <Button className="mt-3 bg-green-600 hover:bg-green-700 text-white" disabled={confirmBusy} onClick={handleConfirmComplete}>
+                                            {confirmBusy ? 'Confirming…' : 'Confirm completion'}
+                                        </Button>
+                                    </>
+                                ) : (
+                                    <p className="text-sm text-blue-800 mt-1">Waiting for the student to confirm the session first.</p>
+                                )}
+                                {actionError && <div className="mt-2 text-sm text-red-700">{actionError}</div>}
+                            </div>
+                        )}
+
                         {/* Action buttons */}
                         <div className="flex flex-wrap gap-3 pt-2">
                             {isStudent && !needsPayment && isJoinable && (
@@ -430,16 +493,15 @@ const SessionDetailPage: React.FC = () => {
                                 </Button>
                             )}
 
-                            {!isStudent && lesson.meeting_link && !['COMPLETED', 'CANCELLED', 'MISSED'].includes(lesson.status.toUpperCase()) && (() => {
+                            {!isStudent && !['COMPLETED', 'CANCELLED', 'MISSED'].includes(lesson.status.toUpperCase()) && (() => {
                                 const startMs = new Date(lesson.start_time).getTime();
+                                const endMs = new Date(lesson.end_time).getTime();
                                 const nowMs = Date.now();
-                                return nowMs >= startMs - 15 * 60 * 1000 && nowMs <= startMs + 50 * 60 * 1000;
+                                return nowMs >= startMs - 15 * 60 * 1000 && nowMs <= endMs + 15 * 60 * 1000;
                             })() && (
-                                <a href={lesson.meeting_link} target="_blank" rel="noreferrer">
-                                    <Button className="flex items-center gap-2">
-                                        <ExternalLink className="w-4 h-4" /> Join
-                                    </Button>
-                                </a>
+                                <Button className="flex items-center gap-2" disabled={joinBusy} onClick={handleJoin}>
+                                    <ExternalLink className="w-4 h-4" /> {joinBusy ? 'Joining…' : 'Join Session'}
+                                </Button>
                             )}
 
                             {lesson.google_calendar_html_link && (

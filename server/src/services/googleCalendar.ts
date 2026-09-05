@@ -101,7 +101,7 @@ export const getFreeBusy = async (tutorId: string, timeMin: string, timeMax: str
     return busy;
 };
 
-export const createMeetEventForLesson = async (args: {
+type LessonMeetArgs = {
     tutorId: string;
     lessonId: string;
     title: string;
@@ -109,16 +109,30 @@ export const createMeetEventForLesson = async (args: {
     start: Date;
     end: Date;
     attendeesEmails: string[];
-}) => {
-    const client = await getAuthorizedCalendarClient(args.tutorId);
-    if (!client) return null;
+};
 
-    const { calendar, conn } = client;
+/**
+ * Fallback: create the lesson's Meet event on the PLATFORM Google account
+ * (same GOOGLE_DEMO_REFRESH_TOKEN used for demo calls). Used whenever the
+ * tutor has not connected their own Google Calendar, so a session always
+ * gets a meeting link.
+ */
+const createPlatformMeetEventForLesson = async (args: LessonMeetArgs) => {
+    const refreshToken = process.env.GOOGLE_DEMO_REFRESH_TOKEN;
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    if (!refreshToken || !clientId || !clientSecret) {
+        console.error('[GoogleCalendar] Platform Meet fallback unavailable: GOOGLE_DEMO_REFRESH_TOKEN / GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET missing.');
+        return null;
+    }
 
-    const requestId = `lesson-${args.lessonId}`;
+    const oauth2Client = new google.auth.OAuth2(clientId, clientSecret, process.env.GOOGLE_REDIRECT_URI);
+    oauth2Client.setCredentials({ refresh_token: refreshToken });
+    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+    const calendarId = process.env.GOOGLE_DEMO_CALENDAR_ID || 'primary';
 
     const resp = await calendar.events.insert({
-        calendarId: conn.calendar_id || 'primary',
+        calendarId,
         conferenceDataVersion: 1,
         requestBody: {
             summary: args.title,
@@ -128,7 +142,7 @@ export const createMeetEventForLesson = async (args: {
             attendees: args.attendeesEmails.map(email => ({ email })),
             conferenceData: {
                 createRequest: {
-                    requestId,
+                    requestId: `lesson-${args.lessonId}`,
                     conferenceSolutionKey: { type: 'hangoutsMeet' },
                 }
             }
@@ -140,6 +154,89 @@ export const createMeetEventForLesson = async (args: {
         htmlLink: resp.data.htmlLink || null,
         meetLink: resp.data.hangoutLink || null,
     };
+};
+
+export const createMeetEventForLesson = async (args: LessonMeetArgs) => {
+    // Prefer the tutor's own calendar so the event lives where they manage availability…
+    try {
+        const client = await getAuthorizedCalendarClient(args.tutorId);
+        if (client) {
+            const { calendar, conn } = client;
+            const resp = await calendar.events.insert({
+                calendarId: conn.calendar_id || 'primary',
+                conferenceDataVersion: 1,
+                requestBody: {
+                    summary: args.title,
+                    description: args.description,
+                    start: { dateTime: args.start.toISOString() },
+                    end: { dateTime: args.end.toISOString() },
+                    attendees: args.attendeesEmails.map(email => ({ email })),
+                    conferenceData: {
+                        createRequest: {
+                            requestId: `lesson-${args.lessonId}`,
+                            conferenceSolutionKey: { type: 'hangoutsMeet' },
+                        }
+                    }
+                }
+            });
+            const result = {
+                eventId: resp.data.id || null,
+                htmlLink: resp.data.htmlLink || null,
+                meetLink: resp.data.hangoutLink || null,
+            };
+            if (result.meetLink) return result;
+            console.warn(`[GoogleCalendar] Tutor calendar returned no Meet link for lesson ${args.lessonId}; falling back to platform calendar.`);
+        }
+    } catch (e) {
+        console.error(`[GoogleCalendar] Tutor-calendar event failed for lesson ${args.lessonId}; falling back to platform calendar:`, e);
+    }
+
+    // …but ALWAYS fall back to the platform account so the session has a link.
+    try {
+        return await createPlatformMeetEventForLesson(args);
+    } catch (e) {
+        console.error(`[GoogleCalendar] Platform-calendar fallback failed for lesson ${args.lessonId}:`, e);
+        return null;
+    }
+};
+
+/**
+ * Make sure a lesson has a meeting link, creating the calendar event on demand
+ * if booking-time creation failed. Safe to call repeatedly; returns the link or null.
+ */
+export const ensureMeetLinkForLesson = async (lessonId: string): Promise<string | null> => {
+    const lesson = await prisma.lesson.findUnique({
+        where: { id: lessonId },
+        include: {
+            tutor: { select: { id: true, username: true, user: { select: { email: true } } } },
+            student: { select: { user: { select: { email: true } } } },
+        },
+    });
+    if (!lesson) return null;
+    if (lesson.meeting_link) return lesson.meeting_link;
+    if (lesson.status === 'CANCELLED' || lesson.status === 'MISSED') return null;
+
+    const attendees = [lesson.student?.user?.email, lesson.tutor?.user?.email].filter(Boolean) as string[];
+    const event = await createMeetEventForLesson({
+        tutorId: lesson.tutor_id,
+        lessonId: lesson.id,
+        title: `Mentoring Session with ${lesson.tutor?.username || 'your mentor'}`,
+        description: 'Scheduled via Empowered Learnings',
+        start: lesson.start_time,
+        end: lesson.end_time,
+        attendeesEmails: attendees,
+    });
+    if (!event?.meetLink && !event?.eventId && !event?.htmlLink) return null;
+
+    await prisma.lesson.update({
+        where: { id: lesson.id },
+        data: {
+            meeting_link: event.meetLink || undefined,
+            google_calendar_event_id: event.eventId || undefined,
+            google_calendar_html_link: event.htmlLink || undefined,
+        },
+    });
+    return event.meetLink || null;
 };
 
 /**

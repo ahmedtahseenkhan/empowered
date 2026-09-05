@@ -32,6 +32,8 @@ type Lesson = {
     reservation?: { status: string; credits: number } | null;
     earning?: { status: string; available_at: string } | null;
     dispute?: { status: string } | null;
+    student_confirmed_at?: string | null;
+    tutor_confirmed_at?: string | null;
     meeting_link?: string | null;
     google_calendar_html_link?: string | null;
     tutor?: { username?: string | null };
@@ -168,6 +170,7 @@ const StudentSessionsPage: React.FC = () => {
     const [reportTarget, setReportTarget] = useState<Lesson | null>(null);
     const [reportReason, setReportReason] = useState('');
     const [reportBusy, setReportBusy] = useState(false);
+    const [confirmBusyId, setConfirmBusyId] = useState<string | null>(null);
     const [actionError, setActionError] = useState('');
     const [actionNotice, setActionNotice] = useState('');
 
@@ -213,6 +216,23 @@ const StudentSessionsPage: React.FC = () => {
             setActionError(apiError(e, 'Unable to send your report.'));
         } finally {
             setReportBusy(false);
+        }
+    };
+
+    const submitConfirmComplete = async (l: Lesson) => {
+        try {
+            setConfirmBusyId(l.id);
+            const res = await api.post(`/lessons/${l.id}/confirm-complete`);
+            const upd = res.data?.lesson;
+            setLessons((prev) => prev.map((x) => (x.id === l.id
+                ? { ...x, status: upd?.status || x.status, student_confirmed_at: upd?.student_confirmed_at ?? x.student_confirmed_at, tutor_confirmed_at: upd?.tutor_confirmed_at ?? x.tutor_confirmed_at }
+                : x)));
+            setActionNotice('Thanks! Your confirmation was recorded — your mentor confirms next.');
+        } catch (e) {
+            setJoinError(apiError(e, 'Unable to confirm completion.'));
+            setErrorModalOpen(true);
+        } finally {
+            setConfirmBusyId(null);
         }
     };
 
@@ -307,6 +327,18 @@ const StudentSessionsPage: React.FC = () => {
         const lessonStatus = (lesson.status || '').toUpperCase();
 
         const pill = 'inline-flex items-center px-3 py-1 rounded-full text-xs sm:text-sm font-medium border';
+        const startMs = new Date(lesson.start_time).getTime();
+        const endMs = new Date(lesson.end_time).getTime();
+        if (lessonStatus === 'BOOKED' && nowMs >= startMs && nowMs <= endMs + 15 * 60 * 1000) {
+            return <span className={`${pill} bg-green-600 text-white border-green-600 animate-pulse`}>In progress — join now</span>;
+        }
+        if (lessonStatus === 'BOOKED' && nowMs > endMs) {
+            return (
+                <span className={`${pill} bg-blue-50 text-blue-700 border-blue-200`}>
+                    {lesson.student_confirmed_at ? 'Waiting for mentor confirmation' : 'Awaiting your confirmation'}
+                </span>
+            );
+        }
         if (isCreditsFunded(lesson)) {
             const ds = lesson.dispute?.status;
             if (ds === 'OPEN') {
@@ -444,7 +476,7 @@ const StudentSessionsPage: React.FC = () => {
                                             ) : (() => {
                                                 const startMs = new Date(l.start_time).getTime();
                                                 const nowMs2 = Date.now();
-                                                const isJoinable = nowMs2 >= startMs - 15 * 60 * 1000 && nowMs2 <= startMs + 50 * 60 * 1000 && !['COMPLETED', 'CANCELLED', 'MISSED'].includes(l.status.toUpperCase());
+                                                const isJoinable = nowMs2 >= startMs - 15 * 60 * 1000 && nowMs2 <= new Date(l.end_time).getTime() + 15 * 60 * 1000 && !['COMPLETED', 'CANCELLED', 'MISSED'].includes(l.status.toUpperCase());
                                                 if (!isJoinable) return null;
                                                 return (
                                                     <>
@@ -522,6 +554,24 @@ const StudentSessionsPage: React.FC = () => {
                                                 >
                                                     Report a problem
                                                 </Button>
+                                            ) : null}
+                                            {(l.status || '').toUpperCase() === 'BOOKED' && nowMs > new Date(l.end_time).getTime() ? (
+                                                l.student_confirmed_at ? (
+                                                    <span className="inline-flex items-center px-3 py-2 rounded-lg text-sm bg-blue-50 text-blue-700 border border-blue-200">
+                                                        Confirmed — waiting for mentor
+                                                    </span>
+                                                ) : (
+                                                    <Button
+                                                        className="bg-green-600 hover:bg-green-700 text-white"
+                                                        disabled={confirmBusyId === l.id}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            submitConfirmComplete(l);
+                                                        }}
+                                                    >
+                                                        {confirmBusyId === l.id ? 'Confirming…' : 'Confirm session completed'}
+                                                    </Button>
+                                                )
                                             ) : null}
                                             {l.google_calendar_html_link ? (
                                                 <a href={l.google_calendar_html_link} target="_blank" rel="noreferrer">

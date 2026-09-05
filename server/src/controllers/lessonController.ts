@@ -2,7 +2,8 @@ import { Response } from 'express';
 import prisma from '../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
 import { isTutorSlotAvailable } from '../services/availability';
-import { updateMeetEventForLesson } from '../services/googleCalendar';
+import { updateMeetEventForLesson, ensureMeetLinkForLesson } from '../services/googleCalendar';
+import { completeLessonNow, WalletError } from '../services/walletService';
 
 // Student-initiated reschedule policy
 const RESCHEDULE_CUTOFF_HOURS = 24; // cannot reschedule within 24h of start
@@ -62,6 +63,8 @@ export const getMyLessons = async (req: AuthRequest, res: Response) => {
                 status: true,
                 billing_type: true,
                 reschedule_count: true,
+                student_confirmed_at: true,
+                tutor_confirmed_at: true,
                 meeting_link: true,
                 google_calendar_html_link: true,
                 created_at: true,
@@ -146,6 +149,8 @@ export const getLessonDetail = async (req: AuthRequest, res: Response) => {
                 duration: true,
                 status: true,
                 billing_type: true,
+                student_confirmed_at: true,
+                tutor_confirmed_at: true,
                 meeting_link: true,
                 google_calendar_html_link: true,
                 category: true,
@@ -230,6 +235,7 @@ export const joinLesson = async (req: AuthRequest, res: Response) => {
                 student_id: true,
                 booking_id: true,
                 start_time: true,
+                end_time: true,
                 meeting_link: true,
                 google_calendar_html_link: true,
                 booking: { select: { funding: true } },
@@ -264,7 +270,7 @@ export const joinLesson = async (req: AuthRequest, res: Response) => {
         // Credit-funded sessions were paid (reserved) at booking time — no per-session payment exists.
         if (role === 'STUDENT' && lesson.booking?.funding !== 'CREDITS') {
             const now = new Date();
-            const sessionEnd = new Date(lesson.start_time.getTime() + 50 * 60 * 1000); // 50 min window
+            const sessionEnd = new Date(lesson.end_time.getTime() + 15 * 60 * 1000); // real end + grace
 
             // Session already over — allow access without payment check (completed session)
             if (now > sessionEnd) {
@@ -296,13 +302,113 @@ export const joinLesson = async (req: AuthRequest, res: Response) => {
             }
         }
 
+        // Booking-time calendar creation can fail (e.g. mentor never connected Google
+        // Calendar before the fallback existed). Create the Meet link on demand so
+        // nobody is ever stuck at session time without one.
+        let meetingLink = lesson.meeting_link;
+        if (!meetingLink) {
+            try {
+                meetingLink = await ensureMeetLinkForLesson(lesson.id);
+            } catch (err) {
+                console.error(`joinLesson: on-demand meet link failed for ${lesson.id}:`, err);
+            }
+        }
+
         return res.json({
-            meeting_link: lesson.meeting_link,
+            meeting_link: meetingLink,
             google_calendar_html_link: lesson.google_calendar_html_link,
         });
     } catch (e) {
         console.error('joinLesson error:', e);
         return res.status(500).json({ error: 'Failed to join lesson' });
+    }
+};
+
+/**
+ * Two-sided completion confirmation. The student (who pays) confirms first;
+ * the mentor's confirmation then finalizes the session as COMPLETED and, for
+ * credit-funded sessions, releases the reserved credits into pending earnings.
+ * If neither side confirms, the wallet scheduler still auto-completes
+ * credit-funded sessions after the grace window as a backstop.
+ */
+export const confirmLessonComplete = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user?.id;
+        const role = req.user?.role;
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+        if (role !== 'STUDENT' && role !== 'TUTOR') return res.status(403).json({ error: 'Forbidden' });
+
+        const lessonId = (req.params.lessonId || '').trim();
+        if (!lessonId) return res.status(400).json({ error: 'lessonId is required' });
+
+        const lesson = await prisma.lesson.findUnique({
+            where: { id: lessonId },
+            select: {
+                id: true, tutor_id: true, student_id: true, status: true,
+                start_time: true, end_time: true,
+                student_confirmed_at: true, tutor_confirmed_at: true,
+            },
+        });
+        if (!lesson) return res.status(404).json({ error: 'Session not found' });
+
+        if (role === 'STUDENT') {
+            const student = await prisma.studentProfile.findUnique({ where: { user_id: userId } });
+            if (!student || lesson.student_id !== student.id) return res.status(403).json({ error: 'Forbidden' });
+        } else {
+            const tutor = await prisma.tutorProfile.findUnique({ where: { user_id: userId } });
+            if (!tutor || lesson.tutor_id !== tutor.id) return res.status(403).json({ error: 'Forbidden' });
+        }
+
+        if (lesson.status === 'CANCELLED' || lesson.status === 'MISSED') {
+            return res.status(400).json({ error: 'This session was not held, so it cannot be confirmed as completed.' });
+        }
+        if (Date.now() < lesson.end_time.getTime()) {
+            return res.status(400).json({ error: 'You can confirm completion once the session has ended.' });
+        }
+
+        let updated = lesson;
+        if (role === 'STUDENT') {
+            if (!lesson.student_confirmed_at) {
+                updated = await prisma.lesson.update({
+                    where: { id: lesson.id },
+                    data: { student_confirmed_at: new Date() },
+                    select: {
+                        id: true, tutor_id: true, student_id: true, status: true,
+                        start_time: true, end_time: true,
+                        student_confirmed_at: true, tutor_confirmed_at: true,
+                    },
+                });
+            }
+        } else {
+            if (!lesson.student_confirmed_at) {
+                return res.status(400).json({ error: 'The student has not confirmed this session yet. They confirm first.' });
+            }
+            if (!lesson.tutor_confirmed_at) {
+                await prisma.lesson.update({ where: { id: lesson.id }, data: { tutor_confirmed_at: new Date() } });
+                await completeLessonNow(lesson.id); // marks COMPLETED + releases credits for credit-funded sessions
+                updated = (await prisma.lesson.findUnique({
+                    where: { id: lesson.id },
+                    select: {
+                        id: true, tutor_id: true, student_id: true, status: true,
+                        start_time: true, end_time: true,
+                        student_confirmed_at: true, tutor_confirmed_at: true,
+                    },
+                }))!;
+            }
+        }
+
+        return res.json({
+            lesson: {
+                id: updated.id,
+                status: updated.status,
+                student_confirmed_at: updated.student_confirmed_at,
+                tutor_confirmed_at: updated.tutor_confirmed_at,
+            },
+        });
+    } catch (e) {
+        if (e instanceof WalletError) return res.status(e.status).json({ error: e.message });
+        console.error('confirmLessonComplete error:', e);
+        return res.status(500).json({ error: 'Failed to confirm session completion' });
     }
 };
 

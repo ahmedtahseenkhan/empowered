@@ -19,7 +19,9 @@ type Lesson = {
     meeting_link?: string | null;
     google_calendar_html_link?: string | null;
     student?: { username?: string | null };
-    booking?: { frequency?: string; created_at?: string } | null;
+    booking?: { frequency?: string; created_at?: string; funding?: string | null } | null;
+    student_confirmed_at?: string | null;
+    tutor_confirmed_at?: string | null;
 };
 
 const TutorSessionsPage: React.FC = () => {
@@ -28,6 +30,8 @@ const TutorSessionsPage: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [lessons, setLessons] = useState<Lesson[]>([]);
     const [tab, setTab] = useState<'upcoming' | 'past'>('upcoming');
+    const [joinBusyId, setJoinBusyId] = useState<string | null>(null);
+    const [confirmBusyId, setConfirmBusyId] = useState<string | null>(null);
 
     const studentId = useMemo(() => {
         const params = new URLSearchParams(location.search);
@@ -133,6 +137,19 @@ const TutorSessionsPage: React.FC = () => {
         const lessonStatus = (lesson.status || '').toUpperCase();
 
         const pill = 'inline-flex items-center px-3 py-1 rounded-full text-xs sm:text-sm font-medium border';
+        const startMs = new Date(lesson.start_time).getTime();
+        const endMs = new Date(lesson.end_time).getTime();
+        const nowMs2 = Date.now();
+        if (lessonStatus === 'BOOKED' && nowMs2 >= startMs && nowMs2 <= endMs + 15 * 60 * 1000) {
+            return <span className={`${pill} bg-green-600 text-white border-green-600 animate-pulse`}>In progress — join now</span>;
+        }
+        if (lessonStatus === 'BOOKED' && nowMs2 > endMs) {
+            return (
+                <span className={`${pill} bg-blue-50 text-blue-700 border-blue-200`}>
+                    {lesson.student_confirmed_at ? 'Student confirmed — finalize below' : 'Awaiting student confirmation'}
+                </span>
+            );
+        }
         if (lessonStatus === 'CANCELLED') {
             return <span className={`${pill} bg-gray-50 text-gray-600 border-gray-200`}>Cancelled</span>;
         }
@@ -206,19 +223,34 @@ const TutorSessionsPage: React.FC = () => {
                                             {(() => {
                                                 const status = l.status.toUpperCase();
                                                 if (['COMPLETED', 'CANCELLED', 'MISSED'].includes(status)) return null;
-                                                if (!l.meeting_link) return null;
                                                 const startMs = new Date(l.start_time).getTime();
+                                                const endMs = new Date(l.end_time).getTime();
                                                 const nowMs = Date.now();
-                                                const isJoinable = nowMs >= startMs - 15 * 60 * 1000 && nowMs <= startMs + 50 * 60 * 1000;
+                                                const isJoinable = nowMs >= startMs - 15 * 60 * 1000 && nowMs <= endMs + 15 * 60 * 1000;
                                                 if (!isJoinable) return null;
                                                 return (
                                                     <>
-                                                        <a href={l.meeting_link} target="_blank" rel="noreferrer">
-                                                            <Button className="flex items-center gap-2">
-                                                                <ExternalLink className="w-4 h-4" />
-                                                                Join Session
-                                                            </Button>
-                                                        </a>
+                                                        <Button
+                                                            className="flex items-center gap-2"
+                                                            disabled={joinBusyId === l.id}
+                                                            onClick={async (e) => {
+                                                                e.stopPropagation();
+                                                                try {
+                                                                    setJoinBusyId(l.id);
+                                                                    const res = await api.get(`/lessons/${l.id}/join`);
+                                                                    const url = res.data?.meeting_link as string | undefined;
+                                                                    if (url) window.open(url, '_blank');
+                                                                    else alert('Meeting link is not available yet. Please try again in a minute.');
+                                                                } catch {
+                                                                    alert('Unable to join session. Please try again.');
+                                                                } finally {
+                                                                    setJoinBusyId(null);
+                                                                }
+                                                            }}
+                                                        >
+                                                            <ExternalLink className="w-4 h-4" />
+                                                            {joinBusyId === l.id ? 'Joining…' : 'Join Session'}
+                                                        </Button>
                                                         <a href={`/tutor/whiteboard?lesson=${l.id}`} target="_blank" rel="noreferrer">
                                                             <Button variant="outline" className="flex items-center gap-2">
                                                                 <ExternalLink className="w-4 h-4" />
@@ -228,6 +260,29 @@ const TutorSessionsPage: React.FC = () => {
                                                     </>
                                                 );
                                             })()}
+                                            {(l.status || '').toUpperCase() === 'BOOKED' && Date.now() > new Date(l.end_time).getTime() && l.student_confirmed_at && !l.tutor_confirmed_at ? (
+                                                <Button
+                                                    className="bg-green-600 hover:bg-green-700 text-white"
+                                                    disabled={confirmBusyId === l.id}
+                                                    onClick={async (e) => {
+                                                        e.stopPropagation();
+                                                        try {
+                                                            setConfirmBusyId(l.id);
+                                                            const res = await api.post(`/lessons/${l.id}/confirm-complete`);
+                                                            const upd = res.data?.lesson;
+                                                            setLessons((prev) => prev.map((x) => (x.id === l.id
+                                                                ? { ...x, status: upd?.status || 'COMPLETED', tutor_confirmed_at: upd?.tutor_confirmed_at || new Date().toISOString() }
+                                                                : x)));
+                                                        } catch (err) {
+                                                            alert((err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Unable to confirm completion.');
+                                                        } finally {
+                                                            setConfirmBusyId(null);
+                                                        }
+                                                    }}
+                                                >
+                                                    {confirmBusyId === l.id ? 'Confirming…' : 'Confirm completion'}
+                                                </Button>
+                                            ) : null}
                                             {l.google_calendar_html_link ? (
                                                 <a href={l.google_calendar_html_link} target="_blank" rel="noreferrer">
                                                     <Button variant="outline">Open in Calendar</Button>

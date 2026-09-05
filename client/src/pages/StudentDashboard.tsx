@@ -211,9 +211,11 @@ const StudentDashboard: React.FC = () => {
     };
 
     const canJoin = (l: Lesson) => {
-        if (!l.meeting_link) return false;
+        const st = String(l.status || '').toUpperCase();
+        if (['COMPLETED', 'CANCELLED', 'MISSED'].includes(st)) return false;
         const startMs = new Date(l.start_time).getTime();
-        return Date.now() >= startMs - 15 * 60 * 1000 && Date.now() <= startMs + 50 * 60 * 1000;
+        const endMs = new Date(l.end_time).getTime();
+        return Date.now() >= startMs - 15 * 60 * 1000 && Date.now() <= endMs + 15 * 60 * 1000;
     };
 
     const fmt = (iso: string, opts: Intl.DateTimeFormatOptions) => new Date(iso).toLocaleDateString(undefined, opts);

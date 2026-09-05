@@ -22,8 +22,9 @@ export const WALLET_CONFIG = {
     weeksPerBooking: Number(process.env.WALLET_WEEKS_PER_BOOKING || 4),
     /** Student can cancel a reserved session for a full credit return up to this many hours before start. */
     cancelCutoffHours: Number(process.env.WALLET_CANCEL_CUTOFF_HOURS || 24),
-    /** Minutes after end_time before a BOOKED credit-funded session is auto-marked COMPLETED. */
-    completionGraceMinutes: Number(process.env.WALLET_COMPLETION_GRACE_MINUTES || 30),
+    /** Backstop: minutes after end_time before a BOOKED credit-funded session is auto-marked COMPLETED
+     *  when neither side pressed the completion-confirmation buttons. */
+    completionGraceMinutes: Number(process.env.WALLET_COMPLETION_GRACE_MINUTES || 1440),
     /** Minimum AVAILABLE earnings before a payout is made (cents). Phase 2 uses this; shown to mentors now. */
     payoutMinimumCents: Number(process.env.WALLET_PAYOUT_MINIMUM_CENTS || 5000),
 };
@@ -606,6 +607,31 @@ export async function getMentorEarnings(tutorId: string) {
             created_at: e.created_at,
         })),
     };
+}
+
+/**
+ * Immediately mark a lesson COMPLETED (both sides confirmed) and, for credit-funded
+ * sessions, release the reserved credits into the mentor's pending earnings.
+ */
+export async function completeLessonNow(lessonId: string) {
+    return prisma.$transaction(async (tx) => {
+        const lesson = await tx.lesson.findUnique({
+            where: { id: lessonId },
+            include: { reservation: true, booking: { select: { funding: true } } },
+        });
+        if (!lesson) throw new WalletError('Session not found', 404);
+        if (lesson.status === 'COMPLETED') return lesson;
+        if (lesson.status !== 'BOOKED') throw new WalletError('Only booked sessions can be completed');
+
+        const updated = await tx.lesson.update({
+            where: { id: lesson.id },
+            data: { status: 'COMPLETED', completed_at: now() },
+        });
+        if (lesson.booking?.funding === 'CREDITS' && lesson.reservation?.status === 'RESERVED') {
+            await releaseReservationTx(tx, lesson.reservation.id);
+        }
+        return updated;
+    });
 }
 
 // ---------------------------------------------------------------------------
