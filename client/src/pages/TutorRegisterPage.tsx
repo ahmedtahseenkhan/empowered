@@ -37,6 +37,7 @@ const TutorRegisterPage: React.FC = () => {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [betaActivated, setBetaActivated] = useState(false);
+    const [isBeta, setIsBeta] = useState(false);
     const [serverPlans, setServerPlans] = useState<Array<{ id: string; priceId: string; annualAmount: number }>>([]);
 
     const plansBase = [
@@ -153,7 +154,18 @@ const TutorRegisterPage: React.FC = () => {
             .catch(() => setServerPlans([]));
     }, []);
 
-    const { login } = useAuth();
+    const { login, user } = useAuth();
+
+    // Approved beta mentors get the Premium plan assigned automatically on the server (at email
+    // verification), so they never see the Plan / Payment steps and go straight to the dashboard.
+    const betaMentor = isBeta || !!user?.is_beta;
+    const steps = betaMentor ? STEPS.slice(0, 3) : STEPS;
+
+    useEffect(() => {
+        if (betaMentor && currentStep >= 4) {
+            window.location.href = '/dashboard';
+        }
+    }, [betaMentor, currentStep]);
 
     // STEP 1: Basic Info Submission
     const handleBasicInfoSubmit = async (e: React.FormEvent) => {
@@ -163,12 +175,13 @@ const TutorRegisterPage: React.FC = () => {
         try {
             // Create the account, but do NOT log in yet. Access is granted only after the
             // email is verified (step 2). Tier is never sent — it is set by payment/beta only.
-            await api.post('/auth/register', {
+            const res = await api.post('/auth/register', {
                 username: formData.username,
                 email: formData.email,
                 password: formData.password,
                 role: 'TUTOR',
             });
+            if (res.data?.is_beta) setIsBeta(true);
             setCurrentStep(2);
         } catch (err: any) {
             setError(err.response?.data?.error || 'Registration failed.');
@@ -190,6 +203,7 @@ const TutorRegisterPage: React.FC = () => {
             // The account is only authenticated once the email is verified.
             if (response.data?.token && response.data?.user) {
                 login(response.data.token, response.data.user);
+                if (response.data.user.is_beta) setIsBeta(true);
             }
             setCurrentStep(3);
         } catch (err: any) {
@@ -398,11 +412,27 @@ const TutorRegisterPage: React.FC = () => {
                             <h3 className="font-bold text-gray-900 mt-4 mb-2">7. Termination & Subscription Cancellation</h3>
                             <p>EmpowerEd may suspend or terminate accounts immediately for violations of platform policies or safety concerns. You may cancel your subscription at any time before the next billing cycle to stop future charges. Upon cancellation/termination, you will receive payment for completed sessions processed prior to termination (subject to processor timelines), and your profile will be removed from the platform. Subscription fees are non-refundable unless required by law.</p>
                         </div>
+                        {betaMentor && (
+                            <div className="bg-green-50 border border-green-200 text-green-800 text-sm px-4 py-3 rounded-lg">
+                                Your free beta <strong>Premium</strong> plan is already active — there is nothing to pay and no card required.
+                            </div>
+                        )}
                         <div className="flex items-center gap-2">
                             <input type="checkbox" id="accept-terms" className="w-4 h-4 text-primary-600 rounded" />
                             <label htmlFor="accept-terms" className="text-sm text-gray-700">I accept the Terms and Conditions</label>
                         </div>
-                        <Button className="w-full" onClick={() => setCurrentStep(4)}>Accept & Continue</Button>
+                        <Button
+                            className="w-full"
+                            onClick={() => {
+                                if (betaMentor) {
+                                    window.location.href = '/dashboard';
+                                } else {
+                                    setCurrentStep(4);
+                                }
+                            }}
+                        >
+                            {betaMentor ? 'Accept & Go to Dashboard' : 'Accept & Continue'}
+                        </Button>
                     </div>
                 );
             case 4:
@@ -524,7 +554,7 @@ const TutorRegisterPage: React.FC = () => {
                     <div className="mb-8">
                         <div className="flex justify-between items-center relative">
                             <div className="absolute left-0 top-1/2 w-full h-1 bg-gray-200 -z-0"></div>
-                            {STEPS.map((step) => (
+                            {steps.map((step) => (
                                 <div key={step.id} className={`relative z-10 flex flex-col items-center`}>
                                     <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-colors ${currentStep >= step.id
                                         ? 'bg-primary-600 border-primary-600 text-white'

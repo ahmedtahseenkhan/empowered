@@ -7,6 +7,7 @@ interface User {
     role: 'STUDENT' | 'TUTOR' | 'ADMIN';
     username: string;
     tier?: string;
+    is_beta?: boolean;
     timezone?: string;
 }
 
@@ -34,15 +35,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const parsedUser: User = JSON.parse(savedUser);
             setUser(parsedUser);
 
-            // The cached `tier` is captured at login time and can go stale
-            // (e.g. the user upgrades after logging in). Re-fetch the live tier
+            // The cached `tier` / `is_beta` are captured at login time and can go stale
+            // (e.g. the user upgrades after logging in). Re-fetch the live values
             // for tutors so gated nav items (AI Assist) reflect the current plan.
             if (parsedUser.role === 'TUTOR') {
                 api.get('/payments/mentor/status')
                     .then(res => {
                         const freshTier = res.data?.tier ?? null;
-                        if (freshTier && freshTier !== parsedUser.tier) {
-                            const updatedUser = { ...parsedUser, tier: freshTier };
+                        const freshBeta = typeof res.data?.is_beta === 'boolean' ? res.data.is_beta : undefined;
+                        const tierChanged = !!freshTier && freshTier !== parsedUser.tier;
+                        const betaChanged = freshBeta !== undefined && freshBeta !== !!parsedUser.is_beta;
+                        if (tierChanged || betaChanged) {
+                            const updatedUser: User = {
+                                ...parsedUser,
+                                ...(tierChanged ? { tier: freshTier } : {}),
+                                ...(betaChanged ? { is_beta: freshBeta } : {}),
+                            };
                             setUser(updatedUser);
                             localStorage.setItem('user', JSON.stringify(updatedUser));
                         }

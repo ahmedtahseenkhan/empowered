@@ -5,6 +5,7 @@ import { hashPassword, comparePassword, generateToken, generateVerificationToken
 import { RegisterSchema, LoginSchema } from '../utils/validation';
 import { AuthRequest } from '../middleware/authMiddleware';
 import emailService from '../services/emailService';
+import { ensureBetaPremiumAccess, isApprovedBetaEmail } from '../services/betaService';
 
 const getClientBaseUrl = (): string => {
     const raw = (process.env.CLIENT_URL || process.env.CLIENT_BASE_URL || 'https://emplearnings.com').trim();
@@ -83,11 +84,17 @@ export const register = async (req: Request, res: Response) => {
         // NOTE: no token is issued here. Access is granted only after the email is
         // verified via /auth/verify-email-code (which returns the login token). This
         // applies to every role — no account can be used before verification.
+        //
+        // Tell the signup wizard up front whether this mentor is an approved beta applicant so it
+        // can hide the plan/payment steps — Premium is assigned automatically on email verification.
+        const isBeta = role === 'TUTOR' ? await isApprovedBetaEmail(email).catch(() => false) : false;
+
         res.status(201).json({
             message: 'User registered successfully. Please check your email for a verification code.',
             requiresVerification: true,
             email: result.email,
             role: result.role,
+            is_beta: isBeta,
         });
 
     } catch (error: any) {
@@ -283,6 +290,7 @@ export const me = async (req: AuthRequest, res: Response) => {
                 is_suspended: user.is_suspended,
                 username: userProfile?.username,
                 tier: (userProfile as any)?.tier,
+                is_beta: (userProfile as any)?.is_beta ?? false,
                 timezone: (userProfile as any)?.timezone,
                 profile_photo: userProfile?.profile_photo,
                 department: (userProfile as any)?.department,
@@ -331,13 +339,24 @@ export const login = async (req: Request, res: Response) => {
 
         const token = generateToken(user.id, user.role);
         const username = user.role === 'STUDENT' ? user.student_profile?.username : user.tutor_profile?.username;
-        const tier = user.role === 'TUTOR' ? user.tutor_profile?.tier : undefined;
+        let tier = user.role === 'TUTOR' ? user.tutor_profile?.tier : undefined;
+        let isBeta = user.role === 'TUTOR' ? (user.tutor_profile?.is_beta ?? false) : undefined;
         const timezone = user.role === 'TUTOR' ? user.tutor_profile?.timezone : undefined;
+
+        // Approved beta mentors who signed up before auto-assignment existed (or abandoned the old
+        // plan step) get their Premium beta plan here, so they land straight on the dashboard.
+        if (user.role === 'TUTOR' && user.tutor_profile && !user.tutor_profile.is_beta) {
+            const beta = await ensureBetaPremiumAccess(user.id).catch(() => null);
+            if (beta) {
+                tier = beta.tier;
+                isBeta = beta.is_beta;
+            }
+        }
 
         res.json({
             message: 'Login successful',
             token,
-            user: { id: user.id, email: user.email, role: user.role, username, tier, timezone }
+            user: { id: user.id, email: user.email, role: user.role, username, tier, is_beta: isBeta, timezone }
         });
 
     } catch (error: any) {
@@ -366,6 +385,9 @@ export const verifyEmail = async (req: Request, res: Response) => {
             where: { id: user.id },
             data: { is_verified: true }
         });
+
+        // Approved beta mentors get the Premium beta plan assigned automatically.
+        if (user.role === 'TUTOR') await ensureBetaPremiumAccess(user.id).catch(() => null);
 
         return res.json({ message: 'Email verified successfully' });
     } catch (error) {
@@ -460,13 +482,24 @@ export const verifyEmailCode = async (req: Request, res: Response) => {
             });
         } catch (_e) { /* non-fatal */ }
 
+        // Approved beta mentors get the Premium beta plan assigned automatically — they never
+        // see the plan/payment step and go straight to the dashboard.
+        const beta = user.role === 'TUTOR' ? await ensureBetaPremiumAccess(user.id).catch(() => null) : null;
+
         // Issue the login token ONLY now that the email is verified. The registration
         // endpoint deliberately does not grant mentors access before this step.
         const token = generateToken(user.id, user.role);
         return res.json({
             message: 'Email verified successfully',
             token,
-            user: { id: user.id, email: user.email, role: user.role, username },
+            user: {
+                id: user.id,
+                email: user.email,
+                role: user.role,
+                username,
+                tier: beta?.tier,
+                is_beta: beta?.is_beta ?? false,
+            },
         });
     } catch (error) {
         console.error('verifyEmailCode error:', error);

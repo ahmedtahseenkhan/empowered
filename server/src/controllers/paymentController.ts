@@ -3,6 +3,7 @@ import { StripeService } from '../services/stripeService';
 import { PaymentAnalyticsService } from '../services/paymentAnalyticsService';
 import prisma from '../config/db';
 import { z } from 'zod';
+import { findApprovedBetaApplication, grantBetaPremium } from '../services/betaService';
 import { handleCheckoutSessionCompleted } from './webhookController';
 
 /** Mentor subscription plans: annual billing. Price IDs from env or fallback for backward compatibility. */
@@ -172,7 +173,7 @@ const ActivateTrialSchema = z.object({
 export const activateMentorTrial = async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user.id;
-        const { tier } = ActivateTrialSchema.parse(req.body);
+        ActivateTrialSchema.parse(req.body); // `tier` is accepted but ignored — beta mentors always receive Premium
 
         const tutor = await prisma.tutorProfile.findUnique({
             where: { user_id: userId },
@@ -180,18 +181,22 @@ export const activateMentorTrial = async (req: Request, res: Response) => {
         });
         if (!tutor) return res.status(404).json({ error: 'Tutor profile not found' });
 
-        // Only approved beta applicants may activate the trial.
-        // Match case-insensitively — application and account emails are not stored with consistent casing.
-        const betaApproval = await prisma.betaApplication.findFirst({
-            where: {
-                email: { equals: tutor.user.email, mode: 'insensitive' },
-                status: 'APPROVED',
-            },
-            select: { id: true },
-        });
+        // Only approved beta applicants may activate the trial (matched case-insensitively).
+        const betaApproval = await findApprovedBetaApplication(tutor.user.email);
         if (!betaApproval) {
             return res.status(403).json({
                 error: 'Beta access only. Apply at emplearnings.com/beta and wait for approval before activating your account.',
+            });
+        }
+
+        // Already on the beta plan (auto-assigned at signup/login) — succeed idempotently.
+        if (tutor.is_beta) {
+            return res.json({
+                success: true,
+                already_active: true,
+                subscription_status: tutor.subscription_status,
+                subscription_end_date: tutor.subscription_end_date,
+                tier: tutor.tier,
             });
         }
 
@@ -202,21 +207,14 @@ export const activateMentorTrial = async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'You have already used your free trial. Please subscribe to continue.' });
         }
 
-        const trialEnd = new Date();
-        trialEnd.setDate(trialEnd.getDate() + 30); // 1-month free beta trial
+        const updated = await grantBetaPremium(tutor.id);
 
-        await prisma.tutorProfile.update({
-            where: { id: tutor.id },
-            data: {
-                tier: 'PREMIUM' as any, // Beta users always receive the Premium plan
-                subscription_status: 'trialing',
-                subscription_end_date: trialEnd,
-                has_used_trial: true,
-                is_beta: true,
-            },
+        return res.json({
+            success: true,
+            subscription_status: updated.subscription_status,
+            subscription_end_date: updated.subscription_end_date,
+            tier: updated.tier,
         });
-
-        return res.json({ success: true, subscription_status: 'trialing', subscription_end_date: trialEnd, tier: 'PREMIUM' });
     } catch (error: any) {
         if (error instanceof z.ZodError) {
             return res.status(400).json({ error: error.issues });

@@ -911,7 +911,7 @@ class EmailService {
 <body style="font-family:Arial,sans-serif;color:#222;max-width:600px;margin:0 auto;padding:32px 24px;background:#fff">
   <p style="margin:0 0 16px 0">Hi ${firstName},</p>
   <p style="margin:0 0 16px 0">We're excited to let you know that your application to join the EmpowerEd Learnings Founding Mentor Beta has been approved.</p>
-  <p style="margin:0 0 16px 0">You can now create your mentor account and complete your profile using the link below:</p>
+  <p style="margin:0 0 16px 0">Your beta access includes our Premium plan at no cost — there is no plan to choose, nothing to pay, and no card required. Simply create your mentor account and complete your profile using the link below:</p>
   <p style="margin:0 0 24px 0">
     <a href="${createAccountUrl}" style="display:inline-block;background:#4A148C;color:#fff;text-decoration:none;padding:12px 28px;border-radius:9999px;font-weight:600;font-size:15px">Create My Mentor Account</a>
   </p>
