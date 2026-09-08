@@ -432,14 +432,24 @@ class EmailService {
         callDate: string;
         callTime: string;
         meetingLink: string;
+        reminderType?: '24h' | '3h';
     }): Promise<void> {
+        // Defaults to the same-day nudge so legacy queued rows (whose payload has no
+        // reminderType) keep the short-notice wording they were actually scheduled for.
+        const isDayBefore = data.reminderType === '24h';
+        const whenText = isDayBefore ? 'tomorrow' : 'later today (in about 3 hours)';
         const html = this.renderTemplate('mentor/demo-call-reminder', {
             ...data,
+            whenText,
+            canReschedule: isDayBefore,
             year: new Date().getFullYear(),
         });
+        const subject = isDayBefore
+            ? 'Your Demo Is Tomorrow – Don\u2019t Miss It'
+            : 'Your Demo Is Today – Starting in About 3 Hours';
         await this.sendEmail({
             to: data.mentorEmail,
-            subject: 'Your Demo Is Tomorrow – Don\u2019t Miss It',
+            subject,
             html,
         });
     }

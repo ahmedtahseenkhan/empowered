@@ -28,7 +28,7 @@
                                 Hi <strong>{{mentorName}}</strong>,
                             </p>
                             <p style="font-size: 16px; color: #333333; line-height: 1.6; margin: 0 0 20px;">
-                                This is a reminder that your demo call with the EmpowerEd team is scheduled for tomorrow.
+                                This is a reminder that your demo call with the EmpowerEd team is scheduled for {{whenText}}.
                             </p>
 
                             <!-- Session Details Box -->
@@ -52,6 +52,7 @@
                             <p style="font-size: 16px; color: #333333; line-height: 1.6; margin: 0 0 10px;">
                                 Please join on time and ensure your audio/video is working.
                             </p>
+                            {{#if canReschedule}}
                             <p style="font-size: 16px; color: #333333; line-height: 1.6; margin: 0 0 20px;">
                                 If you need to reschedule, please do it now.
                             </p>
@@ -61,6 +62,7 @@
                                     ⚠️ Demo calls cannot be rescheduled once less than 24 hours remain.
                                 </p>
                             </div>
+                            {{/if}}
 
                             <!-- CTA Button -->
                             {{#if meetingLink}}

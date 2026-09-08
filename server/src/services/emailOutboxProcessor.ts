@@ -576,6 +576,7 @@ async function sendOutboxRow(row: OutboxRow) {
 
     if (row.type === 'DEMO_CALL_REMINDER_MENTOR') {
         const demoBookingId = row.payload?.demoBookingId as string | undefined;
+        const reminderType = row.payload?.reminderType as '24h' | '3h' | undefined;
         if (!demoBookingId) throw new Error('Missing demoBookingId in payload');
 
         const demoBooking = await prisma.demoBooking.findUnique({
@@ -591,6 +592,7 @@ async function sendOutboxRow(row: OutboxRow) {
             callDate: formatDatePart(demoBooking.slot_start_time, timeZone),
             callTime: formatTimePart(demoBooking.slot_start_time, timeZone),
             meetingLink: demoBooking.meeting_link || '',
+            reminderType,
         });
         return;
     }
