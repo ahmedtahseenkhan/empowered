@@ -332,10 +332,21 @@ export const createCreditsPurchaseCheckout = async (req: AuthRequest, res: Respo
         if (!successUrl || !cancelUrl) throw new WalletError('successUrl and cancelUrl are required');
 
         const user = await prisma.user.findUnique({ where: { id: req.user!.id }, select: { email: true } });
-        const stripeCustomerId =
-            student.stripe_customer_id ||
-            (await StripeService.createCustomer(user?.email || 'student@example.com', student.username)).id;
-        if (!student.stripe_customer_id) {
+
+        // A stored customer id can be stale (created in Stripe test mode, or deleted).
+        // Validate it and mint a fresh customer if Stripe no longer recognizes it.
+        let stripeCustomerId = student.stripe_customer_id;
+        if (stripeCustomerId) {
+            try {
+                const c = await StripeService.getCustomer(stripeCustomerId);
+                if ((c as { deleted?: boolean }).deleted) stripeCustomerId = null;
+            } catch {
+                console.warn(`[Wallet] Stored Stripe customer ${stripeCustomerId} is invalid (test-mode leftover?); creating a new one.`);
+                stripeCustomerId = null;
+            }
+        }
+        if (!stripeCustomerId) {
+            stripeCustomerId = (await StripeService.createCustomer(user?.email || 'student@example.com', student.username)).id;
             await prisma.studentProfile.update({ where: { id: student.id }, data: { stripe_customer_id: stripeCustomerId } });
         }
 

@@ -8,20 +8,30 @@ import { applyCreditsPurchase, handleCardDisputeOnPurchase, markTransferredAsPai
 
 export const handleStripeWebhook = async (req: Request, res: Response) => {
     const sig = req.headers['stripe-signature'];
-    const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    // Two Stripe endpoints can point at this URL: the normal account endpoint and a
+    // "listen on Connected accounts" endpoint (payout.paid etc.). Each has its own
+    // signing secret, so verify against whichever secrets are configured.
+    const secrets = [process.env.STRIPE_WEBHOOK_SECRET, process.env.STRIPE_CONNECT_WEBHOOK_SECRET]
+        .filter(Boolean) as string[];
 
-    if (!sig || !endpointSecret) {
+    if (!sig || secrets.length === 0) {
         return res.status(400).send('Missing signature or secret');
     }
 
     let event;
-
-    try {
-        // Use raw body (needs express.raw() middleware in route)
-        event = StripeService.constructEvent(req.body, sig as string, endpointSecret);
-    } catch (err: any) {
-        console.error(`Webhook Error: ${err.message}`);
-        return res.status(400).send(`Webhook Error: ${err.message}`);
+    let lastError: any = null;
+    for (const secret of secrets) {
+        try {
+            // Use raw body (needs express.raw() middleware in route)
+            event = StripeService.constructEvent(req.body, sig as string, secret);
+            break;
+        } catch (err: any) {
+            lastError = err;
+        }
+    }
+    if (!event) {
+        console.error(`Webhook Error: ${lastError?.message}`);
+        return res.status(400).send(`Webhook Error: ${lastError?.message}`);
     }
 
     // Log event (optional, for debugging)

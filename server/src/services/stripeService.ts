@@ -122,6 +122,10 @@ export class StripeService {
     /**
      * Create a Customer for a Student
      */
+    static async getCustomer(customerId: string) {
+        return stripe.customers.retrieve(customerId);
+    }
+
     static async createCustomer(email: string, name: string) {
         try {
             const customer = await stripe.customers.create({
