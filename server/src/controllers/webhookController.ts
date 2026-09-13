@@ -4,6 +4,7 @@ import prisma from '../config/db';
 import { Prisma } from '@prisma/client';
 import { isTutorSlotAvailable } from '../services/availability';
 import { createMeetEventForLesson } from '../services/googleCalendar';
+import { applyCreditsPurchase, handleCardDisputeOnPurchase, markTransferredAsPaidForAccount } from '../services/walletService';
 
 export const handleStripeWebhook = async (req: Request, res: Response) => {
     const sig = req.headers['stripe-signature'];
@@ -41,6 +42,27 @@ export const handleStripeWebhook = async (req: Request, res: Response) => {
             case 'customer.subscription.deleted':
                 await handleSubscriptionDeleted(event.data.object);
                 break;
+            case 'charge.dispute.created': {
+                // A student disputed a card charge with their bank. If it was a Learning
+                // Credits purchase, freeze the wallet until an admin reviews it.
+                const dispute = event.data.object as any;
+                const pi = (dispute?.payment_intent as string | undefined) || undefined;
+                if (pi) {
+                    const frozen = await handleCardDisputeOnPurchase(pi);
+                    if (frozen) console.warn(`[Stripe Webhook] Dispute ${dispute.id}: wallet frozen for student ${frozen.studentId}`);
+                    else console.warn(`[Stripe Webhook] Dispute ${dispute.id} on ${pi} (not a credits purchase).`);
+                }
+                break;
+            }
+            case 'payout.paid': {
+                // Connect event from a mentor's account: their bank payout completed.
+                const acct = (event as any).account as string | undefined;
+                if (acct) {
+                    const r = await markTransferredAsPaidForAccount(acct);
+                    if (r.updated) console.log(`[Stripe Webhook] payout.paid for ${acct}: marked ${r.updated} record(s) PAID`);
+                }
+                break;
+            }
             default:
                 console.log(`Unhandled event type ${event.type}`);
         }
@@ -140,6 +162,25 @@ export async function handleCheckoutSessionCompleted(session: any) {
                 },
             }).catch((e: any) => { if (e.code !== 'P2002') console.error('[Webhook] Failed to queue subscription activated email:', e); });
         }
+    } else if (metadata.type === 'credits_purchase') {
+        const studentId = metadata.studentId as string | undefined;
+        const credits = Number(metadata.credits || 0);
+        if (!studentId || !Number.isInteger(credits) || credits <= 0) {
+            console.error('[Stripe Webhook] credits_purchase missing/invalid metadata', metadata);
+            return;
+        }
+        if (session.payment_status && session.payment_status !== 'paid') {
+            console.log(`[Stripe Webhook] credits_purchase session ${session.id} not paid yet (${session.payment_status}). Skipping.`);
+            return;
+        }
+        const result = await applyCreditsPurchase({
+            studentId,
+            credits,
+            amountCents: Number(session.amount_total || 0),
+            stripePaymentIntentId: String(session.payment_intent),
+            stripeCheckoutSessionId: session.id as string,
+        });
+        console.log(`[Stripe Webhook] credits_purchase ${session.id}: ${result.applied ? `credited ${credits} credits to ${studentId}` : 'already applied'}`);
     } else if (metadata.type === 'student_booking_payment') {
         const paymentScheduleId = metadata.paymentScheduleId as string | undefined;
         if (!paymentScheduleId) {

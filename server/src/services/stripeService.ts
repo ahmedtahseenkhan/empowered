@@ -46,6 +46,11 @@ export class StripeService {
                 country: countryCode,
                 email,
                 capabilities,
+                // Mentors are settled once a month (Learning Credits model): transfers land on the
+                // connected account and Stripe pays the bank out on the 1st.
+                settings: {
+                    payouts: { schedule: { interval: 'monthly', monthly_anchor: 1 } },
+                },
             };
 
             if (isRecipientOnly) {
@@ -223,6 +228,63 @@ export class StripeService {
             console.error('Error creating booking checkout session:', error);
             throw error;
         }
+    }
+
+    /** Checkout for a Learning Credits purchase. Plain platform charge — no transfer_data,
+     *  the money stays on the platform account until monthly mentor settlement. */
+    static async createCreditsCheckoutSession(
+        amountInCents: number,
+        customerId: string,
+        successUrl: string,
+        cancelUrl: string,
+        metadata: Record<string, string>,
+    ) {
+        return stripe.checkout.sessions.create({
+            customer: customerId,
+            mode: 'payment',
+            payment_method_types: ['card'],
+            line_items: [
+                {
+                    price_data: {
+                        currency: 'usd',
+                        product_data: {
+                            name: 'EmpowerEd Learning Credits',
+                            description: '1 credit = $1. Credits are used to reserve mentoring sessions on EmpowerEd Learnings and are not redeemable for cash.',
+                        },
+                        unit_amount: amountInCents,
+                    },
+                    quantity: 1,
+                },
+            ],
+            success_url: successUrl,
+            cancel_url: cancelUrl,
+            metadata,
+        });
+    }
+
+    /** Separate charges & transfers: move settled mentor earnings to their connected account. */
+    static async createTransfer(
+        amountInCents: number,
+        destinationAccountId: string,
+        idempotencyKey: string,
+        metadata: Record<string, string>,
+    ) {
+        return stripe.transfers.create(
+            {
+                amount: amountInCents,
+                currency: 'usd',
+                destination: destinationAccountId,
+                metadata,
+            },
+            { idempotencyKey },
+        );
+    }
+
+    /** Switch an existing connected account to the monthly payout schedule (backfill for pre-Phase-2 mentors). */
+    static async setMonthlyPayoutSchedule(accountId: string) {
+        return stripe.accounts.update(accountId, {
+            settings: { payouts: { schedule: { interval: 'monthly', monthly_anchor: 1 } } },
+        });
     }
 
     static async getSubscription(subscriptionId: string) {

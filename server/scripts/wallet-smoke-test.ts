@@ -4,6 +4,10 @@
  */
 import prisma from '../src/config/db';
 import * as w from '../src/services/walletService';
+import { StripeService } from '../src/services/stripeService';
+
+// Phase 2 checks must not hit Stripe: stub the transfer call.
+(StripeService as unknown as { createTransfer: unknown }).createTransfer = async () => ({ id: `tr_smoke_${Date.now()}` });
 
 let failures = 0;
 const check = (label: string, cond: boolean, extra?: unknown) => {
@@ -119,10 +123,64 @@ async function main() {
         threw = null;
         try { await w.adminAdjustCredits({ studentId: student.id, amount: -999, type: 'MANUAL_ADJUSTMENT', reason: 'x', adminUserId: admin }); } catch (e) { threw = e; }
         check('negative adjustment beyond balance rejected', threw instanceof w.WalletError, String(threw));
+
+        // ---------- Phase 2 ----------
+        const pi = `pi_smoke_${stamp}`;
+
+        // 13. Credit purchase is applied exactly once (webhook/finalize race)
+        const p1 = await w.applyCreditsPurchase({ studentId: student.id, credits: 50, amountCents: 5000, stripePaymentIntentId: pi, stripeCheckoutSessionId: `cs_smoke_${stamp}` });
+        const p2 = await w.applyCreditsPurchase({ studentId: student.id, credits: 50, amountCents: 5000, stripePaymentIntentId: pi });
+        ws = await w.getStudentWallet(student.id);
+        check('purchase credited once (idempotent on PaymentIntent)', p1.applied && !p2.applied && ws.available === 100 && ws.promotional === 50 && ws.purchased === 50, ws);
+
+        // 14. Frozen wallet blocks reserving
+        await w.setWalletFrozen({ studentId: student.id, frozen: true, reason: 'smoke freeze', adminUserId: admin });
+        threw = null;
+        try {
+            await prisma.$transaction((tx) => w.reserveCreditsForLessons(tx, { studentId: student.id, bookingId, lessons: [{ id: res.lessons[2].id, start_time: res.lessons[2].start_time }], creditsPerSession: 25, description: 'x' }));
+        } catch (e) { threw = e; }
+        ws = await w.getStudentWallet(student.id);
+        check('frozen wallet blocks reserving', threw instanceof w.WalletError && (threw as w.WalletError).status === 403 && ws.frozen === true, String(threw));
+        await w.setWalletFrozen({ studentId: student.id, frozen: false, adminUserId: admin });
+
+        // 15. Card dispute on the purchase freezes the wallet
+        const disputed = await w.handleCardDisputeOnPurchase(pi);
+        ws = await w.getStudentWallet(student.id);
+        check('card dispute freezes wallet', !!disputed && ws.frozen === true && (ws.freeze_reason || '').includes(pi), ws);
+        await w.setWalletFrozen({ studentId: student.id, frozen: false, adminUserId: admin });
+
+        // 16. Monthly settlement transfers AVAILABLE earnings via Stripe (stubbed)
+        const acct = `acct_smoke_${stamp}`;
+        await prisma.tutorProfile.update({ where: { id: tutor.id }, data: { stripe_account_id: acct } });
+        const extraLesson = await prisma.lesson.create({
+            data: { tutor_id: tutor.id, student_id: student.id, booking_id: bookingId, start_time: new Date(Date.now() - 80 * H), end_time: new Date(Date.now() - 79 * H), duration: 60, status: 'COMPLETED', billing_type: 'PAID' },
+        });
+        await prisma.mentorEarning.create({
+            data: { tutor_id: tutor.id, student_id: student.id, booking_id: bookingId, lesson_id: extraLesson.id, gross_cents: 6316, fee_cents: 316, net_cents: 6000, fee_percent: 5, status: 'AVAILABLE', available_at: new Date(Date.now() - H) },
+        });
+        const r1 = await w.runMonthlySettlement({ triggeredBy: 'smoke', force: true });
+        const payout = await prisma.mentorPayout.findFirst({ where: { tutor_id: tutor.id, status: 'TRANSFERRED' } });
+        const transferredEarning = await prisma.mentorEarning.findUnique({ where: { lesson_id: extraLesson.id } });
+        check('settlement: one transfer of $60, earning TRANSFERRED with transfer id',
+            !!payout && payout.amount_cents === 6000 && !!payout.stripe_transfer_id
+            && transferredEarning?.status === 'TRANSFERRED' && transferredEarning.payout_id === payout.id,
+            { r1: r1.payouts, payout });
+
+        // 17. Settlement is once-per-period
+        const r2 = await w.runMonthlySettlement({ triggeredBy: 'smoke' });
+        check('settlement does not run twice in a period', r2.already_ran === true, r2);
+
+        // 18. payout.paid webhook marks TRANSFERRED as PAID
+        const mk = await w.markTransferredAsPaidForAccount(acct);
+        const paidEarning = await prisma.mentorEarning.findUnique({ where: { lesson_id: extraLesson.id } });
+        const paidPayout = await prisma.mentorPayout.findFirst({ where: { id: payout!.id } });
+        check('payout.paid flips TRANSFERRED to PAID', mk.updated >= 2 && paidEarning?.status === 'PAID' && paidPayout?.status === 'PAID' && !!paidPayout?.paid_at, mk);
     } finally {
         // Cleanup everything this script created
         await prisma.sessionDispute.deleteMany({ where: { student_id: student.id } });
         await prisma.mentorEarning.deleteMany({ where: { student_id: student.id } });
+        await prisma.mentorPayout.deleteMany({ where: { tutor_id: tutor.id } });
+        await prisma.walletSettlementRun.deleteMany({ where: { triggered_by: 'smoke' } });
         await prisma.sessionReservation.deleteMany({ where: { student_id: student.id } });
         await prisma.creditLedger.deleteMany({ where: { student_id: student.id } });
         await prisma.lesson.deleteMany({ where: { student_id: student.id } });

@@ -1,5 +1,5 @@
 import prisma from '../config/db';
-import { WALLET_CONFIG, processCompletedLessons, settlePendingEarnings } from './walletService';
+import { WALLET_CONFIG, processCompletedLessons, settlePendingEarnings, runMonthlySettlement } from './walletService';
 import { ensureMeetLinkForLesson } from './googleCalendar';
 
 /** BOOKED lessons that never got a Meet link (calendar failure at booking time) get one retried here. */
@@ -40,6 +40,12 @@ export async function runWalletJobs() {
         const s = await settlePendingEarnings();
         if (c.completed || c.returned || s.settled) {
             console.log(`[Wallet] completed=${c.completed} returned=${c.returned} settled=${s.settled}`);
+        }
+        // Monthly mentor settlement — the unique per-period run row makes this idempotent,
+        // so checking on every tick is safe.
+        if (new Date().getDate() === WALLET_CONFIG.settlementDayOfMonth) {
+            const r = await runMonthlySettlement({ triggeredBy: 'scheduler' });
+            if (!r.already_ran) console.log(`[Wallet] Monthly settlement ${r.period}: ${r.created} payout(s)`);
         }
     } catch (e) {
         console.error('[Wallet] Scheduler error:', e);

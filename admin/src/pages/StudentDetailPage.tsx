@@ -21,7 +21,7 @@ interface DetailedStudent {
 }
 
 interface WalletInfo {
-    wallet: { available: number; promotional: number; purchased: number; reserved: number };
+    wallet: { available: number; promotional: number; purchased: number; reserved: number; frozen?: boolean; freeze_reason?: string | null };
     entries: Array<{
         id: string;
         amount: number;
@@ -114,6 +114,25 @@ const StudentDetailPage: React.FC = () => {
             alert('Failed to update status');
         } finally {
             setActionLoading(false);
+        }
+    };
+
+    const toggleFreeze = async () => {
+        if (!id || !walletInfo) return;
+        const frozen = !walletInfo.wallet.frozen;
+        let reason = '';
+        if (frozen) {
+            const r = prompt('Freeze this wallet? The student will not be able to buy credits or book sessions.\n\nReason (recorded):');
+            if (r === null) return;
+            reason = r;
+        } else if (!confirm('Unfreeze this wallet? The student can buy credits and book again.')) {
+            return;
+        }
+        try {
+            await api.put(`/admin/students/${id}/wallet/freeze`, { frozen, reason });
+            await fetchWallet();
+        } catch (e) {
+            alert(apiError(e, 'Failed to update wallet freeze'));
         }
     };
 
@@ -224,7 +243,28 @@ const StudentDetailPage: React.FC = () => {
                 <h3 className="text-lg font-bold text-gray-900 mb-1 flex items-center gap-2">
                     <Wallet className="w-5 h-5 text-purple-600" /> Learning Credits
                 </h3>
-                <p className="text-sm text-gray-500 mb-4">1 credit = $1. Promotional credits are spent first and never leave the platform as cash.</p>
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                    <p className="text-sm text-gray-500">1 credit = $1. Promotional credits are spent first and never leave the platform as cash.</p>
+                    {walletInfo && (
+                        <button
+                            type="button"
+                            onClick={toggleFreeze}
+                            className={cn(
+                                'px-3 py-1.5 rounded-lg text-xs font-medium border',
+                                walletInfo.wallet.frozen
+                                    ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
+                                    : 'bg-white text-amber-700 border-amber-200 hover:bg-amber-50',
+                            )}
+                        >
+                            {walletInfo.wallet.frozen ? 'Unfreeze wallet' : 'Freeze wallet'}
+                        </button>
+                    )}
+                </div>
+                {walletInfo?.wallet.frozen && (
+                    <div className="mb-4 text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                        <span className="font-semibold">Wallet frozen.</span> {walletInfo.wallet.freeze_reason || 'No reason recorded.'}
+                    </div>
+                )}
 
                 {walletError && <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-4">{walletError}</div>}
 

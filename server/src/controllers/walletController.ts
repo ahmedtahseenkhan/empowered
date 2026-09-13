@@ -2,6 +2,7 @@ import { Response } from 'express';
 import prisma from '../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
 import { createMeetEventForLesson } from '../services/googleCalendar';
+import { StripeService } from '../services/stripeService';
 import { isTutorSlotAvailable } from '../services/availability';
 import * as wallet from '../services/walletService';
 import { WalletError, WALLET_CONFIG } from '../services/walletService';
@@ -316,6 +317,73 @@ export const reportSessionProblem = async (req: AuthRequest, res: Response) => {
     }
 };
 
+/** Start a Stripe Checkout to buy Learning Credits (1 credit = $1). */
+export const createCreditsPurchaseCheckout = async (req: AuthRequest, res: Response) => {
+    try {
+        if (!WALLET_CONFIG.enabled) throw new WalletError('Learning Credits are not enabled', 403);
+        const student = await requireStudent(req);
+        if (student.wallet_frozen_at) throw new WalletError('Your credits wallet is currently on hold. Please contact support.', 403);
+
+        const { credits, successUrl, cancelUrl } = req.body as { credits?: number; successUrl?: string; cancelUrl?: string };
+        const amount = Number(credits);
+        if (!Number.isInteger(amount) || amount < WALLET_CONFIG.purchaseMinCredits || amount > WALLET_CONFIG.purchaseMaxCredits) {
+            throw new WalletError(`You can buy between ${WALLET_CONFIG.purchaseMinCredits} and ${WALLET_CONFIG.purchaseMaxCredits} credits at a time.`);
+        }
+        if (!successUrl || !cancelUrl) throw new WalletError('successUrl and cancelUrl are required');
+
+        const user = await prisma.user.findUnique({ where: { id: req.user!.id }, select: { email: true } });
+        const stripeCustomerId =
+            student.stripe_customer_id ||
+            (await StripeService.createCustomer(user?.email || 'student@example.com', student.username)).id;
+        if (!student.stripe_customer_id) {
+            await prisma.studentProfile.update({ where: { id: student.id }, data: { stripe_customer_id: stripeCustomerId } });
+        }
+
+        const successWithSession = successUrl.includes('?')
+            ? `${successUrl}&purchase_session_id={CHECKOUT_SESSION_ID}`
+            : `${successUrl}?purchase_session_id={CHECKOUT_SESSION_ID}`;
+
+        const session = await StripeService.createCreditsCheckoutSession(
+            amount * 100,
+            stripeCustomerId,
+            successWithSession,
+            cancelUrl,
+            { type: 'credits_purchase', studentId: student.id, credits: String(amount) },
+        );
+        return res.json({ url: session.url });
+    } catch (e) {
+        return fail(res, e, 'Failed to start credits purchase');
+    }
+};
+
+/** Called when the browser returns from Checkout — credits the wallet if the webhook hasn't already. */
+export const finalizeCreditsPurchase = async (req: AuthRequest, res: Response) => {
+    try {
+        const student = await requireStudent(req);
+        const { sessionId } = req.body as { sessionId?: string };
+        if (!sessionId) throw new WalletError('sessionId is required');
+
+        const session = await StripeService.getCheckoutSessionById(sessionId);
+        if (!session) throw new WalletError('Checkout session not found', 404);
+        const meta = (session.metadata || {}) as Record<string, string>;
+        if (meta.type !== 'credits_purchase') throw new WalletError('Invalid checkout session type');
+        if (meta.studentId !== student.id) throw new WalletError('Forbidden', 403);
+        if (session.payment_status !== 'paid') throw new WalletError('Payment has not completed yet', 400);
+
+        const result = await wallet.applyCreditsPurchase({
+            studentId: student.id,
+            credits: Number(meta.credits),
+            amountCents: Number(session.amount_total || 0),
+            stripePaymentIntentId: String(session.payment_intent),
+            stripeCheckoutSessionId: session.id,
+        });
+        const w = await wallet.getStudentWallet(student.id);
+        return res.json({ ok: true, applied: result.applied, wallet: w });
+    } catch (e) {
+        return fail(res, e, 'Failed to finalize credits purchase');
+    }
+};
+
 // ---------------------------------------------------------------------------
 // Mentor
 // ---------------------------------------------------------------------------
@@ -403,6 +471,42 @@ export const adminListMentorEarnings = async (_req: AuthRequest, res: Response) 
         return res.json({ mentors, config: wallet.publicConfig() });
     } catch (e) {
         return fail(res, e, 'Failed to load mentor earnings');
+    }
+};
+
+export const adminSetWalletFrozen = async (req: AuthRequest, res: Response) => {
+    try {
+        const adminUserId = req.user?.id;
+        if (!adminUserId) throw new WalletError('Unauthorized', 401);
+        const { id } = req.params;
+        const { frozen, reason } = req.body as { frozen?: boolean; reason?: string };
+        if (typeof frozen !== 'boolean') throw new WalletError('frozen must be true or false');
+        const result = await wallet.setWalletFrozen({ studentId: id, frozen, reason, adminUserId });
+        return res.json({ ok: true, ...result });
+    } catch (e) {
+        return fail(res, e, 'Failed to update wallet freeze');
+    }
+};
+
+export const adminRunSettlement = async (req: AuthRequest, res: Response) => {
+    try {
+        const adminUserId = req.user?.id;
+        if (!adminUserId) throw new WalletError('Unauthorized', 401);
+        const { force } = req.body as { force?: boolean };
+        const result = await wallet.runMonthlySettlement({ triggeredBy: adminUserId, force: !!force });
+        return res.json(result);
+    } catch (e) {
+        return fail(res, e, 'Failed to run settlement');
+    }
+};
+
+export const adminListPayouts = async (req: AuthRequest, res: Response) => {
+    try {
+        const tutorId = (req.query.tutorId as string | undefined)?.trim() || undefined;
+        const payouts = await wallet.listPayouts(tutorId);
+        return res.json({ payouts });
+    } catch (e) {
+        return fail(res, e, 'Failed to load payouts');
     }
 };
 

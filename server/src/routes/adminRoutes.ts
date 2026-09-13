@@ -44,6 +44,9 @@ import {
     adminResolveDispute,
     adminListMentorEarnings,
     adminMarkMentorPaid,
+    adminSetWalletFrozen,
+    adminRunSettlement,
+    adminListPayouts,
 } from '../controllers/walletController';
 
 const router = express.Router();
@@ -61,6 +64,7 @@ router.get('/students', requirePermission('students'), adminListStudents);
 router.get('/students/:id', requirePermission('students'), adminGetStudent);
 router.get('/students/:id/wallet', requirePermission('students', 'payments'), adminGetStudentWallet);
 router.post('/students/:id/credits', requirePermission('students', 'payments'), adminAdjustStudentCredits);
+router.put('/students/:id/wallet/freeze', requirePermission('students', 'payments'), adminSetWalletFrozen);
 
 // Suspend/unsuspend is used from both mentor and student detail pages.
 router.put('/users/:userId/suspended', requirePermission('mentors', 'students'), adminSetUserSuspended);
@@ -79,6 +83,8 @@ router.get('/wallet/disputes', requirePermission('payments'), adminListDisputes)
 router.put('/wallet/disputes/:id/resolve', requirePermission('payments'), adminResolveDispute);
 router.get('/wallet/mentor-earnings', requirePermission('payments'), adminListMentorEarnings);
 router.put('/wallet/mentors/:id/mark-paid', requirePermission('payments'), adminMarkMentorPaid);
+router.post('/wallet/settlement/run', requirePermission('payments'), adminRunSettlement);
+router.get('/wallet/payouts', requirePermission('payments'), adminListPayouts);
 
 router.get('/support', requirePermission('support'), adminListTickets);
 router.put('/support/:id/reply', requirePermission('support'), adminReplyTicket);

@@ -1,5 +1,6 @@
 import prisma from '../config/db';
 import { Prisma, CreditSource, CreditTransactionType } from '@prisma/client';
+import { StripeService } from './stripeService';
 
 /**
  * Learning Credits wallet — Phase 1.
@@ -25,8 +26,15 @@ export const WALLET_CONFIG = {
     /** Backstop: minutes after end_time before a BOOKED credit-funded session is auto-marked COMPLETED
      *  when neither side pressed the completion-confirmation buttons. */
     completionGraceMinutes: Number(process.env.WALLET_COMPLETION_GRACE_MINUTES || 1440),
-    /** Minimum AVAILABLE earnings before a payout is made (cents). Phase 2 uses this; shown to mentors now. */
+    /** Minimum AVAILABLE earnings before a payout is made (cents). */
     payoutMinimumCents: Number(process.env.WALLET_PAYOUT_MINIMUM_CENTS || 5000),
+    /** Day of the month the automatic settlement runs. */
+    settlementDayOfMonth: Number(process.env.WALLET_SETTLEMENT_DAY || 1),
+    /** Credit purchase limits (1 credit = $1). */
+    purchaseMinCredits: Number(process.env.WALLET_PURCHASE_MIN || 10),
+    purchaseMaxCredits: Number(process.env.WALLET_PURCHASE_MAX || 1000),
+    purchasePackages: (process.env.WALLET_PURCHASE_PACKAGES || '25,50,100,200')
+        .split(',').map((v) => Number(v.trim())).filter((v) => Number.isInteger(v) && v > 0),
 };
 
 export class WalletError extends Error {
@@ -49,7 +57,10 @@ const addDays = (d: Date, days: number) => new Date(d.getTime() + days * 24 * 60
 export async function getStudentWallet(studentId: string) {
     const s = await prisma.studentProfile.findUnique({
         where: { id: studentId },
-        select: { credits_balance: true, promo_credits_balance: true, reserved_credits: true },
+        select: {
+            credits_balance: true, promo_credits_balance: true, reserved_credits: true,
+            wallet_frozen_at: true, wallet_freeze_reason: true,
+        },
     });
     if (!s) throw new WalletError('Student profile not found', 404);
     return {
@@ -57,6 +68,8 @@ export async function getStudentWallet(studentId: string) {
         promotional: s.promo_credits_balance,
         purchased: s.credits_balance - s.promo_credits_balance,
         reserved: s.reserved_credits,
+        frozen: !!s.wallet_frozen_at,
+        freeze_reason: s.wallet_frozen_at ? s.wallet_freeze_reason : null,
         config: publicConfig(),
     };
 }
@@ -69,6 +82,10 @@ export function publicConfig() {
         weeksPerBooking: WALLET_CONFIG.weeksPerBooking,
         cancelCutoffHours: WALLET_CONFIG.cancelCutoffHours,
         payoutMinimumCents: WALLET_CONFIG.payoutMinimumCents,
+        settlementDayOfMonth: WALLET_CONFIG.settlementDayOfMonth,
+        purchaseMinCredits: WALLET_CONFIG.purchaseMinCredits,
+        purchaseMaxCredits: WALLET_CONFIG.purchaseMaxCredits,
+        purchasePackages: WALLET_CONFIG.purchasePackages,
     };
 }
 
@@ -181,9 +198,12 @@ export async function reserveCreditsForLessons(
 
     const before = await tx.studentProfile.findUnique({
         where: { id: studentId },
-        select: { credits_balance: true, promo_credits_balance: true },
+        select: { credits_balance: true, promo_credits_balance: true, wallet_frozen_at: true },
     });
     if (!before) throw new WalletError('Student profile not found', 404);
+    if (before.wallet_frozen_at) {
+        throw new WalletError('Your credits wallet is currently on hold. Please contact support.', 403);
+    }
     if (before.credits_balance < total) {
         throw new WalletError(
             `You need ${total} credits to reserve these sessions but only have ${before.credits_balance}.`,
@@ -519,15 +539,35 @@ export async function listDisputes(status?: 'OPEN' | 'RESOLVED_REFUNDED' | 'RESO
     });
 }
 
-/** Phase 1 manual payout: mark a mentor's AVAILABLE earnings as PAID with a reference note. */
+/** Manual payout outside Stripe: mark a mentor's AVAILABLE earnings as PAID with a reference note. */
 export async function markEarningsPaid(args: { tutorId: string; note: string; adminUserId: string }) {
     const note = (args.note || '').trim();
     if (!note) throw new WalletError('A payout reference / note is required');
-    const res = await prisma.mentorEarning.updateMany({
-        where: { tutor_id: args.tutorId, status: 'AVAILABLE' },
-        data: { status: 'PAID', paid_at: now(), payout_note: `${note} (by ${args.adminUserId})` },
+    return prisma.$transaction(async (tx) => {
+        const sum = await tx.mentorEarning.aggregate({
+            where: { tutor_id: args.tutorId, status: 'AVAILABLE', payout_id: null },
+            _sum: { net_cents: true },
+            _count: { _all: true },
+        });
+        if (!sum._count._all) return { count: 0 };
+        const payout = await tx.mentorPayout.create({
+            data: {
+                tutor_id: args.tutorId,
+                period: periodOf(now()),
+                amount_cents: sum._sum.net_cents || 0,
+                earnings_count: sum._count._all,
+                status: 'MANUAL',
+                note,
+                created_by_user_id: args.adminUserId,
+                paid_at: now(),
+            },
+        });
+        const res = await tx.mentorEarning.updateMany({
+            where: { tutor_id: args.tutorId, status: 'AVAILABLE', payout_id: null },
+            data: { status: 'PAID', paid_at: now(), payout_id: payout.id, payout_note: `${note} (by ${args.adminUserId})` },
+        });
+        return { count: res.count };
     });
-    return { count: res.count };
 }
 
 export async function listMentorEarningsForAdmin() {
@@ -560,6 +600,237 @@ export async function listMentorEarningsForAdmin() {
         };
     }
     return Array.from(byTutor.values());
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2: credit purchases (real money in)
+// ---------------------------------------------------------------------------
+
+/**
+ * Credit a paid Stripe Checkout purchase to the student's wallet.
+ * Idempotent: the unique stripe_payment_intent_id ledger column guarantees a
+ * purchase is applied exactly once even if the webhook and the browser
+ * finalize call race each other.
+ */
+export async function applyCreditsPurchase(args: {
+    studentId: string;
+    credits: number;
+    amountCents: number;
+    stripePaymentIntentId: string;
+    stripeCheckoutSessionId?: string;
+}) {
+    const { studentId, credits, amountCents, stripePaymentIntentId, stripeCheckoutSessionId } = args;
+    if (!Number.isInteger(credits) || credits <= 0) throw new WalletError('Invalid credit amount');
+    if (!stripePaymentIntentId) throw new WalletError('Missing payment reference');
+
+    try {
+        return await prisma.$transaction(async (tx) => {
+            const updated = await tx.studentProfile.update({
+                where: { id: studentId },
+                data: { credits_balance: { increment: credits } },
+                select: { credits_balance: true },
+            });
+            const entry = await tx.creditLedger.create({
+                data: {
+                    student_id: studentId,
+                    amount: credits,
+                    type: 'PURCHASE',
+                    source: 'PURCHASED',
+                    balance_after: updated.credits_balance,
+                    description: `Purchased ${credits} Learning Credits ($${(amountCents / 100).toFixed(2)})`,
+                    stripe_payment_intent_id: stripePaymentIntentId,
+                    stripe_checkout_session_id: stripeCheckoutSessionId || null,
+                    metadata: { amount_cents: amountCents },
+                },
+            });
+            return { applied: true as const, entry };
+        });
+    } catch (e) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+            return { applied: false as const, entry: null }; // already credited (webhook/finalize race)
+        }
+        throw e;
+    }
+}
+
+export async function setWalletFrozen(args: { studentId: string; frozen: boolean; reason?: string; adminUserId: string }) {
+    const student = await prisma.studentProfile.findUnique({ where: { id: args.studentId }, select: { id: true } });
+    if (!student) throw new WalletError('Student not found', 404);
+    return prisma.studentProfile.update({
+        where: { id: args.studentId },
+        data: args.frozen
+            ? { wallet_frozen_at: now(), wallet_freeze_reason: (args.reason || '').trim() || `Frozen by admin ${args.adminUserId}` }
+            : { wallet_frozen_at: null, wallet_freeze_reason: null },
+        select: { wallet_frozen_at: true, wallet_freeze_reason: true },
+    });
+}
+
+/** Card dispute on a credit purchase: freeze the wallet and surface what the purchase funded. */
+export async function handleCardDisputeOnPurchase(paymentIntentId: string) {
+    const entry = await prisma.creditLedger.findUnique({
+        where: { stripe_payment_intent_id: paymentIntentId },
+        select: { id: true, student_id: true, amount: true },
+    });
+    if (!entry) return null;
+
+    await prisma.studentProfile.update({
+        where: { id: entry.student_id },
+        data: {
+            wallet_frozen_at: now(),
+            wallet_freeze_reason: `Card dispute on credit purchase ${paymentIntentId} (${entry.amount} credits). Review before unfreezing.`,
+        },
+    });
+    console.warn(`[Wallet] Wallet frozen for student ${entry.student_id}: card dispute on ${paymentIntentId}`);
+    return { studentId: entry.student_id, credits: entry.amount };
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2: monthly settlement (real money out)
+// ---------------------------------------------------------------------------
+
+const periodOf = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+
+/**
+ * Send every mentor's payout-ready (AVAILABLE) earnings to their Stripe connected
+ * account as one transfer each. Runs once per calendar period — the unique
+ * WalletSettlementRun row makes the scheduler and the admin button race-safe.
+ * Mentors below the minimum, or without a Stripe account, roll forward.
+ */
+export async function runMonthlySettlement(args: { triggeredBy: string; force?: boolean }) {
+    const period = periodOf(now());
+
+    let run;
+    try {
+        run = await prisma.walletSettlementRun.create({
+            data: { period, triggered_by: args.triggeredBy },
+        });
+    } catch (e) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+            if (!args.force) return { period, already_ran: true as const, payouts: [] };
+            run = await prisma.walletSettlementRun.findUnique({ where: { period } });
+        } else throw e;
+    }
+    if (!run) throw new WalletError('Failed to start settlement run', 500);
+
+    const groups = await prisma.mentorEarning.groupBy({
+        by: ['tutor_id'],
+        where: { status: 'AVAILABLE', payout_id: null },
+        _sum: { net_cents: true },
+        _count: { _all: true },
+    });
+
+    const results: Array<{ tutor_id: string; status: string; amount_cents: number; reason?: string }> = [];
+    let created = 0, totalCents = 0, skipped = 0;
+
+    for (const g of groups) {
+        const sum = g._sum.net_cents || 0;
+        const tutor = await prisma.tutorProfile.findUnique({
+            where: { id: g.tutor_id },
+            select: { id: true, username: true, stripe_account_id: true },
+        });
+        if (!tutor) continue;
+
+        if (!tutor.stripe_account_id) {
+            skipped += 1;
+            results.push({ tutor_id: g.tutor_id, status: 'skipped', amount_cents: sum, reason: 'No Stripe account connected' });
+            continue;
+        }
+        if (sum < WALLET_CONFIG.payoutMinimumCents) {
+            skipped += 1;
+            results.push({ tutor_id: g.tutor_id, status: 'rolled_forward', amount_cents: sum, reason: `Below $${(WALLET_CONFIG.payoutMinimumCents / 100).toFixed(0)} minimum` });
+            continue;
+        }
+
+        // Claim the earnings atomically so a concurrent run cannot pay them twice,
+        // then verify the claimed sum before moving money.
+        const payout = await prisma.mentorPayout.create({
+            data: { tutor_id: tutor.id, period, amount_cents: 0, status: 'PENDING', created_by_user_id: args.triggeredBy === 'scheduler' ? null : args.triggeredBy },
+        });
+        await prisma.mentorEarning.updateMany({
+            where: { tutor_id: tutor.id, status: 'AVAILABLE', payout_id: null },
+            data: { payout_id: payout.id },
+        });
+        const claimed = await prisma.mentorEarning.aggregate({
+            where: { payout_id: payout.id },
+            _sum: { net_cents: true },
+            _count: { _all: true },
+        });
+        const amount = claimed._sum.net_cents || 0;
+        if (amount < WALLET_CONFIG.payoutMinimumCents) {
+            await prisma.mentorEarning.updateMany({ where: { payout_id: payout.id }, data: { payout_id: null } });
+            await prisma.mentorPayout.delete({ where: { id: payout.id } });
+            skipped += 1;
+            results.push({ tutor_id: g.tutor_id, status: 'rolled_forward', amount_cents: amount });
+            continue;
+        }
+
+        try {
+            const transfer = await StripeService.createTransfer(
+                amount,
+                tutor.stripe_account_id,
+                `wallet-payout-${payout.id}`,
+                { payout_id: payout.id, tutor_id: tutor.id, period, platform: 'empowered-learnings-wallet' },
+            );
+            await prisma.$transaction([
+                prisma.mentorPayout.update({
+                    where: { id: payout.id },
+                    data: { status: 'TRANSFERRED', amount_cents: amount, earnings_count: claimed._count._all, stripe_transfer_id: transfer.id },
+                }),
+                prisma.mentorEarning.updateMany({
+                    where: { payout_id: payout.id },
+                    data: { status: 'TRANSFERRED', stripe_transfer_id: transfer.id },
+                }),
+            ]);
+            created += 1;
+            totalCents += amount;
+            results.push({ tutor_id: tutor.id, status: 'transferred', amount_cents: amount });
+        } catch (e: unknown) {
+            const msg = (e as Error)?.message || 'Stripe transfer failed';
+            console.error(`[Wallet] Settlement transfer failed for mentor ${tutor.id}:`, e);
+            await prisma.$transaction([
+                prisma.mentorPayout.update({
+                    where: { id: payout.id },
+                    data: { status: 'FAILED', amount_cents: amount, earnings_count: claimed._count._all, failure_reason: msg.slice(0, 500) },
+                }),
+                // Release the claim so the earnings pay out next run.
+                prisma.mentorEarning.updateMany({ where: { payout_id: payout.id }, data: { payout_id: null } }),
+            ]);
+            results.push({ tutor_id: tutor.id, status: 'failed', amount_cents: amount, reason: msg });
+        }
+    }
+
+    await prisma.walletSettlementRun.update({
+        where: { id: run.id },
+        data: {
+            payouts_created: { increment: created },
+            total_cents: { increment: totalCents },
+            skipped_mentors: skipped,
+        },
+    });
+
+    console.log(`[Wallet] Settlement ${period}: ${created} payout(s), $${(totalCents / 100).toFixed(2)} total, ${skipped} rolled forward`);
+    return { period, already_ran: false as const, payouts: results, created, total_cents: totalCents, skipped };
+}
+
+/** Best effort: when Stripe reports a bank payout completed on a connected account,
+ *  flip that mentor's TRANSFERRED earnings/payouts to PAID. */
+export async function markTransferredAsPaidForAccount(stripeAccountId: string) {
+    const tutor = await prisma.tutorProfile.findFirst({ where: { stripe_account_id: stripeAccountId }, select: { id: true } });
+    if (!tutor) return { updated: 0 };
+    const [payouts, earnings] = await prisma.$transaction([
+        prisma.mentorPayout.updateMany({ where: { tutor_id: tutor.id, status: 'TRANSFERRED' }, data: { status: 'PAID', paid_at: now() } }),
+        prisma.mentorEarning.updateMany({ where: { tutor_id: tutor.id, status: 'TRANSFERRED' }, data: { status: 'PAID', paid_at: now() } }),
+    ]);
+    return { updated: payouts.count + earnings.count };
+}
+
+export async function listPayouts(tutorId?: string) {
+    return prisma.mentorPayout.findMany({
+        where: tutorId ? { tutor_id: tutorId } : undefined,
+        orderBy: { created_at: 'desc' },
+        take: 200,
+        include: { tutor: { select: { id: true, username: true, user: { select: { email: true } } } } },
+    });
 }
 
 // ---------------------------------------------------------------------------

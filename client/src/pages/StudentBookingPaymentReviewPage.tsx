@@ -277,9 +277,12 @@ const StudentBookingPaymentReviewPage: React.FC = () => {
                       {creditsBusy ? 'Reserving…' : `Reserve ${quote.sessions} sessions with ${quote.required} credits`}
                     </Button>
                   ) : (
-                    <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                      You need {quote.shortfall} more credits to reserve these sessions. Contact the EmpowerEd team to top up your wallet, or pay per session by card below.
-                    </p>
+                    <div className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex flex-wrap items-center justify-between gap-2">
+                      <span>You need {quote.shortfall} more credits to reserve these sessions.</span>
+                      <Button size="xs" onClick={() => navigate('/student/wallet')} disabled={busy || creditsBusy}>
+                        Buy credits
+                      </Button>
+                    </div>
                   )}
                 </div>
               </div>

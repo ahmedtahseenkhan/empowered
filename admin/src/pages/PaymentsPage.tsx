@@ -117,6 +117,26 @@ const PaymentsPage: React.FC = () => {
         }
     };
 
+    const [settlementBusy, setSettlementBusy] = useState(false);
+    const runSettlement = async () => {
+        if (!confirm('Run the monthly settlement now?\n\nEvery mentor with payout-ready earnings above the minimum and a connected Stripe account will receive one Stripe transfer.')) return;
+        setSettlementBusy(true);
+        try {
+            const res = await api.post('/admin/wallet/settlement/run', {});
+            const d = res.data;
+            if (d?.already_ran) {
+                alert(`Settlement for ${d.period} already ran this month. Balances roll forward to the next run.`);
+            } else {
+                alert(`Settlement ${d?.period}: ${d?.created ?? 0} payout(s) sent, ${money(d?.total_cents || 0)} total, ${d?.skipped ?? 0} mentor(s) rolled forward.`);
+            }
+            await fetchMentorEarnings();
+        } catch (e) {
+            alert(apiError(e, 'Failed to run settlement'));
+        } finally {
+            setSettlementBusy(false);
+        }
+    };
+
     const recordPayout = async (row: MentorEarningRow) => {
         const available = row.totals.AVAILABLE?.net_cents || 0;
         const note = prompt(`Record a manual payout of ${money(available)} to ${row.tutor.username}?\n\nEnter the payout reference (bank transfer ID, date, etc.):`);
@@ -236,10 +256,20 @@ const PaymentsPage: React.FC = () => {
             {activeTab === 'MENTOR_EARNINGS' && (
                 <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
                     <div className="px-6 py-4 border-b border-gray-100">
-                        <div className="flex items-center gap-2 text-gray-900 font-semibold"><Banknote className="w-5 h-5 text-purple-600" /> Mentor earnings from Learning Credits</div>
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div className="flex items-center gap-2 text-gray-900 font-semibold"><Banknote className="w-5 h-5 text-purple-600" /> Mentor earnings from Learning Credits</div>
+                            <button
+                                type="button"
+                                disabled={settlementBusy}
+                                onClick={runSettlement}
+                                className="px-4 py-2 rounded-lg text-sm font-medium bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50"
+                            >
+                                {settlementBusy ? 'Running…' : 'Run monthly settlement now'}
+                            </button>
+                        </div>
                         {config && (
                             <p className="text-xs text-gray-500 mt-1">
-                                Fee {config.feePercent}% · Settlement window {config.settlementDays} days · Payout minimum {money(config.payoutMinimumCents)}. Phase 1: payouts are recorded manually; Phase 2 will send them through Stripe Connect.
+                                Fee {config.feePercent}% · Settlement window {config.settlementDays} days · Payout minimum {money(config.payoutMinimumCents)}. Settlement runs automatically on the 1st of each month via Stripe Connect transfers; "Record payout" stays available for mentors paid outside Stripe.
                             </p>
                         )}
                     </div>

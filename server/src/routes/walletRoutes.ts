@@ -2,6 +2,8 @@ import express from 'express';
 import { authenticateToken } from '../middleware/authMiddleware';
 import {
     getMyWallet,
+    createCreditsPurchaseCheckout,
+    finalizeCreditsPurchase,
     getMyWalletHistory,
     getBookingQuote,
     createCreditsBooking,
@@ -18,6 +20,8 @@ router.use(authenticateToken);
 router.get('/me', getMyWallet);
 router.get('/me/history', getMyWalletHistory);
 router.get('/quote', getBookingQuote);
+router.post('/purchase', createCreditsPurchaseCheckout);
+router.post('/purchase/finalize', finalizeCreditsPurchase);
 router.post('/bookings', createCreditsBooking);
 router.post('/lessons/:lessonId/cancel', cancelCreditsLesson);
 router.post('/lessons/:lessonId/report', reportSessionProblem);

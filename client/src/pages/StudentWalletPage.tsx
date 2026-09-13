@@ -1,5 +1,7 @@
-import React, { useEffect, useState } from 'react';
-import { Wallet, Lock, Sparkles, Info } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { Wallet, Lock, Sparkles, Info, CreditCard, AlertTriangle } from 'lucide-react';
+import { Button } from '../components/ui/Button';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { Card } from '../components/ui/Card';
 import api from '../api/axios';
@@ -12,12 +14,17 @@ type WalletData = {
     promotional: number;
     purchased: number;
     reserved: number;
+    frozen?: boolean;
+    freeze_reason?: string | null;
     config: {
         enabled: boolean;
         feePercent: number;
         settlementDays: number;
         weeksPerBooking: number;
         cancelCutoffHours: number;
+        purchaseMinCredits?: number;
+        purchaseMaxCredits?: number;
+        purchasePackages?: number[];
     };
 };
 
@@ -49,15 +56,24 @@ const StudentWalletPage: React.FC = () => {
     const [entries, setEntries] = useState<Entry[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [searchParams, setSearchParams] = useSearchParams();
+
+    const [buyAmount, setBuyAmount] = useState('');
+    const [buyBusy, setBuyBusy] = useState(false);
+    const [buyError, setBuyError] = useState('');
+    const [purchaseNotice, setPurchaseNotice] = useState('');
+
+    const refresh = useCallback(async () => {
+        const [w, h] = await Promise.all([api.get('/wallet/me'), api.get('/wallet/me/history')]);
+        setWallet(w.data);
+        setEntries(h.data?.entries || []);
+    }, []);
 
     useEffect(() => {
         let cancelled = false;
         (async () => {
             try {
-                const [w, h] = await Promise.all([api.get('/wallet/me'), api.get('/wallet/me/history')]);
-                if (cancelled) return;
-                setWallet(w.data);
-                setEntries(h.data?.entries || []);
+                await refresh();
             } catch (e) {
                 if (!cancelled) setError(apiError(e, 'Failed to load your credits.'));
             } finally {
@@ -65,7 +81,48 @@ const StudentWalletPage: React.FC = () => {
             }
         })();
         return () => { cancelled = true; };
-    }, []);
+    }, [refresh]);
+
+    // Returning from Stripe Checkout: credit the purchase (idempotent with the webhook).
+    useEffect(() => {
+        const sessionId = searchParams.get('purchase_session_id');
+        if (!sessionId) return;
+        (async () => {
+            try {
+                await api.post('/wallet/purchase/finalize', { sessionId });
+                setPurchaseNotice('Payment received — your credits have been added to your wallet.');
+                await refresh();
+            } catch (e) {
+                setPurchaseNotice(apiError(e, 'We could not confirm your purchase automatically. It may take a minute — refresh this page.'));
+            } finally {
+                searchParams.delete('purchase_session_id');
+                setSearchParams(searchParams, { replace: true });
+            }
+        })();
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const packages = useMemo(() => wallet?.config.purchasePackages?.length ? wallet.config.purchasePackages : [25, 50, 100, 200], [wallet]);
+    const minBuy = wallet?.config.purchaseMinCredits ?? 10;
+    const maxBuy = wallet?.config.purchaseMaxCredits ?? 1000;
+
+    const startPurchase = async (credits: number) => {
+        try {
+            setBuyBusy(true);
+            setBuyError('');
+            const base = window.location.origin;
+            const res = await api.post('/wallet/purchase', {
+                credits,
+                successUrl: `${base}/student/wallet`,
+                cancelUrl: `${base}/student/wallet`,
+            });
+            const url = res.data?.url as string | undefined;
+            if (!url) throw new Error('No checkout URL returned');
+            window.location.href = url;
+        } catch (e) {
+            setBuyError(apiError(e, 'Failed to start the purchase.'));
+            setBuyBusy(false);
+        }
+    };
 
     const fmtDate = (iso: string) =>
         new Date(iso).toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
@@ -107,6 +164,20 @@ const StudentWalletPage: React.FC = () => {
                     <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>
                 )}
 
+                {purchaseNotice && (
+                    <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-lg text-sm flex items-start justify-between gap-3">
+                        <span>{purchaseNotice}</span>
+                        <button type="button" className="text-emerald-700 text-xs underline" onClick={() => setPurchaseNotice('')}>Dismiss</button>
+                    </div>
+                )}
+
+                {wallet?.frozen && (
+                    <div className="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded-lg text-sm flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                        <span>Your wallet is currently on hold while our team reviews recent activity. You can't buy credits or book new sessions right now — please contact support.</span>
+                    </div>
+                )}
+
                 {wallet && (
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div className="relative bg-white rounded-2xl border border-gray-100 shadow-sm p-5 overflow-hidden">
@@ -142,6 +213,55 @@ const StudentWalletPage: React.FC = () => {
                     </div>
                 )}
 
+                {!wallet?.frozen && (
+                    <Card className="p-6">
+                        <div className="flex items-center gap-2 mb-1">
+                            <CreditCard className="w-5 h-5 text-[#4A1D96]" />
+                            <h2 className="text-lg font-semibold text-gray-900">Buy Learning Credits</h2>
+                        </div>
+                        <p className="text-sm text-gray-600 mb-4">1 credit = $1, paid securely through Stripe. Credits land in your wallet instantly after payment.</p>
+                        <div className="flex flex-wrap gap-2">
+                            {packages.map((p) => (
+                                <button
+                                    key={p}
+                                    type="button"
+                                    disabled={buyBusy}
+                                    onClick={() => startPurchase(p)}
+                                    className="px-5 py-3 rounded-xl border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-900 font-semibold text-sm disabled:opacity-50"
+                                >
+                                    {p} credits
+                                    <span className="block text-xs font-normal text-purple-700">${p}.00</span>
+                                </button>
+                            ))}
+                        </div>
+                        <div className="mt-4 flex flex-wrap items-end gap-3">
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Custom amount</label>
+                                <input
+                                    type="number"
+                                    min={minBuy}
+                                    max={maxBuy}
+                                    step={1}
+                                    value={buyAmount}
+                                    onChange={(e) => setBuyAmount(e.target.value)}
+                                    placeholder={`${minBuy}–${maxBuy}`}
+                                    className="w-36 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                                    disabled={buyBusy}
+                                />
+                            </div>
+                            <Button
+                                size="sm"
+                                disabled={buyBusy || !buyAmount || !Number.isInteger(Number(buyAmount)) || Number(buyAmount) < minBuy || Number(buyAmount) > maxBuy}
+                                onClick={() => startPurchase(Number(buyAmount))}
+                            >
+                                {buyBusy ? 'Redirecting…' : `Buy${buyAmount ? ` ${buyAmount} credits ($${buyAmount})` : ' credits'}`}
+                            </Button>
+                        </div>
+                        {buyError && <div className="mt-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{buyError}</div>}
+                        <p className="mt-3 text-xs text-gray-500">Credits can only be used on EmpowerEd Learnings and can't be withdrawn as cash. They never expire.</p>
+                    </Card>
+                )}
+
                 <Card className="p-5 bg-purple-50/60 border-purple-100">
                     <div className="flex items-start gap-3">
                         <Info className="w-5 h-5 text-purple-700 mt-0.5 shrink-0" />
@@ -154,7 +274,7 @@ const StudentWalletPage: React.FC = () => {
                                 <li>Had a problem with a session? Report it within {wallet?.config.settlementDays || 7} days from your sessions page and our team will review it.</li>
                                 <li>Credits can only be used on EmpowerEd Learnings and cannot be withdrawn as cash. They never expire.</li>
                             </ul>
-                            <p className="text-xs text-gray-500 pt-1">Need more credits during beta? Contact the EmpowerEd team and we'll top up your wallet.</p>
+                            <p className="text-xs text-gray-500 pt-1">Buy credits any time with the form above — they're added to your wallet the moment payment completes.</p>
                         </div>
                     </div>
                 </Card>
