@@ -19,10 +19,11 @@ class EmailService {
     private templateCache: Map<string, ReturnType<typeof handlebars.compile>> = new Map();
 
     constructor() {
-        // Always show brand address so recipients see "From: Empowered Learnings <info@emplearnings.com>".
-        // SMTP login remains SMTP_USER/SMTP_PASSWORD (e.g. Gmail); Gmail "Send mail as" must have info@emplearnings.com verified.
-        this.fromEmail = 'info@emplearnings.com';
-        this.fromName = process.env.SMTP_FROM_NAME || 'Empowered Learnings';
+        // With Gmail SMTP the From address MUST be the authenticated account (SMTP_USER)
+        // or a verified "Send mail as" alias in that account — Gmail rewrites anything else.
+        // So keep SMTP_FROM_EMAIL aligned with the mailbox in SMTP_USER.
+        this.fromEmail = process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER || 'emplearnings@gmail.com';
+        this.fromName = process.env.SMTP_FROM_NAME || 'EmpowerEd Learnings';
     }
 
     private getClientBaseUrl(): string {
