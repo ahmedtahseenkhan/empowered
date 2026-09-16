@@ -3,6 +3,47 @@ import prisma from '../config/db';
 export const ADMIN_TIMEZONE = 'America/Chicago';
 export const SLOT_DURATION_MINUTES = 20;
 
+/** True when `tz` is an IANA timezone the runtime can format with (e.g. "Asia/Muscat"). */
+export function isValidTimezone(tz: unknown): tz is string {
+    if (typeof tz !== 'string' || !tz.trim()) return false;
+    try {
+        new Intl.DateTimeFormat('en-US', { timeZone: tz });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+/** Resolve the timezone a prospect booked in, falling back to the admin's zone for legacy rows. */
+export function resolveDemoTimezone(tz: string | null | undefined): string {
+    return isValidTimezone(tz) ? tz : ADMIN_TIMEZONE;
+}
+
+/** Human label for a timezone, e.g. "Muscat (GMT+4)" or "Chicago (CDT)". */
+export function formatTimezoneLabel(timeZone: string): string {
+    try {
+        const parts = new Intl.DateTimeFormat('en-US', { timeZone, timeZoneName: 'short' }).formatToParts(new Date());
+        const abbr = parts.find((p) => p.type === 'timeZoneName')?.value;
+        const city = timeZone.split('/').pop()?.replace(/_/g, ' ') || timeZone;
+        return abbr ? `${city} (${abbr})` : city;
+    } catch {
+        return timeZone;
+    }
+}
+
+/**
+ * Date + time strings for a demo slot in the given timezone. The time carries the zone
+ * abbreviation ("10:00 AM GMT+4") so an email never reads as ambiguous.
+ */
+export function formatDemoSlot(d: Date, timeZone: string): { date: string; time: string; timezoneLabel: string } {
+    const tz = resolveDemoTimezone(timeZone);
+    return {
+        date: d.toLocaleDateString('en-US', { timeZone: tz, weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }),
+        time: d.toLocaleTimeString('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit', hour12: true, timeZoneName: 'short' }),
+        timezoneLabel: formatTimezoneLabel(tz),
+    };
+}
+
 const ADMIN_START_HOUR = 9;
 
 function secondSundayMarch(year: number): Date {

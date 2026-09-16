@@ -82,6 +82,7 @@ export function publicConfig() {
         weeksPerBooking: WALLET_CONFIG.weeksPerBooking,
         cancelCutoffHours: WALLET_CONFIG.cancelCutoffHours,
         payoutMinimumCents: WALLET_CONFIG.payoutMinimumCents,
+        completionGraceMinutes: WALLET_CONFIG.completionGraceMinutes,
         settlementDayOfMonth: WALLET_CONFIG.settlementDayOfMonth,
         purchaseMinCredits: WALLET_CONFIG.purchaseMinCredits,
         purchaseMaxCredits: WALLET_CONFIG.purchaseMaxCredits,
@@ -909,30 +910,32 @@ export async function completeLessonNow(lessonId: string) {
 // Scheduler jobs
 // ---------------------------------------------------------------------------
 
-/** BOOKED credit-funded sessions whose end time has passed -> COMPLETED, credits released to mentor. */
+/** Backstop: BOOKED sessions whose end time passed the grace window without both-sided
+ *  confirmation -> COMPLETED. Credit-funded sessions also release their reserved credits
+ *  to the mentor; card/free sessions are just marked completed so nothing is left
+ *  showing "awaiting confirmation" forever. */
 export async function processCompletedLessons() {
     const cutoff = new Date(Date.now() - WALLET_CONFIG.completionGraceMinutes * 60 * 1000);
     const due = await prisma.lesson.findMany({
         where: {
             status: 'BOOKED',
             end_time: { lte: cutoff },
-            booking: { funding: 'CREDITS' },
-            reservation: { status: 'RESERVED' },
         },
-        select: { id: true, reservation: { select: { id: true } } },
+        select: { id: true, reservation: { select: { id: true, status: true } } },
         take: 200,
     });
 
     let completed = 0;
     for (const lesson of due) {
-        if (!lesson.reservation) continue;
         try {
             await prisma.$transaction(async (tx) => {
                 await tx.lesson.update({
                     where: { id: lesson.id },
                     data: { status: 'COMPLETED', completed_at: now() },
                 });
-                await releaseReservationTx(tx, lesson.reservation!.id);
+                if (lesson.reservation?.status === 'RESERVED') {
+                    await releaseReservationTx(tx, lesson.reservation.id);
+                }
             });
             completed += 1;
         } catch (e) {

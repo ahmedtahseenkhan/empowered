@@ -3,7 +3,7 @@ import { StripeService } from '../services/stripeService';
 import prisma from '../config/db';
 import { Prisma } from '@prisma/client';
 import { isTutorSlotAvailable } from '../services/availability';
-import { createMeetEventForLesson } from '../services/googleCalendar';
+import { ensureMeetLinkForLesson } from '../services/googleCalendar';
 import { applyCreditsPurchase, handleCardDisputeOnPurchase, markTransferredAsPaidForAccount } from '../services/walletService';
 
 export const handleStripeWebhook = async (req: Request, res: Response) => {
@@ -461,35 +461,16 @@ export async function handleCheckoutSessionCompleted(session: any) {
             throw e;
         }
 
-        // Create Google Meet for each lesson (same as createBooking), then send confirmation emails to both sides
+        // Create the Google Meet link for each lesson (same as createBooking), then send confirmation emails to both sides
         const studentUser = await prisma.user.findUnique({ where: { id: student.user_id } });
         const tutorUser = await prisma.user.findUnique({ where: { id: tutor.user_id } });
-        const attendeesEmails = [studentUser?.email, tutorUser?.email].filter(Boolean) as string[];
 
-        try {
-            for (const lesson of result.createdLessons) {
-                const event = await createMeetEventForLesson({
-                    tutorId,
-                    lessonId: lesson.id,
-                    title: `Mentoring Session with ${tutor.username}`,
-                    description: 'Scheduled via Empowered Learnings',
-                    start: lesson.start_time,
-                    end: lesson.end_time,
-                    attendeesEmails,
-                });
-                if (event?.eventId || event?.meetLink || event?.htmlLink) {
-                    await prisma.lesson.update({
-                        where: { id: lesson.id },
-                        data: {
-                            meeting_link: event.meetLink || undefined,
-                            google_calendar_event_id: event.eventId || undefined,
-                            google_calendar_html_link: event.htmlLink || undefined,
-                        },
-                    });
-                }
+        for (const lesson of result.createdLessons) {
+            try {
+                await ensureMeetLinkForLesson(lesson.id);
+            } catch (e) {
+                console.error(`[Stripe Webhook] Meeting link creation failed for lesson ${lesson.id} (non-fatal):`, e);
             }
-        } catch (e) {
-            console.error('Calendar event creation for student_booking failed (non-fatal):', e);
         }
 
         // Queue confirmation emails so both student and mentor receive booking confirmation with meeting link

@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import prisma from '../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
-import { createMeetEventForLesson } from '../services/googleCalendar';
+import { ensureMeetLinkForLesson } from '../services/googleCalendar';
 import { isTutorSlotAvailable, isFreeSessionSlotAvailable } from '../services/availability';
 
 const FREE_SESSION_DURATION_MINUTES = 25;
@@ -140,35 +140,13 @@ export const createBooking = async (req: AuthRequest, res: Response) => {
             return { createdBooking, createdLessons };
         });
 
-        // Create Google Meet for each lesson so student, mentor, and (in emails) admin get the link.
-        try {
-            const studentUser = await prisma.user.findUnique({ where: { id: userId } });
-            const tutorUser = await prisma.user.findUnique({ where: { id: tutor.user_id } });
-            const attendees = [studentUser?.email, tutorUser?.email].filter(Boolean) as string[];
-
-            for (const lesson of booking.createdLessons ?? []) {
-                const event = await createMeetEventForLesson({
-                    tutorId,
-                    lessonId: lesson.id,
-                    title: `Mentoring Session with ${tutor.username}`,
-                    description: 'Scheduled via Empowered Learnings',
-                    start: lesson.start_time,
-                    end: lesson.end_time,
-                    attendeesEmails: attendees,
-                });
-                if (event?.eventId || event?.meetLink || event?.htmlLink) {
-                    await prisma.lesson.update({
-                        where: { id: lesson.id },
-                        data: {
-                            meeting_link: event.meetLink || undefined,
-                            google_calendar_event_id: event.eventId || undefined,
-                            google_calendar_html_link: event.htmlLink || undefined,
-                        },
-                    });
-                }
+        // Create the Google Meet link for each lesson so student, mentor, and (in emails) admin get it.
+        for (const lesson of booking.createdLessons ?? []) {
+            try {
+                await ensureMeetLinkForLesson(lesson.id);
+            } catch (e) {
+                console.error(`Meeting link creation failed for lesson ${lesson.id} (non-fatal):`, e);
             }
-        } catch (e) {
-            console.error('Calendar event creation failed (non-fatal):', e);
         }
 
         // Queue confirmation emails after Meet links are set so both sides get the link
@@ -322,30 +300,9 @@ export const createFreeSessionBooking = async (req: AuthRequest, res: Response) 
         });
 
         try {
-            const studentUser = await prisma.user.findUnique({ where: { id: userId } });
-            const tutorUser = await prisma.user.findUnique({ where: { id: tutor.user_id } });
-            const attendees = [studentUser?.email, tutorUser?.email].filter(Boolean) as string[];
-            const event = await createMeetEventForLesson({
-                tutorId,
-                lessonId: result.lesson.id,
-                title: `Free intro session with ${tutor.username}`,
-                description: 'Free 25-minute introductory session via Empowered Learnings',
-                start: result.lesson.start_time,
-                end: result.lesson.end_time,
-                attendeesEmails: attendees,
-            });
-            if (event?.eventId || event?.meetLink || event?.htmlLink) {
-                await prisma.lesson.update({
-                    where: { id: result.lesson.id },
-                    data: {
-                        meeting_link: event.meetLink || undefined,
-                        google_calendar_event_id: event.eventId || undefined,
-                        google_calendar_html_link: event.htmlLink || undefined,
-                    },
-                });
-            }
+            await ensureMeetLinkForLesson(result.lesson.id);
         } catch (e) {
-            console.error('Calendar event for free session failed (non-fatal):', e);
+            console.error('Meeting link for free session failed (non-fatal):', e);
         }
 
         // Queue confirmation emails after Meet link is set so both sides get the link

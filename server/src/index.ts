@@ -51,6 +51,7 @@ import walletRoutes from './routes/walletRoutes';
 import { startEmailOutboxProcessor } from './services/emailOutboxProcessor';
 import { startEmailScheduler } from './services/emailScheduler';
 import { startWalletScheduler } from './services/walletScheduler';
+import { logPlatformGoogleStatus } from './services/googleCalendar';
 import { initWhiteboardSocket } from './services/whiteboardSocket';
 
 // Middleware
@@ -120,4 +121,5 @@ httpServer.listen(PORT, () => {
     startEmailOutboxProcessor();
     startEmailScheduler();
     startWalletScheduler();
+    void logPlatformGoogleStatus();
 });

@@ -9,6 +9,8 @@ import {
     SLOT_DURATION_MINUTES,
     checkDemoSlotAvailable,
     getAvailableDemoSlots,
+    formatDemoSlot,
+    resolveDemoTimezone,
 } from '../services/demoAvailability';
 import { createDemoMeetEvent, updateDemoMeetEvent } from '../services/googleCalendar';
 
@@ -664,12 +666,6 @@ export const adminListDemoBookings = async (req: AuthRequest, res: Response) => 
     }
 };
 
-function formatDemoSlotDallas(d: Date): { date: string; time: string } {
-    return {
-        date: d.toLocaleDateString('en-US', { timeZone: ADMIN_TIMEZONE, weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }),
-        time: d.toLocaleTimeString('en-US', { timeZone: ADMIN_TIMEZONE, hour: 'numeric', minute: '2-digit', hour12: true }),
-    };
-}
 
 /**
  * GET /api/admin/demo-slots?from&to&exclude_booking_id
@@ -779,8 +775,10 @@ export const adminRescheduleDemoBooking = async (req: AuthRequest, res: Response
             },
         });
 
-        const previous = formatDemoSlotDallas(previousStart);
-        const next = formatDemoSlotDallas(start);
+        // The prospect booked in their own timezone; keep their emails in it.
+        const prospectTimezone = resolveDemoTimezone(updated.timezone);
+        const previous = formatDemoSlot(previousStart, prospectTimezone);
+        const next = formatDemoSlot(start, prospectTimezone);
         const formatForGoogleCalendar = (d: Date) => d.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
 
         await prisma.emailOutbox.create({
@@ -793,6 +791,7 @@ export const adminRescheduleDemoBooking = async (req: AuthRequest, res: Response
                     previousTime: previous.time,
                     callDate: next.date,
                     callTime: next.time,
+                    timezoneLabel: next.timezoneLabel,
                     meetingLink: updated.meeting_link || '',
                     note,
                     addToCalendarUrl: `https://calendar.google.com/calendar/render?action=TEMPLATE&text=EmpowerEd+Demo&dates=${formatForGoogleCalendar(updated.slot_start_time)}/${formatForGoogleCalendar(updated.slot_end_time)}`,

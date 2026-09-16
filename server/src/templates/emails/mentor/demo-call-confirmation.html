@@ -37,6 +37,9 @@
                                 <tr>
                                     <td>
                                         <p style="margin: 0 0 10px; font-size: 14px; color: #666;">📅 <strong>Date &amp; Time:</strong> {{callDate}} at {{callTime}}</p>
+                                        {{#if timezoneLabel}}
+                                        <p style="margin: 0 0 10px; font-size: 13px; color: #888;">🌍 Shown in your timezone: {{timezoneLabel}}</p>
+                                        {{/if}}
                                         <p style="margin: 0; font-size: 14px; color: #666;">🔗 <strong>Meeting Link:</strong> {{#if meetingLink}}<a href="{{meetingLink}}" style="color: #667eea; text-decoration: none;">Join Demo Call</a>{{else}}You will receive the meeting link from our team.{{/if}}</p>
                                     </td>
                                 </tr>

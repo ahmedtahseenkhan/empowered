@@ -22,7 +22,7 @@
                             <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8f9fa; border-radius: 8px; padding: 20px; margin: 20px 0;">
                                 <tr>
                                     <td>
-                                        <p style="margin: 0 0 10px; font-size: 14px; color: #666;"><strong>Date &amp; time (Dallas, TX):</strong> {{callDate}} at {{callTime}}</p>
+                                        <p style="margin: 0 0 10px; font-size: 14px; color: #666;"><strong>Date &amp; time:</strong> {{callDate}} at {{callTime}}{{#if timezoneLabel}} <span style="color: #888;">({{timezoneLabel}})</span>{{/if}}</p>
                                         <p style="margin: 0; font-size: 14px; color: #666;"><strong>Duration:</strong> 20 minutes</p>
                                     </td>
                                 </tr>

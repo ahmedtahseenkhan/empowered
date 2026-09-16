@@ -35,24 +35,42 @@ const LOOKING_FOR_OPTIONS = [
     'All of the above',
 ];
 
-const DALLAS_TZ = 'America/Chicago';
-
-
-function formatDallasDayKey(iso: string): string {
-    const d = new Date(iso);
-    // YYYY-MM-DD in Dallas timezone
-    return d.toLocaleDateString('en-CA', { timeZone: DALLAS_TZ });
+// Visitor's own timezone: every date/time on this page (and in the emails they get) is shown in it.
+function getVisitorTimezone(): string {
+    try {
+        return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    } catch {
+        return 'UTC';
+    }
 }
 
-function formatDallasDayLabel(dayKey: string): string {
+function formatDayKey(iso: string, timeZone: string): string {
+    const d = new Date(iso);
+    // YYYY-MM-DD in the visitor's timezone
+    return d.toLocaleDateString('en-CA', { timeZone });
+}
+
+function formatDayLabel(dayKey: string): string {
     const [y, m, d] = dayKey.split('-').map(Number);
+    // Noon UTC on the calendar date so the label never drifts to a neighbouring day.
     const dt = new Date(Date.UTC(y, (m || 1) - 1, d || 1, 12, 0, 0));
-    return new Intl.DateTimeFormat(undefined, { timeZone: DALLAS_TZ, weekday: 'short', month: 'short', day: 'numeric' }).format(dt);
+    return new Intl.DateTimeFormat(undefined, { timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric' }).format(dt);
 }
 
-function formatDallasTimeLabel(iso: string): string {
+function formatTimeLabel(iso: string, timeZone: string): string {
     const d = new Date(iso);
-    return new Intl.DateTimeFormat(undefined, { timeZone: DALLAS_TZ, hour: 'numeric', minute: '2-digit', hour12: true }).format(d);
+    return new Intl.DateTimeFormat(undefined, { timeZone, hour: 'numeric', minute: '2-digit', hour12: true }).format(d);
+}
+
+function formatTimezoneLabel(timeZone: string): string {
+    try {
+        const parts = new Intl.DateTimeFormat('en-US', { timeZone, timeZoneName: 'short' }).formatToParts(new Date());
+        const abbr = parts.find((p) => p.type === 'timeZoneName')?.value;
+        const city = timeZone.split('/').pop()?.replace(/_/g, ' ') || timeZone;
+        return abbr ? `${city} (${abbr})` : city;
+    } catch {
+        return timeZone;
+    }
 }
 
 const BookDemoPage: React.FC = () => {
@@ -71,13 +89,16 @@ const BookDemoPage: React.FC = () => {
         slot_start_time: '',
     });
 
+    const visitorTimezone = useMemo(() => getVisitorTimezone(), []);
+    const visitorTimezoneLabel = useMemo(() => formatTimezoneLabel(visitorTimezone), [visitorTimezone]);
+
     const [slotsLoading, setSlotsLoading] = useState(false);
     const [slots, setSlots] = useState<Array<{ start: string; end: string }>>([]);
     const [selectedDayKey, setSelectedDayKey] = useState('');
-    // Start from "tomorrow" in Dallas (admin timezone) so the first day shown is tomorrow, not today
+    // Start from "tomorrow" in the visitor's timezone so the first day shown is tomorrow, not today
     const [weekStart, setWeekStart] = useState(() => {
         const now = new Date();
-        const s = now.toLocaleDateString('en-CA', { timeZone: DALLAS_TZ }).split('-');
+        const s = now.toLocaleDateString('en-CA', { timeZone: visitorTimezone }).split('-');
         const y = parseInt(s[0], 10);
         const m = parseInt(s[1], 10) - 1;
         const d = parseInt(s[2], 10);
@@ -105,7 +126,7 @@ const BookDemoPage: React.FC = () => {
     const slotsByDay = useMemo(() => {
         const map = new Map<string, Array<{ start: string; end: string }>>();
         for (const s of slots) {
-            const key = formatDallasDayKey(s.start);
+            const key = formatDayKey(s.start, visitorTimezone);
             map.set(key, [...(map.get(key) || []), s]);
         }
         for (const [k, arr] of map.entries()) {
@@ -113,14 +134,14 @@ const BookDemoPage: React.FC = () => {
             map.set(k, arr);
         }
         return map;
-    }, [slots]);
+    }, [slots, visitorTimezone]);
 
     const availableDays = useMemo(() => Array.from(slotsByDay.keys()).sort(), [slotsByDay]);
 
     useEffect(() => {
         // Keep selectedDayKey in sync with loaded slots / selected slot.
         if (formData.slot_start_time) {
-            const key = formatDallasDayKey(formData.slot_start_time);
+            const key = formatDayKey(formData.slot_start_time, visitorTimezone);
             setSelectedDayKey(key);
             return;
         }
@@ -164,6 +185,7 @@ const BookDemoPage: React.FC = () => {
                 income_status: formData.income_status || '',
                 looking_for: formData.looking_for,
                 slot_start_time: formData.slot_start_time,
+                timezone: visitorTimezone,
             });
             setSubmitted(true);
         } catch (err: any) {
@@ -212,7 +234,7 @@ const BookDemoPage: React.FC = () => {
                 <div className="max-w-3xl mx-auto">
                     <div className="text-center mb-8">
                         <h1 className="heading-lg mb-3">Book a Demo Call</h1>
-                        <p className="text-gray-600">Schedule a 20-minute demo with our team (9 AM – 5 PM, Dallas, TX).</p>
+                        <p className="text-gray-600">Schedule a 20-minute demo with our team. Times are shown in your local timezone.</p>
                     </div>
 
                     <Card className="p-6">
@@ -301,7 +323,7 @@ const BookDemoPage: React.FC = () => {
 
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">Select a convenient time for a 20-minute demo with our admin.</label>
-                                <p className="text-xs text-gray-500 mb-2">All times shown in Dallas, TX (Central Time). Demo slots are limited each week to ensure personalized onboarding.</p>
+                                <p className="text-xs text-gray-500 mb-2">All times shown in your timezone: <span className="font-medium text-gray-700">{visitorTimezoneLabel}</span>. Your confirmation and reminder emails will use this timezone too. Demo slots are limited each week to ensure personalized onboarding.</p>
                                 {slotsLoading ? (
                                     <div className="text-sm text-gray-600 py-4">Loading available times...</div>
                                 ) : slots.length === 0 ? (
@@ -324,7 +346,7 @@ const BookDemoPage: React.FC = () => {
                                                                 : 'bg-white text-gray-900 border-gray-200 hover:bg-gray-50'
                                                                 }`}
                                                         >
-                                                            <div className="leading-tight">{formatDallasDayLabel(dayKey)}</div>
+                                                            <div className="leading-tight">{formatDayLabel(dayKey)}</div>
                                                             <div className={`text-[11px] ${active ? 'text-purple-100' : 'text-gray-500'}`}>{count} slot{count === 1 ? '' : 's'}</div>
                                                         </button>
                                                     );
@@ -349,8 +371,8 @@ const BookDemoPage: React.FC = () => {
                                                                     ? 'border-purple-600 bg-purple-50'
                                                                     : 'border-gray-200 hover:bg-gray-50'}`}
                                                             >
-                                                                <div className="font-semibold text-gray-900">{formatDallasTimeLabel(slot.start)}</div>
-                                                                <div className="text-xs text-gray-500 mt-0.5">{formatDallasDayLabel(selectedDayKey)}</div>
+                                                                <div className="font-semibold text-gray-900">{formatTimeLabel(slot.start, visitorTimezone)}</div>
+                                                                <div className="text-xs text-gray-500 mt-0.5">{formatDayLabel(selectedDayKey)}</div>
                                                             </button>
                                                         );
                                                     })}

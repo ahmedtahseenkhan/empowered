@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Calendar, Clock, User, CreditCard, ExternalLink, CalendarDays } from 'lucide-react';
+import { ArrowLeft, Calendar, Clock, User, CreditCard, ExternalLink, CalendarDays, Video, Copy, Check, Send } from 'lucide-react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -57,6 +57,9 @@ const SessionDetailPage: React.FC = () => {
     const [joinBusy, setJoinBusy] = useState(false);
     const [joinError, setJoinError] = useState('');
     const [errorModalOpen, setErrorModalOpen] = useState(false);
+    const [linkBusy, setLinkBusy] = useState(false);
+    const [sendBusy, setSendBusy] = useState(false);
+    const [copied, setCopied] = useState(false);
 
     // Learning Credits actions
     const [cancelOpen, setCancelOpen] = useState(false);
@@ -67,6 +70,13 @@ const SessionDetailPage: React.FC = () => {
     const [actionError, setActionError] = useState('');
     const [actionNotice, setActionNotice] = useState('');
     const [confirmBusy, setConfirmBusy] = useState(false);
+    const [walletCfg, setWalletCfg] = useState<{ completionGraceMinutes?: number; settlementDays?: number } | null>(null);
+
+    useEffect(() => {
+        api.get('/wallet/config').then((r) => setWalletCfg(r.data || null)).catch(() => setWalletCfg(null));
+    }, []);
+
+    const graceHours = Math.max(1, Math.round((walletCfg?.completionGraceMinutes ?? 1440) / 60));
 
     const [searchParams, setSearchParams] = useSearchParams();
     const [finalizeStatus, setFinalizeStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -98,8 +108,8 @@ const SessionDetailPage: React.FC = () => {
             try {
                 const res = await api.get(`/lessons/${id}/detail`);
                 setLesson(res.data?.lesson || null);
-            } catch (e: any) {
-                setError(e?.response?.data?.error || 'Failed to load session.');
+            } catch (e) {
+                setError(apiError(e, 'Failed to load session.'));
             } finally {
                 setLoading(false);
             }
@@ -192,8 +202,8 @@ const SessionDetailPage: React.FC = () => {
                 setPayError('Failed to start payment – please try again.');
                 setErrorModalOpen(true);
             }
-        } catch (e: any) {
-            setPayError(e?.response?.data?.error || 'Unable to process payment.');
+        } catch (e) {
+            setPayError(apiError(e, 'Unable to process payment.'));
             setErrorModalOpen(true);
         } finally {
             setPayBusy(false);
@@ -213,11 +223,65 @@ const SessionDetailPage: React.FC = () => {
                 setJoinError('Meeting link is not available yet.');
                 setErrorModalOpen(true);
             }
-        } catch (e: any) {
-            setJoinError(e?.response?.data?.error || 'Unable to join session.');
+        } catch (e) {
+            setJoinError(apiError(e, 'Unable to join session.'));
             setErrorModalOpen(true);
         } finally {
             setJoinBusy(false);
+        }
+    };
+
+    /** The session's Google Meet link; created on the server on demand if it does not exist yet. */
+    const ensureMeetingLink = async (): Promise<string | null> => {
+        if (!lesson) return null;
+        if (lesson.meeting_link) return lesson.meeting_link;
+        const res = await api.get(`/lessons/${lesson.id}/join`);
+        const url = (res.data?.meeting_link as string | undefined) || null;
+        if (url) setLesson({ ...lesson, meeting_link: url });
+        return url;
+    };
+
+    const handleCopyLink = async () => {
+        try {
+            setLinkBusy(true);
+            const url = await ensureMeetingLink();
+            if (!url) {
+                setJoinError('The Google Meet link is not available yet. Please try again in a minute.');
+                setErrorModalOpen(true);
+                return;
+            }
+            if (!navigator.clipboard) {
+                setActionNotice(`Google Meet link: ${url}`);
+                return;
+            }
+            await navigator.clipboard.writeText(url);
+            setCopied(true);
+            window.setTimeout(() => setCopied(false), 2000);
+        } catch (e) {
+            setJoinError(apiError(e, 'Unable to copy the meeting link.'));
+            setErrorModalOpen(true);
+        } finally {
+            setLinkBusy(false);
+        }
+    };
+
+    const handleSendLink = async () => {
+        if (!lesson) return;
+        try {
+            setSendBusy(true);
+            setActionError('');
+            const res = await api.post(`/lessons/${lesson.id}/meeting-link/send`);
+            const url = res.data?.meeting_link as string | undefined;
+            if (url && !lesson.meeting_link) setLesson({ ...lesson, meeting_link: url });
+            const studentName = (res.data?.sent_to as string | undefined) || lesson.student?.username || 'the student';
+            setActionNotice(res.data?.queued === false
+                ? `The Google Meet link was already sent to ${studentName} a moment ago.`
+                : `The Google Meet link has been emailed to ${studentName}.`);
+        } catch (e) {
+            setJoinError(apiError(e, 'Unable to send the meeting link.'));
+            setErrorModalOpen(true);
+        } finally {
+            setSendBusy(false);
         }
     };
 
@@ -423,6 +487,47 @@ const SessionDetailPage: React.FC = () => {
                             <p className="text-xs text-gray-500">Booked on {formatBookedOn(lesson.created_at || lesson.booking?.created_at)}</p>
                         )}
 
+                        {/* Google Meet — the same link for mentor and student */}
+                        {(() => {
+                            const status = lesson.status.toUpperCase();
+                            if (['COMPLETED', 'CANCELLED', 'MISSED'].includes(status)) return null;
+                            if (Date.now() > new Date(lesson.end_time).getTime() + 15 * 60 * 1000) return null;
+                            if (isStudent && needsPayment) return null;
+                            const link = lesson.meeting_link;
+                            return (
+                                <div className="bg-gray-50 border border-gray-200 rounded-xl p-5">
+                                    <div className="flex items-start gap-3">
+                                        <Video className="w-5 h-5 text-[#4A1D96] mt-0.5 flex-shrink-0" />
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">Google Meet</p>
+                                            {link ? (
+                                                <a href={link} target="_blank" rel="noreferrer" className="text-sm font-medium text-[#4A1D96] hover:underline break-all">{link}</a>
+                                            ) : (
+                                                <p className="text-sm text-gray-600">The meeting link has not been created yet.</p>
+                                            )}
+                                            <p className="text-xs text-gray-500 mt-1">
+                                                {isStudent
+                                                    ? 'Open the link at session time — you will be let straight in.'
+                                                    : 'You and the student use this same link. Anyone with the link is let straight in, no approval needed.'}
+                                            </p>
+                                            <div className="flex flex-wrap gap-2 mt-3">
+                                                <Button variant="outline" size="sm" className="flex items-center gap-2" disabled={linkBusy} onClick={handleCopyLink}>
+                                                    {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+                                                    {copied ? 'Link copied' : linkBusy ? 'Preparing link…' : link ? 'Copy link' : 'Create & copy link'}
+                                                </Button>
+                                                {!isStudent && (
+                                                    <Button variant="outline" size="sm" className="flex items-center gap-2" disabled={sendBusy} onClick={handleSendLink}>
+                                                        <Send className="w-4 h-4" />
+                                                        {sendBusy ? 'Sending…' : 'Send link to student'}
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })()}
+
                         {actionNotice && (
                             <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-lg text-sm">{actionNotice}</div>
                         )}
@@ -449,7 +554,7 @@ const SessionDetailPage: React.FC = () => {
                                         <p className="text-sm text-blue-800 mt-1">You confirmed this session. Waiting for your mentor to confirm as well.</p>
                                     ) : (
                                         <>
-                                            <p className="text-sm text-blue-800 mt-1">Please confirm that this session took place successfully. Your mentor confirms after you.</p>
+                                            <p className="text-sm text-blue-800 mt-1">Please confirm that this session took place successfully. Your mentor confirms after you. If you don't confirm, it will be marked completed automatically {graceHours} hours after the session ended.</p>
                                             <Button className="mt-3 bg-green-600 hover:bg-green-700 text-white" disabled={confirmBusy} onClick={handleConfirmComplete}>
                                                 {confirmBusy ? 'Confirming…' : 'Confirm session completed'}
                                             </Button>
@@ -463,7 +568,7 @@ const SessionDetailPage: React.FC = () => {
                                         </Button>
                                     </>
                                 ) : (
-                                    <p className="text-sm text-blue-800 mt-1">Waiting for the student to confirm the session first.</p>
+                                    <p className="text-sm text-blue-800 mt-1">Waiting for the student to confirm the session first — we've asked them by email. If they don't respond, the session completes automatically {graceHours} hours after it ended and your earnings are released{isCreditsFunded ? ' into the review period' : ''}.</p>
                                 )}
                                 {actionError && <div className="mt-2 text-sm text-red-700">{actionError}</div>}
                             </div>

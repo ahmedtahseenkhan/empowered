@@ -2,6 +2,41 @@ import prisma from '../config/db';
 import { WALLET_CONFIG, processCompletedLessons, settlePendingEarnings, runMonthlySettlement } from './walletService';
 import { ensureMeetLinkForLesson } from './googleCalendar';
 
+/** Ask the student to confirm a just-ended credit-funded session (their confirmation
+ *  releases the mentor's payment; the grace-window backstop covers non-responders). */
+async function requestCompletionConfirmations() {
+    const lessons = await prisma.lesson.findMany({
+        where: {
+            status: 'BOOKED',
+            student_confirmed_at: null,
+            end_time: { lte: new Date(), gte: new Date(Date.now() - 6 * 3600 * 1000) },
+            booking: { funding: 'CREDITS' },
+        },
+        select: { id: true, student: { select: { user: { select: { email: true } } } } },
+        take: 100,
+    });
+    for (const l of lessons) {
+        const email = l.student?.user?.email;
+        if (!email) continue;
+        try {
+            await prisma.emailOutbox.create({
+                data: {
+                    type: 'SESSION_CONFIRM_REQUEST_STUDENT',
+                    to_email: email,
+                    payload: {
+                        lessonId: l.id,
+                        graceHours: Math.round(WALLET_CONFIG.completionGraceMinutes / 60),
+                        reviewDays: WALLET_CONFIG.settlementDays,
+                    },
+                    idempotency_key: `session-confirm-request:${l.id}`,
+                },
+            });
+        } catch (e: any) {
+            if (e.code !== 'P2002') console.error(`[Wallet] Failed to queue confirm request for ${l.id}:`, e);
+        }
+    }
+}
+
 /** BOOKED lessons that never got a Meet link (calendar failure at booking time) get one retried here. */
 async function backfillMissingMeetingLinks() {
     const lessons = await prisma.lesson.findMany({
@@ -36,6 +71,7 @@ export async function runWalletJobs() {
     running = true;
     try {
         await backfillMissingMeetingLinks();
+        await requestCompletionConfirmations();
         const c = await processCompletedLessons();
         const s = await settlePendingEarnings();
         if (c.completed || c.returned || s.settled) {

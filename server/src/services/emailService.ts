@@ -210,6 +210,27 @@ class EmailService {
         });
     }
 
+    async sendSessionConfirmRequest(data: {
+        studentName: string;
+        studentEmail: string;
+        mentorName: string;
+        sessionDate: string;
+        sessionTime: string;
+        sessionUrl: string;
+        graceHours: number;
+        reviewDays: number;
+    }): Promise<void> {
+        const html = this.renderTemplate('student/session-confirm-request', {
+            ...data,
+            year: new Date().getFullYear(),
+        });
+        await this.sendEmail({
+            to: data.studentEmail,
+            subject: `Please confirm your session with ${data.mentorName}`,
+            html,
+        });
+    }
+
     async sendPostSessionFeedback(data: {
         studentName: string;
         studentEmail: string;
@@ -321,6 +342,31 @@ class EmailService {
         });
     }
 
+    /**
+     * Mentor-triggered: send the session's Google Meet link to the student.
+     */
+    async sendSessionMeetingLinkStudent(data: {
+        studentName: string;
+        studentEmail: string;
+        mentorName: string;
+        sessionDate: string;
+        sessionTime: string;
+        meetingLink: string;
+        dashboardUrl?: string;
+    }): Promise<void> {
+        const baseUrl = this.getClientBaseUrl();
+        const html = this.renderTemplate('student/session-meeting-link', {
+            ...data,
+            dashboardUrl: data.dashboardUrl || `${baseUrl}/student/sessions`,
+            year: new Date().getFullYear(),
+        });
+        await this.sendEmail({
+            to: data.studentEmail,
+            subject: `Your Google Meet link for the session with ${data.mentorName}`,
+            html,
+        });
+    }
+
     async sendSessionRescheduledMentor(data: {
         mentorName: string;
         mentorEmail: string;
@@ -389,6 +435,8 @@ class EmailService {
         mentorEmail: string;
         callDate: string;
         callTime: string;
+        /** e.g. "Muscat (GMT+4)" — the timezone the prospect booked in */
+        timezoneLabel?: string;
         meetingLink: string;
         addToCalendarUrl?: string;
     }): Promise<void> {
@@ -408,6 +456,7 @@ class EmailService {
         mentorEmail: string;
         callDate: string;
         callTime: string;
+        timezoneLabel?: string;
         previousDate?: string;
         previousTime?: string;
         meetingLink: string;
@@ -431,6 +480,7 @@ class EmailService {
         mentorEmail: string;
         callDate: string;
         callTime: string;
+        timezoneLabel?: string;
         meetingLink: string;
         reminderType?: '24h' | '3h';
     }): Promise<void> {
@@ -794,6 +844,10 @@ class EmailService {
         lookingFor: string;
         callDate: string;
         callTime: string;
+        /** The prospect's own timezone and the same slot formatted in it (shown so admin sees what they saw) */
+        prospectTimezone?: string;
+        prospectCallDate?: string;
+        prospectCallTime?: string;
         meetingLink?: string;
     }): Promise<void> {
         // Admin dashboard lives on a separate domain; never use CLIENT_URL here.

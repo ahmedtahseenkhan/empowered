@@ -1,5 +1,6 @@
 import prisma from '../config/db';
 import emailService from './emailService';
+import { formatTimezoneLabel, resolveDemoTimezone } from './demoAvailability';
 
 type OutboxRow = {
     id: string;
@@ -208,6 +209,37 @@ async function sendOutboxRow(row: OutboxRow) {
         return;
     }
 
+    if (row.type === 'SESSION_MEETING_LINK_STUDENT') {
+        const lessonId = row.payload?.lessonId as string | undefined;
+        if (!lessonId) throw new Error('Missing lessonId in payload');
+
+        const lesson = await prisma.lesson.findUnique({
+            where: { id: lessonId },
+            include: {
+                student: { select: { username: true } },
+                tutor: { select: { username: true, timezone: true } },
+                booking: { select: { client_timezone: true } },
+            },
+        });
+
+        if (!lesson) throw new Error(`Lesson not found: ${lessonId}`);
+        if (!lesson.meeting_link) throw new Error(`Lesson ${lessonId} has no meeting link yet`);
+
+        const clientBase = (process.env.CLIENT_URL || process.env.CLIENT_BASE_URL || 'https://emplearnings.com').trim().replace(/\/+$/, '');
+        const studentTimeZone = lesson.booking?.client_timezone || lesson.tutor?.timezone || 'UTC';
+        await emailService.sendSessionMeetingLinkStudent({
+            studentName: lesson.student?.username || 'Student',
+            studentEmail: row.to_email,
+            mentorName: lesson.tutor?.username || 'Mentor',
+            sessionDate: formatDatePart(lesson.start_time, studentTimeZone),
+            sessionTime: formatTimePart(lesson.start_time, studentTimeZone),
+            meetingLink: lesson.meeting_link,
+            dashboardUrl: `${clientBase}/student/sessions/${lesson.id}`,
+        });
+
+        return;
+    }
+
     if (row.type === 'SESSION_RESCHEDULED_STUDENT') {
         const lessonId = row.payload?.lessonId as string | undefined;
         if (!lessonId) throw new Error('Missing lessonId in payload');
@@ -382,6 +414,35 @@ async function sendOutboxRow(row: OutboxRow) {
         return;
     }
 
+    if (row.type === 'SESSION_CONFIRM_REQUEST_STUDENT') {
+        const lessonId = row.payload?.lessonId as string | undefined;
+        if (!lessonId) throw new Error('Missing lessonId in payload');
+
+        const lesson = await prisma.lesson.findUnique({
+            where: { id: lessonId },
+            include: {
+                student: { select: { username: true } },
+                tutor: { select: { username: true, timezone: true } },
+                booking: { select: { client_timezone: true } },
+            },
+        });
+        if (!lesson) throw new Error(`Lesson not found: ${lessonId}`);
+
+        const clientBase = (process.env.CLIENT_URL || process.env.CLIENT_BASE_URL || 'https://emplearnings.com').trim().replace(/\/+$/, '');
+        const timeZone = lesson.booking?.client_timezone || lesson.tutor?.timezone || 'UTC';
+        await emailService.sendSessionConfirmRequest({
+            studentName: lesson.student?.username || 'Student',
+            studentEmail: row.to_email,
+            mentorName: lesson.tutor?.username || 'Mentor',
+            sessionDate: formatDatePart(lesson.start_time, timeZone),
+            sessionTime: formatTimePart(lesson.start_time, timeZone),
+            sessionUrl: `${clientBase}/student/sessions/${lesson.id}`,
+            graceHours: Number(row.payload?.graceHours || 24),
+            reviewDays: Number(row.payload?.reviewDays || 7),
+        });
+        return;
+    }
+
     if (row.type === 'SESSION_CANCELLED_BY_STUDENT_TUTOR') {
         const lessonId = row.payload?.lessonId as string | undefined;
         if (!lessonId) throw new Error('Missing lessonId in payload');
@@ -536,13 +597,14 @@ async function sendOutboxRow(row: OutboxRow) {
     }
 
     if (row.type === 'DEMO_BOOKING_CONFIRMATION') {
-        const p = row.payload as { fullName?: string; email?: string; callDate?: string; callTime?: string; meetingLink?: string; addToCalendarUrl?: string };
+        const p = row.payload as { fullName?: string; email?: string; callDate?: string; callTime?: string; timezoneLabel?: string; meetingLink?: string; addToCalendarUrl?: string };
         // Mentor-style demo confirmation with meeting link (per System Generated Emails doc)
         await emailService.sendDemoCallConfirmation({
             mentorName: p.fullName || 'there',
             mentorEmail: row.to_email,
             callDate: p.callDate || '',
             callTime: p.callTime || '',
+            timezoneLabel: p.timezoneLabel,
             meetingLink: p.meetingLink || '',
             addToCalendarUrl: p.addToCalendarUrl,
         });
@@ -554,6 +616,7 @@ async function sendOutboxRow(row: OutboxRow) {
             fullName?: string;
             callDate?: string;
             callTime?: string;
+            timezoneLabel?: string;
             previousDate?: string;
             previousTime?: string;
             meetingLink?: string;
@@ -565,6 +628,7 @@ async function sendOutboxRow(row: OutboxRow) {
             mentorEmail: row.to_email,
             callDate: p.callDate || '',
             callTime: p.callTime || '',
+            timezoneLabel: p.timezoneLabel,
             previousDate: p.previousDate,
             previousTime: p.previousTime,
             meetingLink: p.meetingLink || '',
@@ -585,12 +649,14 @@ async function sendOutboxRow(row: OutboxRow) {
 
         if (!demoBooking) throw new Error(`DemoBooking not found: ${demoBookingId}`);
 
-        const timeZone = demoBooking.timezone || 'America/Chicago';
+        // Prospects book in their own timezone (stored on the booking); legacy rows fall back to Dallas.
+        const timeZone = resolveDemoTimezone(demoBooking.timezone);
         await emailService.sendDemoCallReminder({
             mentorName: demoBooking.full_name,
             mentorEmail: row.to_email,
             callDate: formatDatePart(demoBooking.slot_start_time, timeZone),
             callTime: formatTimePart(demoBooking.slot_start_time, timeZone),
+            timezoneLabel: formatTimezoneLabel(timeZone),
             meetingLink: demoBooking.meeting_link || '',
             reminderType,
         });
@@ -609,6 +675,9 @@ async function sendOutboxRow(row: OutboxRow) {
             lookingFor?: string;
             callDate?: string;
             callTime?: string;
+            prospectTimezone?: string;
+            prospectCallDate?: string;
+            prospectCallTime?: string;
             meetingLink?: string;
         };
         await emailService.sendDemoBookingAdminNotification({
@@ -622,6 +691,9 @@ async function sendOutboxRow(row: OutboxRow) {
             lookingFor: p.lookingFor ?? '—',
             callDate: p.callDate ?? '—',
             callTime: p.callTime ?? '—',
+            prospectTimezone: p.prospectTimezone,
+            prospectCallDate: p.prospectCallDate,
+            prospectCallTime: p.prospectCallTime,
             meetingLink: p.meetingLink ?? '',
         });
         return;

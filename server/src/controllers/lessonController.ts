@@ -521,11 +521,10 @@ export const rescheduleLesson = async (req: AuthRequest, res: Response) => {
             }
         });
 
-        // Move the calendar event (non-fatal if calendar is not connected)
+        // Move the platform calendar event (non-fatal; the Meet link is preserved)
         if (lesson.google_calendar_event_id) {
             try {
                 await updateMeetEventForLesson({
-                    tutorId: lesson.tutor_id,
                     eventId: lesson.google_calendar_event_id,
                     start: newStartDate,
                     end: newEndDate,
@@ -578,5 +577,73 @@ export const rescheduleLesson = async (req: AuthRequest, res: Response) => {
     } catch (e) {
         console.error('rescheduleLesson error:', e);
         return res.status(500).json({ error: 'Failed to reschedule session' });
+    }
+};
+
+/**
+ * Mentor shares the session's Google Meet link with the student by email (queued through
+ * the EmailOutbox). Creates the link first if the session does not have one yet.
+ */
+export const sendMeetingLinkToStudent = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user?.id;
+        const role = req.user?.role;
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+        if (role !== 'TUTOR') return res.status(403).json({ error: 'Only mentors can send the meeting link' });
+
+        const lessonId = (req.params.lessonId || '').trim();
+        if (!lessonId) return res.status(400).json({ error: 'lessonId is required' });
+
+        const tutor = await prisma.tutorProfile.findUnique({ where: { user_id: userId }, select: { id: true } });
+        if (!tutor) return res.status(404).json({ error: 'Tutor profile not found' });
+
+        const lesson = await prisma.lesson.findUnique({
+            where: { id: lessonId },
+            select: {
+                id: true,
+                tutor_id: true,
+                status: true,
+                end_time: true,
+                meeting_link: true,
+                student: { select: { username: true, user: { select: { email: true } } } },
+            },
+        });
+        if (!lesson) return res.status(404).json({ error: 'Session not found' });
+        if (lesson.tutor_id !== tutor.id) return res.status(403).json({ error: 'Forbidden' });
+        if (['CANCELLED', 'MISSED', 'COMPLETED'].includes(lesson.status)) {
+            return res.status(400).json({ error: 'This session is no longer active' });
+        }
+        if (lesson.end_time.getTime() < Date.now() - 15 * 60 * 1000) {
+            return res.status(400).json({ error: 'This session has already ended' });
+        }
+
+        const meetingLink = lesson.meeting_link || (await ensureMeetLinkForLesson(lesson.id));
+        if (!meetingLink) {
+            return res.status(503).json({ error: 'The meeting link could not be created right now. Please try again in a minute.' });
+        }
+
+        const studentEmail = lesson.student?.user?.email;
+        if (!studentEmail) return res.status(400).json({ error: 'The student has no email address on file' });
+
+        // At most one email per session per minute, however often the button is pressed.
+        const minuteBucket = Math.floor(Date.now() / 60000);
+        const queued = await prisma.emailOutbox.createMany({
+            data: [{
+                type: 'SESSION_MEETING_LINK_STUDENT',
+                to_email: studentEmail,
+                payload: { lessonId: lesson.id, sentByTutorId: tutor.id },
+                idempotency_key: `meeting-link:${lesson.id}:${minuteBucket}`,
+            }],
+            skipDuplicates: true,
+        });
+
+        return res.json({
+            meeting_link: meetingLink,
+            sent_to: lesson.student?.username || 'Student',
+            queued: queued.count > 0,
+        });
+    } catch (e) {
+        console.error('sendMeetingLinkToStudent error:', e);
+        return res.status(500).json({ error: 'Failed to send the meeting link' });
     }
 };

@@ -2,6 +2,7 @@ import express from 'express';
 import { authenticateToken } from '../middleware/authMiddleware';
 import {
     getMyWallet,
+    getWalletConfig,
     createCreditsPurchaseCheckout,
     finalizeCreditsPurchase,
     getMyWalletHistory,
@@ -17,6 +18,7 @@ const router = express.Router();
 router.use(authenticateToken);
 
 // Student
+router.get('/config', getWalletConfig);
 router.get('/me', getMyWallet);
 router.get('/me/history', getMyWalletHistory);
 router.get('/quote', getBookingQuote);

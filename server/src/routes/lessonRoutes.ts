@@ -1,12 +1,13 @@
 import { Router } from 'express';
 import { authenticateToken } from '../middleware/authMiddleware';
-import { getMyLessons, confirmLessonComplete, getLessonDetail, joinLesson, rescheduleLesson } from '../controllers/lessonController';
+import { getMyLessons, confirmLessonComplete, getLessonDetail, joinLesson, rescheduleLesson, sendMeetingLinkToStudent } from '../controllers/lessonController';
 
 const router = Router();
 
 router.get('/me', authenticateToken, getMyLessons);
 router.get('/:lessonId/detail', authenticateToken, getLessonDetail);
 router.get('/:lessonId/join', authenticateToken, joinLesson);
+router.post('/:lessonId/meeting-link/send', authenticateToken, sendMeetingLinkToStudent);
 router.patch('/:lessonId/reschedule', authenticateToken, rescheduleLesson);
 router.post('/:lessonId/confirm-complete', authenticateToken, confirmLessonComplete);
 

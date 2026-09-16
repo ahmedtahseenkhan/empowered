@@ -1,14 +1,13 @@
 import { Request, Response } from 'express';
 import prisma from '../config/db';
 import { createDemoMeetEvent, getDemoOAuthAuthUrl, exchangeDemoOAuthCode } from '../services/googleCalendar';
-import { ADMIN_TIMEZONE, SLOT_DURATION_MINUTES, getAvailableDemoSlots } from '../services/demoAvailability';
-
-function formatSlotDallas(iso: string): { date: string; time: string } {
-    const d = new Date(iso);
-    const date = d.toLocaleDateString('en-US', { timeZone: ADMIN_TIMEZONE, weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
-    const time = d.toLocaleTimeString('en-US', { timeZone: ADMIN_TIMEZONE, hour: 'numeric', minute: '2-digit', hour12: true });
-    return { date, time };
-}
+import {
+    ADMIN_TIMEZONE,
+    SLOT_DURATION_MINUTES,
+    getAvailableDemoSlots,
+    isValidTimezone,
+    formatDemoSlot,
+} from '../services/demoAvailability';
 
 export async function getDemoSlots(req: Request, res: Response) {
     try {
@@ -42,6 +41,7 @@ export async function createDemoBooking(req: Request, res: Response) {
             income_status?: string;
             looking_for?: string[];
             slot_start_time?: string;
+            timezone?: string;
         };
 
         const full_name = (body.full_name ?? '').trim();
@@ -60,6 +60,10 @@ export async function createDemoBooking(req: Request, res: Response) {
             return res.status(400).json({ error: 'Invalid slot time' });
         }
         const end = new Date(start.getTime() + SLOT_DURATION_MINUTES * 60 * 1000);
+
+        // The prospect's own timezone (from their browser). Every email they receive is
+        // formatted in it; the admin still sees Dallas time.
+        const prospectTimezone = isValidTimezone(body.timezone) ? body.timezone.trim() : ADMIN_TIMEZONE;
 
         const existing = await prisma.demoBooking.findFirst({
             where: {
@@ -100,13 +104,14 @@ export async function createDemoBooking(req: Request, res: Response) {
                 looking_for: looking_for_str,
                 slot_start_time: start,
                 slot_end_time: end,
-                timezone: ADMIN_TIMEZONE,
+                timezone: prospectTimezone,
                 meeting_link: meetResult.meetLink,
                 google_event_id: meetResult.eventId,
             },
         });
 
-        const { date: callDate, time: callTime } = formatSlotDallas(booking.slot_start_time.toISOString());
+        const prospectSlot = formatDemoSlot(booking.slot_start_time, prospectTimezone);
+        const adminSlot = formatDemoSlot(booking.slot_start_time, ADMIN_TIMEZONE);
         const lookingForDisplay = lookingFor.length > 0 ? lookingFor.join(', ') : '—';
 
         const formatForGoogleCalendar = (d: Date) => d.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
@@ -119,8 +124,9 @@ export async function createDemoBooking(req: Request, res: Response) {
                 payload: {
                     fullName: full_name,
                     email,
-                    callDate,
-                    callTime,
+                    callDate: prospectSlot.date,
+                    callTime: prospectSlot.time,
+                    timezoneLabel: prospectSlot.timezoneLabel,
                     meetingLink: meetResult.meetLink,
                     addToCalendarUrl,
                 },
@@ -143,8 +149,11 @@ export async function createDemoBooking(req: Request, res: Response) {
                         experienceYears: (body.experience_years ?? '').trim() || '—',
                         incomeStatus: (body.income_status ?? '').trim() || '—',
                         lookingFor: lookingForDisplay,
-                        callDate,
-                        callTime,
+                        callDate: adminSlot.date,
+                        callTime: adminSlot.time,
+                        prospectTimezone: prospectTimezone,
+                        prospectCallDate: prospectSlot.date,
+                        prospectCallTime: prospectSlot.time,
                         meetingLink: meetResult.meetLink,
                     },
                     status: 'PENDING',
@@ -214,14 +223,19 @@ export async function demoOAuthCallback(req: Request, res: Response) {
     }
     try {
         const redirectUri = getDemoOAuthRedirectUri(req);
-        const { refresh_token } = await exchangeDemoOAuthCode(code, redirectUri);
+        const { refresh_token, missing_meet_scopes } = await exchangeDemoOAuthCode(code, redirectUri);
+        const scopeNotice = missing_meet_scopes.length > 0
+            ? `<p style="color:#b45309;background:#fef3c7;padding:12px;border-radius:6px;"><strong>Google Meet permission was not granted</strong> (${missing_meet_scopes.join(', ')}). Session links will still be created, but participants may have to knock. Make sure the <em>Google Meet REST API</em> is enabled in the Cloud project and tick every permission on the consent screen, then <a href="/api/demo/oauth-start">try again</a>.</p>`
+            : `<p style="color:#166534;background:#dcfce7;padding:12px;border-radius:6px;">Google Meet permission granted — session links will let everyone join without knocking.</p>`;
         const html = `
 <!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"><title>Demo refresh token</title></head>
+<head><meta charset="utf-8"><title>Platform Google refresh token</title></head>
 <body style="font-family: sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem;">
-  <h2>Demo refresh token</h2>
-  <p>Add this to your server <code>.env</code> as <code>GOOGLE_DEMO_REFRESH_TOKEN</code>, then restart the server.</p>
+  <h2>Platform Google refresh token</h2>
+  <p>This token is used for demo calls <strong>and</strong> for every session's Google Meet link.</p>
+  <p>Add it to your server <code>.env</code> as <code>GOOGLE_DEMO_REFRESH_TOKEN</code>, then restart the server.</p>
+  ${scopeNotice}
   <textarea readonly style="width:100%; height:120px; font-family:monospace; font-size:12px;">${refresh_token}</textarea>
   <p><strong>Keep this token private.</strong> Do not commit it to git.</p>
   <p><a href="/api/demo/oauth-start">Get a new token</a></p>
