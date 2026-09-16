@@ -23,6 +23,19 @@ interface PaymentHistory {
     status: string;
 }
 
+interface PayoutSettings {
+    method: 'STRIPE' | 'ZELLE' | 'BANK_TRANSFER' | null;
+    stripe_connected: boolean;
+    zelle_contact: string | null;
+    bank: {
+        bank_name: string | null;
+        account_name: string | null;
+        account_number: string | null;
+        routing: string | null;
+        notes: string | null;
+    };
+}
+
 interface WalletEarning {
     id: string;
     lesson_id: string;
@@ -67,6 +80,10 @@ const PaymentsPage: React.FC = () => {
     const [paymentHistory, setPaymentHistory] = useState<PaymentHistory[]>([]);
     const [upcomingPayments, setUpcomingPayments] = useState<UpcomingPayment[]>([]);
     const [walletEarnings, setWalletEarnings] = useState<WalletEarnings | null>(null);
+    const [payoutSettings, setPayoutSettings] = useState<PayoutSettings | null>(null);
+    const [payoutForm, setPayoutForm] = useState({ method: '' as string, zelle_contact: '', bank_name: '', bank_account_name: '', bank_account_number: '', bank_routing: '', bank_notes: '' });
+    const [payoutSaveBusy, setPayoutSaveBusy] = useState(false);
+    const [payoutSaveMsg, setPayoutSaveMsg] = useState('');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [currentPage, setCurrentPage] = useState(1);
@@ -81,6 +98,23 @@ const PaymentsPage: React.FC = () => {
         api.get('/wallet/mentor/earnings')
             .then((r) => setWalletEarnings(r.data || null))
             .catch(() => setWalletEarnings(null));
+        api.get('/wallet/mentor/payout-settings')
+            .then((r) => {
+                const st = r.data as PayoutSettings;
+                setPayoutSettings(st || null);
+                if (st) {
+                    setPayoutForm({
+                        method: st.method || (st.stripe_connected ? 'STRIPE' : ''),
+                        zelle_contact: st.zelle_contact || '',
+                        bank_name: st.bank?.bank_name || '',
+                        bank_account_name: st.bank?.account_name || '',
+                        bank_account_number: st.bank?.account_number || '',
+                        bank_routing: st.bank?.routing || '',
+                        bank_notes: st.bank?.notes || '',
+                    });
+                }
+            })
+            .catch(() => setPayoutSettings(null));
 
         try {
             setLoading(true);
@@ -112,6 +146,22 @@ const PaymentsPage: React.FC = () => {
             setTotalPages(1);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const savePayoutSettings = async () => {
+        if (!payoutForm.method) { setPayoutSaveMsg('Please choose a payout method first.'); return; }
+        setPayoutSaveBusy(true);
+        setPayoutSaveMsg('');
+        try {
+            const res = await api.put('/wallet/mentor/payout-settings', payoutForm);
+            setPayoutSettings(res.data || null);
+            setPayoutSaveMsg('Saved — your monthly payouts will use this method.');
+        } catch (e) {
+            const err = e as { response?: { data?: { error?: string } } };
+            setPayoutSaveMsg(err?.response?.data?.error || 'Failed to save payout settings.');
+        } finally {
+            setPayoutSaveBusy(false);
         }
     };
 
@@ -219,6 +269,95 @@ const PaymentsPage: React.FC = () => {
                                     {formatCurrency(overview.pendingBalance)}
                                 </div>
                             </div>
+                        </div>
+                    </Card>
+                )}
+
+                {/* Payout method */}
+                {payoutSettings && (
+                    <Card className="p-6">
+                        <h2 className="text-xl font-semibold text-gray-900 mb-1">🏦 How you get paid</h2>
+                        <p className="text-sm text-gray-500 mb-4">
+                            Your Learning Credit earnings are paid out once a month. Choose how you'd like to receive them.
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            {([
+                                { key: 'STRIPE', title: 'Stripe (automatic)', desc: payoutSettings.stripe_connected ? 'Connected — sent to your bank automatically on the 1st.' : 'Requires connecting your Stripe account first.' },
+                                { key: 'ZELLE', title: 'Zelle', desc: 'The EmpowerEd team sends your payout via Zelle each month.' },
+                                { key: 'BANK_TRANSFER', title: 'Bank transfer', desc: 'The EmpowerEd team sends a manual bank transfer each month.' },
+                            ] as const).map((opt) => (
+                                <button
+                                    key={opt.key}
+                                    type="button"
+                                    onClick={() => setPayoutForm((f) => ({ ...f, method: opt.key }))}
+                                    className={`text-left rounded-xl border p-4 transition-colors ${payoutForm.method === opt.key ? 'border-purple-500 ring-2 ring-purple-200 bg-purple-50/50' : 'border-gray-200 hover:border-gray-300 bg-white'}`}
+                                >
+                                    <div className="font-semibold text-gray-900 text-sm">{opt.title}</div>
+                                    <div className="text-xs text-gray-500 mt-1">{opt.desc}</div>
+                                </button>
+                            ))}
+                        </div>
+
+                        {payoutForm.method === 'STRIPE' && !payoutSettings.stripe_connected && (
+                            <p className="mt-4 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                                You haven't connected Stripe yet — set it up on the{' '}
+                                <a href="/connect-account" className="underline font-medium">Connect Account</a> page, then come back and save.
+                            </p>
+                        )}
+
+                        {payoutForm.method === 'ZELLE' && (
+                            <div className="mt-4 max-w-sm">
+                                <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Zelle email or US phone number</label>
+                                <input
+                                    type="text"
+                                    value={payoutForm.zelle_contact}
+                                    onChange={(e) => setPayoutForm((f) => ({ ...f, zelle_contact: e.target.value }))}
+                                    placeholder="you@example.com or +1 555 123 4567"
+                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                                />
+                            </div>
+                        )}
+
+                        {payoutForm.method === 'BANK_TRANSFER' && (
+                            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3 max-w-2xl">
+                                {([
+                                    ['bank_name', 'Bank name', 'e.g. Chase'],
+                                    ['bank_account_name', 'Account holder name', 'Name on the account'],
+                                    ['bank_account_number', 'Account number / IBAN', ''],
+                                    ['bank_routing', 'Routing / SWIFT (if applicable)', ''],
+                                ] as const).map(([key, label, ph]) => (
+                                    <div key={key}>
+                                        <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">{label}</label>
+                                        <input
+                                            type="text"
+                                            value={payoutForm[key]}
+                                            onChange={(e) => setPayoutForm((f) => ({ ...f, [key]: e.target.value }))}
+                                            placeholder={ph}
+                                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                                        />
+                                    </div>
+                                ))}
+                                <div className="md:col-span-2">
+                                    <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Extra instructions (country, branch, etc.)</label>
+                                    <input
+                                        type="text"
+                                        value={payoutForm.bank_notes}
+                                        onChange={(e) => setPayoutForm((f) => ({ ...f, bank_notes: e.target.value }))}
+                                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                                    />
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="mt-4 flex items-center gap-3 flex-wrap">
+                            <button
+                                onClick={savePayoutSettings}
+                                disabled={payoutSaveBusy || !payoutForm.method || (payoutForm.method === 'STRIPE' && !payoutSettings.stripe_connected)}
+                                className="px-4 py-2 bg-purple-700 text-white rounded-lg hover:bg-purple-800 transition-colors text-sm font-medium disabled:opacity-50"
+                            >
+                                {payoutSaveBusy ? 'Saving…' : 'Save payout method'}
+                            </button>
+                            {payoutSaveMsg && <span className="text-sm text-gray-700">{payoutSaveMsg}</span>}
                         </div>
                     </Card>
                 )}

@@ -211,6 +211,15 @@ model TutorProfile {
   wallet_disputes            SessionDispute[]
   wallet_payouts             MentorPayout[]
 
+  // How this mentor wants to be paid their Learning Credit earnings.
+  payout_method              PayoutMethod? // null = not chosen yet (Stripe used if connected)
+  payout_zelle_contact       String? // Zelle email or US phone number
+  payout_bank_name           String?
+  payout_bank_account_name   String?
+  payout_bank_account_number String?
+  payout_bank_routing        String? // Routing / IBAN / SWIFT as applicable
+  payout_bank_notes          String? // Country, branch, or any extra instructions
+
   @@index([stripe_subscription_id])
   @@index([stripe_customer_id])
   @@index([stripe_account_id])
@@ -966,6 +975,12 @@ model SessionDispute {
   @@index([tutor_id])
 }
 
+enum PayoutMethod {
+  STRIPE // Automatic monthly Stripe Connect transfer
+  ZELLE // Admin sends via Zelle and records it with proof
+  BANK_TRANSFER // Admin sends a manual bank transfer and records it with proof
+}
+
 enum PayoutStatus {
   PENDING // Created; Stripe transfer not yet attempted/confirmed
   TRANSFERRED // Stripe transfer to the connected account succeeded
@@ -990,6 +1005,8 @@ model MentorPayout {
   failure_reason     String?
   note               String?
   created_by_user_id String? // Admin who triggered/recorded it (null for the scheduler)
+  method             PayoutMethod?
+  proof_url          String? // Uploaded proof of a manual transfer (screenshot / PDF)
 
   created_at DateTime  @default(now())
   paid_at    DateTime?

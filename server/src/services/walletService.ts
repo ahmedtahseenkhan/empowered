@@ -1,5 +1,5 @@
 import prisma from '../config/db';
-import { Prisma, CreditSource, CreditTransactionType } from '@prisma/client';
+import { Prisma, CreditSource, CreditTransactionType, PayoutMethod } from '@prisma/client';
 import { StripeService } from './stripeService';
 
 /**
@@ -540,11 +540,22 @@ export async function listDisputes(status?: 'OPEN' | 'RESOLVED_REFUNDED' | 'RESO
     });
 }
 
-/** Manual payout outside Stripe: mark a mentor's AVAILABLE earnings as PAID with a reference note. */
-export async function markEarningsPaid(args: { tutorId: string; note: string; adminUserId: string }) {
+/** Manual payout outside automatic Stripe settlement (Zelle / bank transfer / one-off Stripe):
+ *  marks the mentor's AVAILABLE earnings as PAID with a reference note and proof upload. */
+export async function markEarningsPaid(args: {
+    tutorId: string;
+    note: string;
+    adminUserId: string;
+    method?: 'STRIPE' | 'ZELLE' | 'BANK_TRANSFER';
+    proofUrl?: string;
+}) {
     const note = (args.note || '').trim();
     if (!note) throw new WalletError('A payout reference / note is required');
+    const proofUrl = (args.proofUrl || '').trim() || null;
     return prisma.$transaction(async (tx) => {
+        const tutor = await tx.tutorProfile.findUnique({ where: { id: args.tutorId }, select: { payout_method: true } });
+        if (!tutor) throw new WalletError('Tutor not found', 404);
+        const method: PayoutMethod = args.method || tutor.payout_method || 'BANK_TRANSFER';
         const sum = await tx.mentorEarning.aggregate({
             where: { tutor_id: args.tutorId, status: 'AVAILABLE', payout_id: null },
             _sum: { net_cents: true },
@@ -558,6 +569,8 @@ export async function markEarningsPaid(args: { tutorId: string; note: string; ad
                 amount_cents: sum._sum.net_cents || 0,
                 earnings_count: sum._count._all,
                 status: 'MANUAL',
+                method,
+                proof_url: proofUrl,
                 note,
                 created_by_user_id: args.adminUserId,
                 paid_at: now(),
@@ -580,12 +593,12 @@ export async function listMentorEarningsForAdmin() {
     const tutorIds = Array.from(new Set(rows.map((r) => r.tutor_id)));
     const tutors = await prisma.tutorProfile.findMany({
         where: { id: { in: tutorIds } },
-        select: { id: true, username: true, stripe_account_id: true, user: { select: { email: true } } },
+        select: { id: true, username: true, user: { select: { email: true } }, ...PAYOUT_SETTINGS_SELECT },
     });
     const byTutor = new Map<string, any>();
     for (const t of tutors) {
         byTutor.set(t.id, {
-            tutor: t,
+            tutor: { id: t.id, username: t.username, user: t.user, stripe_account_id: t.stripe_account_id, payout: shapePayoutSettings(t) },
             totals: {} as Record<string, { count: number; net_cents: number; gross_cents: number; fee_cents: number; promo_cents: number }>,
         });
     }
@@ -686,6 +699,102 @@ export async function handleCardDisputeOnPurchase(paymentIntentId: string) {
 }
 
 // ---------------------------------------------------------------------------
+// Mentor payout method (Stripe / Zelle / manual bank transfer)
+// ---------------------------------------------------------------------------
+
+const PAYOUT_SETTINGS_SELECT = {
+    payout_method: true,
+    payout_zelle_contact: true,
+    payout_bank_name: true,
+    payout_bank_account_name: true,
+    payout_bank_account_number: true,
+    payout_bank_routing: true,
+    payout_bank_notes: true,
+    stripe_account_id: true,
+} as const;
+
+function shapePayoutSettings(t: {
+    payout_method: PayoutMethod | null;
+    payout_zelle_contact: string | null;
+    payout_bank_name: string | null;
+    payout_bank_account_name: string | null;
+    payout_bank_account_number: string | null;
+    payout_bank_routing: string | null;
+    payout_bank_notes: string | null;
+    stripe_account_id: string | null;
+}) {
+    return {
+        method: t.payout_method, // null = not chosen (Stripe used automatically if connected)
+        stripe_connected: !!t.stripe_account_id,
+        zelle_contact: t.payout_zelle_contact,
+        bank: {
+            bank_name: t.payout_bank_name,
+            account_name: t.payout_bank_account_name,
+            account_number: t.payout_bank_account_number,
+            routing: t.payout_bank_routing,
+            notes: t.payout_bank_notes,
+        },
+    };
+}
+
+export async function getMentorPayoutSettings(tutorId: string) {
+    const t = await prisma.tutorProfile.findUnique({ where: { id: tutorId }, select: PAYOUT_SETTINGS_SELECT });
+    if (!t) throw new WalletError('Tutor not found', 404);
+    return shapePayoutSettings(t);
+}
+
+export async function updateMentorPayoutSettings(tutorId: string, args: {
+    method: 'STRIPE' | 'ZELLE' | 'BANK_TRANSFER';
+    zelle_contact?: string;
+    bank_name?: string;
+    bank_account_name?: string;
+    bank_account_number?: string;
+    bank_routing?: string;
+    bank_notes?: string;
+}) {
+    const method = args.method;
+    if (method !== 'STRIPE' && method !== 'ZELLE' && method !== 'BANK_TRANSFER') {
+        throw new WalletError('method must be STRIPE, ZELLE or BANK_TRANSFER');
+    }
+    const clean = (v?: string, max = 200) => {
+        const t = (v || '').trim();
+        return t ? t.slice(0, max) : null;
+    };
+
+    const tutor = await prisma.tutorProfile.findUnique({ where: { id: tutorId }, select: { stripe_account_id: true } });
+    if (!tutor) throw new WalletError('Tutor not found', 404);
+
+    if (method === 'STRIPE' && !tutor.stripe_account_id) {
+        throw new WalletError('Connect your Stripe account first (Connect Account page), then choose Stripe payouts.');
+    }
+    const zelle = clean(args.zelle_contact, 120);
+    if (method === 'ZELLE' && !zelle) {
+        throw new WalletError('Please enter the email address or US phone number registered with Zelle.');
+    }
+    const bankName = clean(args.bank_name);
+    const bankAccountName = clean(args.bank_account_name);
+    const bankAccountNumber = clean(args.bank_account_number, 60);
+    if (method === 'BANK_TRANSFER' && (!bankName || !bankAccountName || !bankAccountNumber)) {
+        throw new WalletError('Bank name, account holder name and account number are required for bank transfers.');
+    }
+
+    const t = await prisma.tutorProfile.update({
+        where: { id: tutorId },
+        data: {
+            payout_method: method,
+            payout_zelle_contact: zelle,
+            payout_bank_name: bankName,
+            payout_bank_account_name: bankAccountName,
+            payout_bank_account_number: bankAccountNumber,
+            payout_bank_routing: clean(args.bank_routing, 60),
+            payout_bank_notes: clean(args.bank_notes, 500),
+        },
+        select: PAYOUT_SETTINGS_SELECT,
+    });
+    return shapePayoutSettings(t);
+}
+
+// ---------------------------------------------------------------------------
 // Phase 2: monthly settlement (real money out)
 // ---------------------------------------------------------------------------
 
@@ -727,10 +836,17 @@ export async function runMonthlySettlement(args: { triggeredBy: string; force?: 
         const sum = g._sum.net_cents || 0;
         const tutor = await prisma.tutorProfile.findUnique({
             where: { id: g.tutor_id },
-            select: { id: true, username: true, stripe_account_id: true },
+            select: { id: true, username: true, stripe_account_id: true, payout_method: true },
         });
         if (!tutor) continue;
 
+        // Mentors who chose Zelle or a manual bank transfer are paid by an admin
+        // (Record payout with proof); the scheduler leaves their balance alone.
+        if (tutor.payout_method && tutor.payout_method !== 'STRIPE') {
+            skipped += 1;
+            results.push({ tutor_id: g.tutor_id, status: 'manual_method', amount_cents: sum, reason: `Paid manually via ${tutor.payout_method === 'ZELLE' ? 'Zelle' : 'bank transfer'}` });
+            continue;
+        }
         if (!tutor.stripe_account_id) {
             skipped += 1;
             results.push({ tutor_id: g.tutor_id, status: 'skipped', amount_cents: sum, reason: 'No Stripe account connected' });
@@ -775,7 +891,7 @@ export async function runMonthlySettlement(args: { triggeredBy: string; force?: 
             await prisma.$transaction([
                 prisma.mentorPayout.update({
                     where: { id: payout.id },
-                    data: { status: 'TRANSFERRED', amount_cents: amount, earnings_count: claimed._count._all, stripe_transfer_id: transfer.id },
+                    data: { status: 'TRANSFERRED', amount_cents: amount, earnings_count: claimed._count._all, stripe_transfer_id: transfer.id, method: 'STRIPE' },
                 }),
                 prisma.mentorEarning.updateMany({
                     where: { payout_id: payout.id },
@@ -852,8 +968,11 @@ export async function getMentorEarnings(tutorId: string) {
     const sum = (statuses: string[], field: 'net_cents' | 'gross_cents' | 'fee_cents') =>
         earnings.filter((e) => statuses.includes(e.status)).reduce((acc, e) => acc + e[field], 0);
 
+    const settings = await prisma.tutorProfile.findUnique({ where: { id: tutorId }, select: PAYOUT_SETTINGS_SELECT });
+
     return {
         config: publicConfig(),
+        payout_settings: settings ? shapePayoutSettings(settings) : null,
         totals: {
             pending_cents: sum(['PENDING', 'ON_HOLD'], 'net_cents'),
             on_hold_cents: sum(['ON_HOLD'], 'net_cents'),

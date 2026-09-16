@@ -11,6 +11,8 @@ import {
     cancelCreditsLesson,
     reportSessionProblem,
     getMentorWalletEarnings,
+    getMentorPayoutSettings,
+    updateMentorPayoutSettings,
 } from '../controllers/walletController';
 
 const router = express.Router();
@@ -30,5 +32,7 @@ router.post('/lessons/:lessonId/report', reportSessionProblem);
 
 // Mentor
 router.get('/mentor/earnings', getMentorWalletEarnings);
+router.get('/mentor/payout-settings', getMentorPayoutSettings);
+router.put('/mentor/payout-settings', updateMentorPayoutSettings);
 
 export default router;
