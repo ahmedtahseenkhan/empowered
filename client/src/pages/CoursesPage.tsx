@@ -128,12 +128,6 @@ const CoursesPage: React.FC = () => {
                         </Button>
                     </div>
 
-                    {/* Premium Feature Notice */}
-                    <div className="bg-gradient-to-r from-yellow-50 to-yellow-100 border-l-4 border-yellow-500 p-4 rounded-lg">
-                        <p className="text-yellow-800">
-                            <strong>Premium feature:</strong> Premium members can create multiple courses, showcase them, and sell directly from their profile.
-                        </p>
-                    </div>
                 </div>
 
                 {/* Search and Count */}

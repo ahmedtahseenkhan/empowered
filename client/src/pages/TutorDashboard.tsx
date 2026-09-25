@@ -11,6 +11,7 @@ import { useAuth } from '../context/AuthContext';
 import api from '../api/axios';
 import { Modal } from '../components/ui/Modal';
 import { Input } from '../components/ui/Input';
+import { SESSION_MINUTES, SLOT_STEP_MINUTES } from '../constants/session';
 
 // ─── Stat Card ────────────────────────────────────────────────────────────────
 const StatCard = ({
@@ -170,7 +171,7 @@ const TutorDashboard: React.FC = () => {
             api.get('/lessons/me', { params: { from: from.toISOString(), to: to.toISOString() } }),
             api.get('/scheduling/me/blocks', { params: { from: from.toISOString(), to: to.toISOString() } }),
             viewMode === 'week'
-                ? api.get(`/availability/tutor/${profile.id}/slots`, { params: { from: from.toISOString(), to: to.toISOString(), durationMinutes: 60, stepMinutes: 60 } })
+                ? api.get(`/availability/tutor/${profile.id}/slots`, { params: { from: from.toISOString(), to: to.toISOString(), durationMinutes: SESSION_MINUTES, stepMinutes: SLOT_STEP_MINUTES } })
                 : Promise.resolve({ data: { slots: [] } } as any),
         ]).catch(() => [{ data: { lessons: [] } }, { data: { blocks: [] } }, { data: { slots: [] } }]);
 
@@ -330,6 +331,7 @@ const TutorDashboard: React.FC = () => {
     }
     const lessonsByDayKey = new Map<string, { total: number; free: number; paid: number }>();
     for (const l of lessons) {
+        if (l.status === 'CANCELLED') continue;
         const d = new Date(l.start_time);
         const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
         const cur = lessonsByDayKey.get(key) || { total: 0, free: 0, paid: 0 };
@@ -357,6 +359,19 @@ const TutorDashboard: React.FC = () => {
 
     const hour12 = (d: Date) => d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12: true });
 
+    const greeting = (() => {
+        let hour = new Date().getHours();
+        try {
+            if (profile?.timezone && profile.timezone !== 'UTC') {
+                hour = Number(new Intl.DateTimeFormat('en-US', { hour: 'numeric', hourCycle: 'h23', timeZone: profile.timezone }).format(new Date()));
+            }
+        } catch { /* invalid timezone: keep browser time */ }
+        if (hour < 5) return 'Good evening';
+        if (hour < 12) return 'Good morning';
+        if (hour < 17) return 'Good afternoon';
+        return 'Good evening';
+    })();
+
     return (
         <DashboardLayout>
             <div className="space-y-6">
@@ -365,7 +380,7 @@ const TutorDashboard: React.FC = () => {
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div>
                         <h1 className="text-2xl font-bold text-gray-900">
-                            Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'}, {user?.username?.split(' ')[0] || 'Mentor'} 👋
+                            {greeting}, {user?.username?.split(' ')[0] || 'Mentor'} 👋
                         </h1>
                         <div className="flex items-center gap-2 mt-1 flex-wrap">
                             <span className="text-xs font-semibold bg-purple-100 text-purple-800 px-2.5 py-0.5 rounded-full">
@@ -649,12 +664,14 @@ const TutorDashboard: React.FC = () => {
                                                             if (sm < 0 || em > (endHour - startHour) * 60) return null;
                                                             const top = sm / 60 * 56;
                                                             const height = Math.max(24, (em - sm) / 60 * 56);
+                                                            const isCancelled = l.status === 'CANCELLED';
+                                                            const isCompleted = l.status === 'COMPLETED';
                                                             const isFree = l.billing_type === 'FREE_INTRO';
                                                             const isPending = l.status === 'PENDING' || l.status === 'BOOKED' || l.billing_type === 'FREE_TRIAL';
 
-                                                            const bg = isFree ? 'bg-emerald-500' : isPending ? 'bg-amber-500' : 'bg-purple-600';
-                                                            const pill = isFree ? 'Free intro' : isPending ? 'Pending' : 'Paid';
-                                                            const pillBg = isFree ? 'bg-emerald-400/40' : isPending ? 'bg-amber-400/40' : 'bg-purple-500/40';
+                                                            const bg = isCancelled ? 'bg-gray-300 line-through' : isFree ? 'bg-emerald-500' : isCompleted ? 'bg-purple-600' : isPending ? 'bg-amber-500' : 'bg-purple-600';
+                                                            const pill = isCancelled ? 'Cancelled' : isFree ? 'Free intro' : isCompleted ? 'Completed' : isPending ? 'Booked' : 'Paid';
+                                                            const pillBg = isCancelled ? 'bg-gray-400/40' : isFree ? 'bg-emerald-400/40' : isPending && !isCompleted ? 'bg-amber-400/40' : 'bg-purple-500/40';
 
                                                             return (
                                                                 <div key={l.id}

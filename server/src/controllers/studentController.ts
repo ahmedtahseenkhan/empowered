@@ -1,6 +1,34 @@
 import { Response } from 'express';
 import prisma from '../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
+import { LessonSummary, emptyLessonSummary, addLessonToSummary, serializeLessonSummary } from '../utils/lessonSummary';
+
+export const getMyProfile = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user?.id;
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+        if (req.user?.role !== 'STUDENT') return res.status(403).json({ error: 'Only students can access this resource' });
+
+        const student = await prisma.studentProfile.findUnique({
+            where: { user_id: userId },
+            select: {
+                id: true,
+                username: true,
+                profile_photo: true,
+                learning_goals: true,
+                grade_level: true,
+                date_of_birth: true,
+                preferences: true,
+            },
+        });
+        if (!student) return res.status(404).json({ error: 'Student profile not found' });
+
+        return res.json(student);
+    } catch (e) {
+        console.error('getMyProfile error:', e);
+        return res.status(500).json({ error: 'Failed to fetch profile' });
+    }
+};
 
 export const getMyMentors = async (req: AuthRequest, res: Response) => {
     try {
@@ -59,52 +87,29 @@ export const getMyMentors = async (req: AuthRequest, res: Response) => {
                     tier: string | null;
                     email: string | null;
                 };
-                totalLessons: number;
-                nextSessionStart: Date | null;
-                lastSessionStart: Date | null;
+                summary: LessonSummary;
             }
         >();
 
         for (const l of lessons) {
-            const tid = l.tutor_id;
-            const start = l.start_time;
-            const existing = byTutor.get(tid);
-
-            if (!existing) {
-                byTutor.set(tid, {
+            let entry = byTutor.get(l.tutor_id);
+            if (!entry) {
+                entry = {
                     tutor: {
                         ...l.tutor,
                         email: l.tutor.user.email
                     },
-                    totalLessons: 1,
-                    nextSessionStart: start > now ? start : null,
-                    lastSessionStart: start <= now ? start : null,
-                });
-                continue;
+                    summary: emptyLessonSummary(),
+                };
+                byTutor.set(l.tutor_id, entry);
             }
-
-            existing.totalLessons += 1;
-
-            if (start > now) {
-                if (!existing.nextSessionStart || start < existing.nextSessionStart) {
-                    existing.nextSessionStart = start;
-                }
-            } else {
-                if (!existing.lastSessionStart || start > existing.lastSessionStart) {
-                    existing.lastSessionStart = start;
-                }
-            }
+            addLessonToSummary(entry.summary, l, now);
         }
 
         const mentors = Array.from(byTutor.values())
             .map((m) => ({
-                ...m,
-                tutor: {
-                    ...m.tutor,
-                    email: m.tutor.email
-                },
-                nextSessionStart: m.nextSessionStart ? m.nextSessionStart.toISOString() : null,
-                lastSessionStart: m.lastSessionStart ? m.lastSessionStart.toISOString() : null,
+                tutor: m.tutor,
+                ...serializeLessonSummary(m.summary),
             }))
             .sort((a, b) => {
                 const aNext = a.nextSessionStart ? new Date(a.nextSessionStart).getTime() : Infinity;

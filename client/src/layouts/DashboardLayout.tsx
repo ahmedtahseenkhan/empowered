@@ -26,6 +26,7 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
     const location = useLocation();
     const photoFetched = useRef(false);
     const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
+    const [reviewStats, setReviewStats] = useState<{ rating: number; count: number } | null>(null);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [showMobileNotice, setShowMobileNotice] = useState(
         () => typeof window !== 'undefined' && localStorage.getItem('dismissedMobileNotice') !== '1',
@@ -43,10 +44,16 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
     // Fetch profile photo once per mount
     useEffect(() => {
         if (photoFetched.current || !user) return;
+        if (user.role !== 'STUDENT' && user.role !== 'TUTOR') return;
         photoFetched.current = true;
         const endpoint = user.role === 'STUDENT' ? '/student/me' : '/tutor/me';
         api.get(endpoint)
-            .then(res => setProfilePhoto(res.data?.profile_photo || null))
+            .then(res => {
+                setProfilePhoto(res.data?.profile_photo || null);
+                if (user.role === 'TUTOR') {
+                    setReviewStats({ rating: Number(res.data?.rating) || 0, count: Number(res.data?.review_count) || 0 });
+                }
+            })
             .catch(() => {});
     }, [user]);
 
@@ -65,8 +72,8 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
             { icon: <Wallet className="w-5 h-5" />, label: 'My Credits', path: '/student/wallet' },
             { icon: <BookOpen className="w-5 h-5" />, label: 'My Courses', path: '/student/my-courses' },
             { icon: <Users className="w-5 h-5" />, label: 'My Mentors', path: '/student/my-mentors' },
-            { icon: <BookOpen className="w-5 h-5" />, label: 'Notes from Mentor', path: '/student/notes' },
-            { icon: <Users className="w-5 h-5" />, label: 'Find Your Perfect Mentor', path: '/student/mentors' },
+            { icon: <BookOpen className="w-5 h-5" />, label: 'Notes & Homework', path: '/student/notes' },
+            { icon: <Users className="w-5 h-5" />, label: 'Find a Mentor', path: '/student/mentors' },
         ]
         : [
             { icon: <User className="w-5 h-5" />, label: 'Dashboard', path: '/dashboard' },
@@ -146,7 +153,12 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
                         )}
                         <div className="min-w-0 flex-1">
                             <p className="text-sm font-medium text-gray-900 truncate">{user?.username || 'User'}</p>
-                            <p className="text-xs text-gray-500">★ 0 reviews</p>
+                            {reviewStats && (
+                                <p className="text-xs text-gray-500">
+                                    ★ {reviewStats.count > 0 ? `${reviewStats.rating.toFixed(1)} · ` : ''}
+                                    {reviewStats.count} review{reviewStats.count !== 1 ? 's' : ''}
+                                </p>
+                            )}
                             {user?.role !== 'STUDENT' && (
                                 <Link to="/profile/preview" className="text-xs text-primary-600 hover:text-primary-700 font-medium mt-1 inline-block">
                                     View my profile

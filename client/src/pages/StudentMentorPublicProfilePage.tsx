@@ -7,6 +7,8 @@ import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { Award, Star } from 'lucide-react';
 import { MentorSocialLinks } from '../components/common/MentorSocialLinks';
+import { SESSION_MINUTES, SLOT_STEP_MINUTES } from '../constants/session';
+import { parseKeyStrengths } from '../utils/strengths';
 
 type PublicTutorProfile = {
     id: string;
@@ -154,8 +156,7 @@ const StudentMentorPublicProfilePage: React.FC = () => {
     }, [mentor?.id, mentor?.free_session_enabled, isPreview]);
 
     const strengths = useMemo(() => {
-        if (!mentor?.key_strengths) return [];
-        return mentor.key_strengths.split(',').map(s => s.trim()).filter(Boolean);
+        return parseKeyStrengths(mentor?.key_strengths);
     }, [mentor?.key_strengths]);
 
     const categoryGroups = useMemo(() => {
@@ -307,8 +308,8 @@ const StudentMentorPublicProfilePage: React.FC = () => {
                     params: {
                         from: from.toISOString(),
                         to: to.toISOString(),
-                        durationMinutes: 60,
-                        stepMinutes: 60,
+                        durationMinutes: SESSION_MINUTES,
+                        stepMinutes: SLOT_STEP_MINUTES,
                     }
                 });
 
@@ -496,7 +497,7 @@ const StudentMentorPublicProfilePage: React.FC = () => {
                                     <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
                                         <div className="text-xs text-gray-600">Rating</div>
                                         <div className="text-lg font-extrabold text-gray-900">{mentor.rating || 0}</div>
-                                        <div className="text-xs text-gray-500">({mentor.review_count} reviews)</div>
+                                        <div className="text-xs text-gray-500">({mentor.review_count} review{mentor.review_count !== 1 ? 's' : ''})</div>
                                     </div>
                                     <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
                                         <div className="text-xs text-gray-600">Experience</div>

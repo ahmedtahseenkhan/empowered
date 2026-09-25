@@ -16,7 +16,8 @@ interface PaymentHistory {
     id: string;
     date: string;
     studentName: string;
-    sessionDate: string;
+    sessionDate: string | null;
+    lessonStatus?: string | null;
     amountCharged: number;
     tutorEarnings: number;
     platformFee: number;
@@ -55,12 +56,26 @@ interface WalletEarnings {
 interface UpcomingPayment {
     id: string;
     studentName: string;
-    sessionDate: string;
+    sessionDate: string | null;
     expectedAmount: number;
     tutorWillReceive: number;
     paymentDueDate: string;
 }
 
+// "paid" means the student's card was charged — not that the mentor was paid out.
+const PaymentStatusBadge: React.FC<{ payment: PaymentHistory }> = ({ payment }) => {
+    if (payment.lessonStatus === 'CANCELLED') {
+        return (
+            <span className="px-2 py-1 bg-amber-100 text-amber-800 rounded-full text-xs whitespace-nowrap">
+                Charged · session cancelled
+            </span>
+        );
+    }
+    if (payment.status === 'paid') {
+        return <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs whitespace-nowrap">Student charged</span>;
+    }
+    return <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded-full text-xs whitespace-nowrap capitalize">{payment.status}</span>;
+};
 
 const PaymentsPage: React.FC = () => {
     const [overview, setOverview] = useState<EarningsOverview | null>(null);
@@ -143,7 +158,8 @@ const PaymentsPage: React.FC = () => {
         }).format(validAmount);
     };
 
-    const formatDate = (dateString: string) => {
+    const formatDate = (dateString: string | null) => {
+        if (!dateString) return '—';
         return new Date(dateString).toLocaleDateString('en-US', {
             year: 'numeric',
             month: 'short',
@@ -165,10 +181,10 @@ const PaymentsPage: React.FC = () => {
         return (
             <DashboardLayout>
                 <div className="w-full flex flex-col items-center justify-center min-h-[400px]">
-                    <div className="text-red-600 text-lg mb-4">⚠️ {error}</div>
+                    <div className="text-red-600 text-lg mb-4">{error}</div>
                     <button
                         onClick={() => fetchAllData()}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                        className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
                     >
                         Retry
                     </button>
@@ -184,7 +200,7 @@ const PaymentsPage: React.FC = () => {
                     <h1 className="text-3xl font-bold text-gray-900">Payments</h1>
                     <button
                         onClick={handleExportCSV}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                        className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
                     >
                         Export CSV
                     </button>
@@ -193,7 +209,10 @@ const PaymentsPage: React.FC = () => {
                 {/* Earnings Overview */}
                 {overview && (
                     <Card className="p-6">
-                        <h2 className="text-xl font-semibold text-gray-900 mb-4">💰 Earnings Overview</h2>
+                        <h2 className="text-xl font-semibold text-gray-900">Card Payment Earnings</h2>
+                        <p className="text-sm text-gray-500 mt-1 mb-4">
+                            Sessions paid by card. Students pay your rate plus a 10% platform fee; you receive your full rate. Balances come from your Stripe account.
+                        </p>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                             <div className="bg-blue-50 p-4 rounded-lg">
                                 <div className="text-sm text-gray-600 mb-1">Total Earnings</div>
@@ -228,7 +247,7 @@ const PaymentsPage: React.FC = () => {
                     <Card className="p-6">
                         <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
                             <div>
-                                <h2 className="text-xl font-semibold text-gray-900">🎓 Learning Credit Earnings</h2>
+                                <h2 className="text-xl font-semibold text-gray-900">Learning Credit Earnings</h2>
                                 <p className="text-sm text-gray-500 mt-1">
                                     Sessions paid with Learning Credits. Earnings become payout-ready after a {walletEarnings.config.settlementDays}-day settlement &amp; review period.
                                     A {walletEarnings.config.feePercent}% Payment &amp; Settlement Fee is applied to each completed session.
@@ -303,7 +322,7 @@ const PaymentsPage: React.FC = () => {
 
                 {/* Payment History */}
                 <Card className="p-6">
-                    <h2 className="text-xl font-semibold text-gray-900 mb-4">📋 Payment History</h2>
+                    <h2 className="text-xl font-semibold text-gray-900 mb-4">Card Payment History</h2>
 
                     {/* Mobile: stacked cards */}
                     <div className="md:hidden space-y-3">
@@ -314,9 +333,7 @@ const PaymentsPage: React.FC = () => {
                                 <div key={payment.id} className="border border-gray-200 rounded-xl p-4">
                                     <div className="flex items-center justify-between gap-2 mb-2">
                                         <span className="font-medium text-gray-900">{payment.studentName}</span>
-                                        <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs whitespace-nowrap">
-                                            ✅ {payment.status}
-                                        </span>
+                                        <PaymentStatusBadge payment={payment} />
                                     </div>
                                     <div className="flex justify-between text-sm py-0.5">
                                         <span className="text-gray-500">Paid on</span>
@@ -390,9 +407,7 @@ const PaymentsPage: React.FC = () => {
                                                 {formatCurrency(payment.tutorEarnings)}
                                             </td>
                                             <td className="px-4 py-4 text-sm">
-                                                <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs">
-                                                    ✅ {payment.status}
-                                                </span>
+                                                <PaymentStatusBadge payment={payment} />
                                             </td>
                                         </tr>
                                     ))
@@ -428,7 +443,7 @@ const PaymentsPage: React.FC = () => {
                 {/* Upcoming Expected Payments */}
                 {Array.isArray(upcomingPayments) && upcomingPayments.length > 0 && (
                     <Card className="p-6">
-                        <h2 className="text-xl font-semibold text-gray-900 mb-4">📅 Upcoming Expected Payments</h2>
+                        <h2 className="text-xl font-semibold text-gray-900 mb-4">Upcoming Expected Payments</h2>
 
                         {/* Mobile: stacked cards */}
                         <div className="md:hidden space-y-3">
@@ -506,7 +521,7 @@ const PaymentsPage: React.FC = () => {
                                 <span className="text-sm text-gray-600">Schedule:</span>
                                 <span className="text-sm text-gray-900">Automatic (Stripe)</span>
                             </div>
-                            <button className="w-full mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                            <button className="w-full mt-4 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors">
                                 Manage Payout Settings →
                             </button>
                         </div>

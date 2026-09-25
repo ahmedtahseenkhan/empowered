@@ -14,7 +14,7 @@ import {
     getMarketingVideoSubmission,
     upsertMarketingVideoSubmission
 } from '../controllers/tutorController';
-import { authenticateToken, optionalAuth } from '../middleware/authMiddleware'; // Assuming mock or real middleware
+import { authenticateToken, optionalAuth, requireRole } from '../middleware/authMiddleware';
 
 const router = express.Router();
 
@@ -26,6 +26,7 @@ router.get('/public', listPublicTutors);
 router.get('/public/:id', optionalAuth, getPublicTutorById);
 
 // Protected (Tutor)
+router.use('/me', authenticateToken, requireRole('TUTOR'));
 router.get('/me', authenticateToken, getProfile);
 router.get('/me/students', authenticateToken, getMyStudents);
 router.put('/me/bio', authenticateToken, updateBio);

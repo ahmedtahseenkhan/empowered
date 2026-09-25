@@ -38,7 +38,9 @@ When generating lectures or key points, format your response clearly using:
 - Numbered lists for step-by-step content
 - Bold text for important terms
 
-Always tailor content to be educationally appropriate and comprehensive.`;
+Always tailor content to be educationally appropriate and comprehensive.
+
+Never use bracketed placeholders such as [Your Name], [Mentor Name] or [Student Name]. Content may be sent to students as-is; if a name is needed and you don't know it, write around it or end without a signature.`;
 
 interface ChatMessage {
     role: 'user' | 'assistant';

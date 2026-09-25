@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { computeTutorAvailabilitySlots, computeFreeSessionSlots } from '../services/availability';
+import { SESSION_MINUTES, SLOT_STEP_MINUTES } from '../config/session';
 
 const parseISO = (value: string) => {
     const d = new Date(value);
@@ -38,8 +39,8 @@ export const getTutorAvailabilitySlots = async (req: Request, res: Response) => 
         const durationMinutesRaw = req.query.durationMinutes as string | undefined;
         const stepMinutesRaw = req.query.stepMinutes as string | undefined;
 
-        const durationMinutes = durationMinutesRaw ? Math.max(15, parseInt(durationMinutesRaw, 10)) : 60;
-        const stepMinutes = stepMinutesRaw ? Math.max(5, parseInt(stepMinutesRaw, 10)) : 60;
+        const durationMinutes = durationMinutesRaw ? Math.max(15, parseInt(durationMinutesRaw, 10)) : SESSION_MINUTES;
+        const stepMinutes = stepMinutesRaw ? Math.max(5, parseInt(stepMinutesRaw, 10)) : SLOT_STEP_MINUTES;
 
         const { slots } = await computeTutorAvailabilitySlots({
             tutorId,

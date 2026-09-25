@@ -13,6 +13,9 @@ interface MyStudent {
         email: string | null;
     };
     totalLessons: number;
+    completedLessons: number;
+    upcomingLessons: number;
+    firstSessionStart: string | null;
     nextSessionStart: string | null;
     lastSessionStart: string | null;
 }
@@ -84,9 +87,9 @@ const TutorStudentsPage: React.FC = () => {
                                         profilePhoto: s.student.profile_photo || undefined,
                                         category: 'Academic Tutoring',
                                         subCategory: s.student.grade_level || 'Grade Level N/A',
-                                        completedSessions: s.totalLessons,
-                                        pendingSessions: 0,
-                                        enrolledDate: formatDate(s.lastSessionStart) || 'N/A',
+                                        completedSessions: s.completedLessons,
+                                        pendingSessions: s.upcomingLessons,
+                                        enrolledDate: formatDate(s.firstSessionStart) || 'N/A',
                                         lastSessionDate: formatDate(s.lastSessionStart),
                                         nextSessionDate: formatDate(s.nextSessionStart),
                                         status: status

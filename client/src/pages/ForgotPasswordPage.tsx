@@ -111,7 +111,9 @@ const ForgotPasswordPage: React.FC = () => {
                                     value={newPassword}
                                     onChange={(e) => setNewPassword(e.target.value)}
                                     required
-                                    placeholder="Enter new password"
+                                    minLength={8}
+                                    autoComplete="new-password"
+                                    placeholder="At least 8 characters"
                                 />
 
                                 <Button type="submit" variant="primary" size="lg" className="w-full" disabled={loading}>

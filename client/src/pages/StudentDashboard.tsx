@@ -129,7 +129,10 @@ const StudentDashboard: React.FC = () => {
         gridStart.setDate(gridStart.getDate() - ((day + 6) % 7));
         const gridEnd = new Date(gridStart); gridEnd.setDate(gridEnd.getDate() + 42);
 
-        const selected = new Date(monthCursor); selected.setHours(0, 0, 0, 0);
+        // Select today when it falls in the shown month, otherwise the 1st
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const inMonth = today.getFullYear() === monthCursor.getFullYear() && today.getMonth() === monthCursor.getMonth();
+        const selected = inMonth ? today : new Date(monthCursor); selected.setHours(0, 0, 0, 0);
         setSelectedDayIso(selected.toISOString());
 
         api.get('/lessons/me', { params: { from: gridStart.toISOString(), to: gridEnd.toISOString() } })
@@ -300,7 +303,8 @@ const StudentDashboard: React.FC = () => {
                                     const isToday = d.toDateString() === new Date().toDateString();
                                     const isSelected = selectedDayIso === iso;
                                     const dayLessons = lessonsByDayIso.get(iso) || [];
-                                    const count = dayLessons.length;
+                                    const count = dayLessons.filter(l => String(l.status || '').toUpperCase() !== 'CANCELLED').length;
+                                    const cancelledCount = dayLessons.length - count;
                                     return (
                                         <button key={iso} type="button" onClick={() => setSelectedDayIso(iso)}
                                             className={`h-14 sm:h-[72px] p-1.5 sm:p-2 text-left border-r border-b border-gray-50 last:border-r-0 transition-colors
@@ -314,6 +318,11 @@ const StudentDashboard: React.FC = () => {
                                                 <div className={`inline-flex items-center text-[10px] px-1 sm:px-1.5 py-0.5 rounded-md font-semibold
                                                     ${count === 1 ? 'bg-purple-100 text-purple-800' : 'bg-purple-200 text-purple-900'}`}>
                                                     {count}<span className="hidden sm:inline">&nbsp;{count === 1 ? 'session' : 'sessions'}</span>
+                                                </div>
+                                            )}
+                                            {count === 0 && cancelledCount > 0 && (
+                                                <div className="inline-flex items-center text-[10px] px-1 sm:px-1.5 py-0.5 rounded-md font-medium bg-gray-100 text-gray-500 line-through">
+                                                    {cancelledCount}<span className="hidden sm:inline">&nbsp;cancelled</span>
                                                 </div>
                                             )}
                                         </button>

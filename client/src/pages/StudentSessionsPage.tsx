@@ -7,6 +7,10 @@ import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import SessionListCard from '../components/sessions/SessionListCard';
 import api from '../api/axios';
+import { SLOT_STEP_MINUTES } from '../constants/session';
+
+// Earliest date the Past tab looks back to (before the platform launched)
+const PAST_SESSIONS_FROM = '2020-01-01T00:00:00.000Z';
 
 const apiError = (e: unknown, fallback: string) =>
     (e as { response?: { data?: { error?: string } } })?.response?.data?.error || fallback;
@@ -21,7 +25,7 @@ type Lesson = {
     created_at?: string;
     status: string;
     billing_type?: 'FREE_TRIAL' | 'FREE_INTRO' | 'PAID';
-    payment_status?: 'paid' | 'pending' | 'failed' | 'not_required' | 'unknown';
+    payment_status?: 'paid' | 'pending' | 'failed' | 'not_required' | 'refunded' | 'unknown';
     booking_id?: string | null;
     booking?: {
         id?: string;
@@ -43,37 +47,40 @@ const StudentSessionsPage: React.FC = () => {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [lessons, setLessons] = useState<Lesson[]>([]);
+    const [loadError, setLoadError] = useState('');
     const [tab, setTab] = useState<'upcoming' | 'past'>('upcoming');
     const [joinBusyId, setJoinBusyId] = useState<string | null>(null);
     const [joinError, setJoinError] = useState<string>('');
     const [errorModalOpen, setErrorModalOpen] = useState(false);
 
     useEffect(() => {
-        const fetchLessons = async () => {
-            try {
-                const from = new Date();
-                from.setDate(from.getDate() - 60);
-                from.setHours(0, 0, 0, 0);
+        // Each tab fetches its own range: Past has no 2-month floor, Upcoming starts a day back
+        // so sessions in progress are included.
+        let cancelled = false;
+        setLoading(true);
+        setLoadError('');
+        const now = new Date();
+        const params = tab === 'upcoming'
+            ? { from: new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString(), to: new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000).toISOString() }
+            : { from: PAST_SESSIONS_FROM, to: now.toISOString() };
 
-                const to = new Date();
-                to.setDate(to.getDate() + 120);
-                to.setHours(23, 59, 59, 999);
-
-                const res = await api.get('/lessons/me', {
-                    params: { from: from.toISOString(), to: to.toISOString() },
-                });
-
-                setLessons(res.data?.lessons || []);
-            } catch (e) {
+        api.get('/lessons/me', { params })
+            .then((res) => {
+                if (!cancelled) setLessons(res.data?.lessons || []);
+            })
+            .catch((e) => {
                 console.error('Failed to fetch student lessons', e);
-                setLessons([]);
-            } finally {
-                setLoading(false);
-            }
-        };
+                if (!cancelled) {
+                    setLessons([]);
+                    setLoadError('Could not load your sessions. Please refresh the page.');
+                }
+            })
+            .finally(() => {
+                if (!cancelled) setLoading(false);
+            });
 
-        fetchLessons();
-    }, []);
+        return () => { cancelled = true; };
+    }, [tab]);
 
     const nowMs = Date.now();
 
@@ -141,10 +148,11 @@ const StudentSessionsPage: React.FC = () => {
     };
 
     const filtered = useMemo(() => {
+        // A session belongs to Upcoming until it has ended
         if (tab === 'upcoming') {
-            return enhanced.filter((l) => l.startMs >= nowMs);
+            return enhanced.filter((l) => l.end.getTime() >= nowMs);
         }
-        return enhanced.filter((l) => l.startMs < nowMs);
+        return enhanced.filter((l) => l.end.getTime() < nowMs);
     }, [enhanced, tab, nowMs]);
 
     const sorted = useMemo(() => {
@@ -263,7 +271,7 @@ const StudentSessionsPage: React.FC = () => {
                     from: from.toISOString(),
                     to: to.toISOString(),
                     durationMinutes: dur,
-                    stepMinutes: dur,
+                    stepMinutes: SLOT_STEP_MINUTES,
                 },
             });
             const fetched: { start: string; end: string }[] = res.data?.slots || [];
@@ -417,11 +425,19 @@ const StudentSessionsPage: React.FC = () => {
                     <Card className="p-6">
                         <div className="text-sm text-gray-600">Loading sessions...</div>
                     </Card>
+                ) : loadError ? (
+                    <Card className="p-6">
+                        <div className="text-sm text-red-700 font-semibold">{loadError}</div>
+                    </Card>
                 ) : sorted.length === 0 ? (
                     <Card className="p-6">
-                        <div className="text-sm text-gray-700 font-semibold">No sessions</div>
+                        <div className="text-sm text-gray-700 font-semibold">
+                            {tab === 'upcoming' ? 'No upcoming sessions' : 'No past sessions'}
+                        </div>
                         <div className="text-sm text-gray-600 mt-1">
-                            Once you book with a mentor, your sessions will appear here.
+                            {tab === 'upcoming'
+                                ? 'Once you book with a mentor, your sessions will appear here.'
+                                : 'Sessions you have attended or cancelled will appear here.'}
                         </div>
                     </Card>
                 ) : (

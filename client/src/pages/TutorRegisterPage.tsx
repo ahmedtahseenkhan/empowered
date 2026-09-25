@@ -322,6 +322,9 @@ const TutorRegisterPage: React.FC = () => {
                             value={formData.password}
                             onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                             required
+                            minLength={8}
+                            autoComplete="new-password"
+                            helperText="At least 8 characters"
                         />
                         <Button type="submit" className="w-full" disabled={loading}>
                             {loading ? 'Creating Account...' : 'Continue'}

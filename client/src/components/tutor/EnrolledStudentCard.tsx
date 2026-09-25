@@ -2,6 +2,7 @@ import React from 'react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Calendar, Clock } from 'lucide-react';
+import { Avatar } from '../ui/Avatar';
 
 interface EnrolledStudentCardProps {
     student: {
@@ -33,19 +34,23 @@ export const EnrolledStudentCard: React.FC<EnrolledStudentCardProps> = ({
             <div className="flex flex-col md:flex-row gap-6 items-start">
                 {/* Left Column: Avatar, Status, Send Note */}
                 <div className="flex flex-col items-center gap-3 min-w-[120px]">
-                    <img loading="lazy" decoding="async"
-                        src={student.profilePhoto || `https://ui-avatars.com/api/?name=${student.name}&background=random&color=fff`}
-                        alt={student.name}
-                        className="w-24 h-24 rounded-full object-cover border-4 border-white shadow-md cursor-pointer hover:opacity-90 transition-opacity"
+                    <Avatar
+                        name={student.name}
+                        src={student.profilePhoto}
+                        className="w-24 h-24 border-4 border-white shadow-md"
                     />
 
                     {student.status === 'pending' ? (
                         <div className="flex items-center gap-1 bg-gradient-to-r from-red-400 to-red-500 text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-sm">
                             pending <span className="ml-1">✎</span>
                         </div>
-                    ) : (
+                    ) : student.status === 'active' ? (
                         <div className="flex items-center gap-1 bg-green-100 text-green-700 text-xs font-bold px-4 py-1.5 rounded-full">
                             active
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-1 bg-gray-100 text-gray-600 text-xs font-bold px-4 py-1.5 rounded-full">
+                            inactive
                         </div>
                     )}
 
@@ -68,7 +73,7 @@ export const EnrolledStudentCard: React.FC<EnrolledStudentCardProps> = ({
 
                     <div className="pt-2 flex flex-wrap gap-4 text-sm text-gray-600 font-medium pb-2">
                         <span>Completed Sessions: <span className="text-gray-900">{student.completedSessions}</span></span>
-                        <span>Pending Sessions: <span className="text-indigo-900">{student.pendingSessions}</span></span>
+                        <span>Upcoming Sessions: <span className="text-indigo-900">{student.pendingSessions}</span></span>
                     </div>
 
                     <div className="text-xs text-gray-500 space-y-2 mt-2">

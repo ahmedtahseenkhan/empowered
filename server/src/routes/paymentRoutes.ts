@@ -1,5 +1,5 @@
 import express from 'express';
-import { authenticateToken } from '../middleware/authMiddleware';
+import { authenticateToken, requireRole } from '../middleware/authMiddleware';
 import {
     createMentorSubscriptionCheckout,
     activateMentorTrial,
@@ -30,6 +30,9 @@ router.get('/plans', getMentorPlans);
 
 // All other routes require authentication
 router.use(authenticateToken);
+
+router.use(['/mentor', '/tutor'], requireRole('TUTOR'));
+router.use('/student', requireRole('STUDENT'));
 
 // Mentor Subscription
 router.post('/mentor/subscription', createMentorSubscriptionCheckout);

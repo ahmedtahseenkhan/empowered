@@ -8,6 +8,8 @@ import { PageLayout } from '../layouts/PageLayout';
 import { Button } from '../components/ui/Button';
 import { MentorSocialLinks } from '../components/common/MentorSocialLinks';
 import api from '../api/axios';
+import { SESSION_MINUTES, SLOT_STEP_MINUTES } from '../constants/session';
+import { parseKeyStrengths } from '../utils/strengths';
 
 type PublicTutorProfile = {
     id: string;
@@ -102,8 +104,7 @@ const MentorPublicProfilePage: React.FC = () => {
     }, [id]);
 
     const strengths = useMemo(() => {
-        if (!mentor?.key_strengths) return [];
-        return mentor.key_strengths.split(',').map(s => s.trim()).filter(Boolean);
+        return parseKeyStrengths(mentor?.key_strengths);
     }, [mentor?.key_strengths]);
 
     const categoryGroups = useMemo(() => {
@@ -272,8 +273,8 @@ const MentorPublicProfilePage: React.FC = () => {
                     params: {
                         from: from.toISOString(),
                         to: to.toISOString(),
-                        durationMinutes: 60,
-                        stepMinutes: 60,
+                        durationMinutes: SESSION_MINUTES,
+                        stepMinutes: SLOT_STEP_MINUTES,
                     }
                 });
 

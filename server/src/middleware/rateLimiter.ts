@@ -34,12 +34,9 @@ export function rateLimit(options: RateLimitOptions) {
     cleanup.unref?.();
 
     return (req: Request, res: Response, next: NextFunction) => {
-        const key = (
-            (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() ||
-            req.ip ||
-            req.socket.remoteAddress ||
-            'unknown'
-        );
+        // req.ip honours `trust proxy` (set in index.ts); a raw X-Forwarded-For
+        // header is client-controlled and would let callers bypass the limit.
+        const key = req.ip || req.socket.remoteAddress || 'unknown';
 
         const now = Date.now();
         const entry = hits.get(key);

@@ -5,6 +5,8 @@ import { Button } from '../components/ui/Button';
 import api from '../api/axios';
 
 interface TutorProfile {
+    rating?: number | null;
+    review_count?: number | null;
     username: string;
     profile_photo?: string;
     tagline?: string;
@@ -127,7 +129,9 @@ const PublicProfilePage: React.FC = () => {
                                     )}
                                     <div className="flex items-center gap-2">
                                         <Star size={18} className="text-yellow-500 fill-yellow-500" />
-                                        <span className="font-semibold">0.0 (0 reviews)</span>
+                                        <span className="font-semibold">
+                                            {(Number(profile.rating) || 0).toFixed(1)} ({Number(profile.review_count) || 0} review{Number(profile.review_count) === 1 ? '' : 's'})
+                                        </span>
                                     </div>
                                 </div>
                             </div>
@@ -140,7 +144,7 @@ const PublicProfilePage: React.FC = () => {
                                 </Button>
                                 {profile.hourly_rate && (
                                     <p className="text-center mt-3 text-gray-600">
-                                        <span className="text-2xl font-bold text-[#4A1D96]">${profile.hourly_rate}</span>/hour
+                                        <span className="text-2xl font-bold text-[#4A1D96]">${profile.hourly_rate}</span> per 50-min session
                                     </p>
                                 )}
                             </div>

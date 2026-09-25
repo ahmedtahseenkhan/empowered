@@ -84,42 +84,56 @@ export const getMyLessons = async (req: AuthRequest, res: Response) => {
             }
         });
 
-        // Enrich each lesson with its payment schedule status
-        const enriched = await Promise.all(
-            lessons.map(async (lesson) => {
-                if (lesson.billing_type === 'FREE_INTRO' || lesson.billing_type === 'FREE_TRIAL') {
-                    return { ...lesson, payment_status: 'not_required' as const };
-                }
-
-                // Sessions reserved with Learning Credits are paid up front — no PaymentSchedule rows exist.
-                if (lesson.booking?.funding === 'CREDITS') {
-                    return { ...lesson, payment_status: 'paid' as const };
-                }
-
-                if (!lesson.booking_id) {
-                    return { ...lesson, payment_status: 'unknown' as const };
-                }
-
-                const dueDate = new Date(lesson.start_time.getTime() - 48 * 60 * 60 * 1000);
-                const dueStart = new Date(dueDate.getTime() - 2 * 60 * 60 * 1000);
-                const dueEnd = new Date(dueDate.getTime() + 2 * 60 * 60 * 1000);
-
-                const schedule = await prisma.paymentSchedule.findFirst({
-                    where: {
-                        booking_id: lesson.booking_id,
-                        due_date: { gte: dueStart, lte: dueEnd },
-                    },
-                    select: { status: true },
-                });
-
-                if (!schedule) {
-                    // First session in a booking is paid at checkout — no schedule row means it was paid upfront
-                    return { ...lesson, payment_status: 'paid' as const };
-                }
-
-                return { ...lesson, payment_status: schedule.status as 'paid' | 'pending' | 'failed' };
+        // Enrich each lesson with its payment schedule status (one query for all bookings)
+        const bookingIds = [...new Set(lessons.map((l) => l.booking_id).filter((id): id is string => !!id))];
+        const schedules = bookingIds.length
+            ? await prisma.paymentSchedule.findMany({
+                where: { booking_id: { in: bookingIds } },
+                select: { booking_id: true, due_date: true, status: true },
             })
-        );
+            : [];
+        const schedulesByBooking = new Map<string, typeof schedules>();
+        for (const sch of schedules) {
+            const list = schedulesByBooking.get(sch.booking_id) || [];
+            list.push(sch);
+            schedulesByBooking.set(sch.booking_id, list);
+        }
+        const DUE_LEAD_MS = 48 * 60 * 60 * 1000;
+        const DUE_WINDOW_MS = 2 * 60 * 60 * 1000;
+
+        const enriched = lessons.map((lesson) => {
+            if (lesson.billing_type === 'FREE_INTRO' || lesson.billing_type === 'FREE_TRIAL') {
+                return { ...lesson, payment_status: 'not_required' as const };
+            }
+
+            // Sessions reserved with Learning Credits are paid up front — no PaymentSchedule rows exist.
+            if (lesson.booking?.funding === 'CREDITS') {
+                if (lesson.reservation?.status === 'RETURNED') {
+                    return { ...lesson, payment_status: 'refunded' as const };
+                }
+                return { ...lesson, payment_status: 'paid' as const };
+            }
+
+            if (!lesson.booking_id) {
+                return { ...lesson, payment_status: 'unknown' as const };
+            }
+
+            const dueMs = lesson.start_time.getTime() - DUE_LEAD_MS;
+            const schedule = (schedulesByBooking.get(lesson.booking_id) || [])
+                .find((sch) => Math.abs(sch.due_date.getTime() - dueMs) <= DUE_WINDOW_MS);
+
+            if (!schedule) {
+                // First session in a booking is paid at checkout — no schedule row means it was paid upfront
+                return { ...lesson, payment_status: 'paid' as const };
+            }
+
+            // A cancelled lesson's unpaid schedule will never be charged
+            if (lesson.status === 'CANCELLED' && schedule.status !== 'paid') {
+                return { ...lesson, payment_status: 'not_required' as const };
+            }
+
+            return { ...lesson, payment_status: schedule.status as 'paid' | 'pending' | 'failed' };
+        });
 
         return res.json({ lessons: enriched });
     } catch (e) {

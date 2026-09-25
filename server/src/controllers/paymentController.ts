@@ -5,6 +5,7 @@ import prisma from '../config/db';
 import { z } from 'zod';
 import { findApprovedBetaApplication, grantBetaPremium } from '../services/betaService';
 import { handleCheckoutSessionCompleted } from './webhookController';
+import { CARD_PLATFORM_FEE_RATE } from '../config/fees';
 
 /** Mentor subscription plans: annual billing. Price IDs from env or fallback for backward compatibility. */
 export const MENTOR_PLANS = [
@@ -296,22 +297,15 @@ export const createConnectOnboardingLink = async (req: Request, res: Response) =
             const link = await StripeService.createAccountLink(accountId, refreshUrl, returnUrl);
             res.json({ url: link });
         } catch (linkError: any) {
-            // Handle case where account ID exists in DB but not in Stripe (e.g. deleted in dashboard)
+            // Account ID exists in DB but Stripe can't find it. This is usually a test/live
+            // key mismatch, not a deleted account, so never silently replace a mentor's
+            // payout account — surface it and let support resolve it.
             if (linkError.message && linkError.message.includes('No such account')) {
-                console.warn(`Stripe account ${accountId} not found. Creating a new one.`);
-
-                // Retry creation
-                const selectedCountry = country || tutor.country || 'US';
-                const account = await StripeService.createConnectAccount(tutor.user.email, selectedCountry);
-                accountId = account.id;
-
-                await prisma.tutorProfile.update({
-                    where: { id: tutor.id },
-                    data: { stripe_account_id: accountId }
+                console.error(`Stripe account ${accountId} not found for tutor ${tutor.id} (check STRIPE_SECRET_KEY mode).`);
+                return res.status(409).json({
+                    error: 'Your payout account could not be found in Stripe. Please contact support — do not create a new account.',
+                    code: 'ACCOUNT_NOT_FOUND',
                 });
-
-                const link = await StripeService.createAccountLink(accountId, refreshUrl, returnUrl);
-                return res.json({ url: link });
             }
             throw linkError;
         }
@@ -396,7 +390,13 @@ export const getConnectAccountStatus = async (req: Request, res: Response) => {
         });
     } catch (error: any) {
         console.error('Get connect status error:', error);
-        res.status(500).json({ error: 'Failed to retrieve account status' });
+        const notFound = typeof error?.message === 'string' && error.message.includes('No such account');
+        res.status(502).json({
+            error: notFound
+                ? 'Your payout account could not be found in Stripe. Please contact support.'
+                : 'Could not reach Stripe to check your account. Please try again shortly.',
+            code: notFound ? 'ACCOUNT_NOT_FOUND' : 'STRIPE_UNAVAILABLE',
+        });
     }
 };
 
@@ -712,7 +712,7 @@ export const createStudentBookingCheckout = async (req: Request, res: Response) 
         // 3. Pricing: charge ONLY the first session now (pay-per-session model)
         // hourly_rate is in whole currency units (e.g. dollars); Stripe needs cents
         const sessionRate = tutor.hourly_rate;
-        const platformFeePercentage = 0.10; // 10% platform fee
+        const platformFeePercentage = CARD_PLATFORM_FEE_RATE;
 
         const platformFee = sessionRate * platformFeePercentage;
         const totalAmount = sessionRate + platformFee;
@@ -864,7 +864,7 @@ export const payNextStudentBookingSession = async (req: Request, res: Response) 
 
         // Charge the student the session rate + platform fee (same as initial booking checkout)
         const sessionRate = Number(tutor.hourly_rate);
-        const platformFeePercentage = 0.10;
+        const platformFeePercentage = CARD_PLATFORM_FEE_RATE;
         const platformFee = sessionRate * platformFeePercentage;
         const totalAmount = sessionRate + platformFee;
 

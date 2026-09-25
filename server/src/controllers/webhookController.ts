@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client';
 import { isTutorSlotAvailable } from '../services/availability';
 import { ensureMeetLinkForLesson } from '../services/googleCalendar';
 import { applyCreditsPurchase, handleCardDisputeOnPurchase, markTransferredAsPaidForAccount } from '../services/walletService';
+import { SESSION_MINUTES } from '../config/session';
 
 export const handleStripeWebhook = async (req: Request, res: Response) => {
     const sig = req.headers['stripe-signature'];
@@ -318,7 +319,7 @@ export async function handleCheckoutSessionCompleted(session: any) {
         const tutorId = metadata.tutorId as string;
         const studentId = metadata.studentId as string;
         const frequency = metadata.frequency as 'ONCE' | 'WEEKLY' | 'TWICE_WEEKLY' | 'THRICE_WEEKLY';
-        const durationMinutes = Number(metadata.durationMinutes || 60);
+        const durationMinutes = Number(metadata.durationMinutes || SESSION_MINUTES);
         const clientTimezone = (metadata.clientTimezone as string | undefined) || 'UTC';
 
         let slotStarts: string[] = [];
