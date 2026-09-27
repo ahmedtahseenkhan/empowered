@@ -152,6 +152,7 @@ const supportedCountries = [
 const ConnectAccountPage: React.FC = () => {
     const [status, setStatus] = useState<ConnectAccountStatus | null>(null);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [creatingLink, setCreatingLink] = useState(false);
     const [selectedCountry, setSelectedCountry] = useState('US');
 
@@ -162,10 +163,14 @@ const ConnectAccountPage: React.FC = () => {
     const fetchStatus = async () => {
         try {
             setLoading(true);
+            setLoadError(null);
             const res = await api.get('/payments/mentor/connect-status');
             setStatus(res.data);
         } catch (error) {
             console.error('Failed to fetch Connect account status:', error);
+            // Never fall back to the onboarding screen: the mentor may already be connected.
+            setStatus(null);
+            setLoadError(apiError(error).error || 'Could not load your payout account status. Please try again.');
         } finally {
             setLoading(false);
         }
@@ -232,6 +237,28 @@ const ConnectAccountPage: React.FC = () => {
             <DashboardLayout>
                 <div className="flex items-center justify-center min-h-[400px]">
                     <Loader className="w-8 h-8 animate-spin text-primary-600" />
+                </div>
+            </DashboardLayout>
+        );
+    }
+
+    if (loadError) {
+        return (
+            <DashboardLayout>
+                <div className="max-w-4xl mx-auto px-4 py-8">
+                    <h1 className="text-3xl font-bold text-gray-900 mb-8">Connect Account Settings</h1>
+                    <Card className="p-8">
+                        <div className="flex items-start gap-4">
+                            <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                                <AlertCircle className="w-6 h-6 text-red-600" />
+                            </div>
+                            <div className="flex-1">
+                                <h2 className="text-xl font-bold text-gray-900">Couldn't load your account status</h2>
+                                <p className="text-gray-600 mt-1">{loadError}</p>
+                                <Button onClick={fetchStatus} className="mt-4">Try again</Button>
+                            </div>
+                        </div>
+                    </Card>
                 </div>
             </DashboardLayout>
         );

@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import prisma from '../config/db';
 import { AuthRequest } from '../middleware/authMiddleware'; // Assuming this exists or defining inline
+import { LessonSummary, emptyLessonSummary, addLessonToSummary, serializeLessonSummary } from '../utils/lessonSummary';
 
 interface AuthenticatedRequest extends Request {
     user?: {
@@ -533,6 +534,7 @@ export const getMyStudents = async (req: AuthRequest, res: Response) => {
             select: {
                 student_id: true,
                 start_time: true,
+                status: true,
                 student: {
                     select: {
                         id: true,
@@ -563,52 +565,29 @@ export const getMyStudents = async (req: AuthRequest, res: Response) => {
                     grade_level: string | null;
                     email: string | null;
                 };
-                totalLessons: number;
-                nextSessionStart: Date | null;
-                lastSessionStart: Date | null;
+                summary: LessonSummary;
             }
         >();
 
         for (const l of lessons) {
-            const sid = l.student_id;
-            const start = l.start_time;
-            const existing = byStudent.get(sid);
-
-            if (!existing) {
-                byStudent.set(sid, {
+            let entry = byStudent.get(l.student_id);
+            if (!entry) {
+                entry = {
                     student: {
                         ...l.student,
                         email: l.student.user.email
                     },
-                    totalLessons: 1,
-                    nextSessionStart: start > now ? start : null,
-                    lastSessionStart: start <= now ? start : null,
-                });
-                continue;
+                    summary: emptyLessonSummary(),
+                };
+                byStudent.set(l.student_id, entry);
             }
-
-            existing.totalLessons += 1;
-
-            if (start > now) {
-                if (!existing.nextSessionStart || start < existing.nextSessionStart) {
-                    existing.nextSessionStart = start;
-                }
-            } else {
-                if (!existing.lastSessionStart || start > existing.lastSessionStart) {
-                    existing.lastSessionStart = start;
-                }
-            }
+            addLessonToSummary(entry.summary, l, now);
         }
 
         const students = Array.from(byStudent.values())
             .map((s) => ({
-                ...s,
-                student: {
-                    ...s.student,
-                    email: s.student.email
-                },
-                nextSessionStart: s.nextSessionStart ? s.nextSessionStart.toISOString() : null,
-                lastSessionStart: s.lastSessionStart ? s.lastSessionStart.toISOString() : null,
+                student: s.student,
+                ...serializeLessonSummary(s.summary),
             }))
             .sort((a, b) => {
                 const aNext = a.nextSessionStart ? new Date(a.nextSessionStart).getTime() : Infinity;

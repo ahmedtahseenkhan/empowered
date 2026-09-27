@@ -28,6 +28,7 @@ const AccountSettingsPage: React.FC = () => {
 
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
     const [savingPassword, setSavingPassword] = useState(false);
 
     const [error, setError] = useState('');
@@ -79,12 +80,21 @@ const AccountSettingsPage: React.FC = () => {
             setError('Please enter your current password and a new password.');
             return;
         }
+        if (newPassword.length < 8) {
+            setError('New password must be at least 8 characters.');
+            return;
+        }
+        if (newPassword !== confirmPassword) {
+            setError('New passwords do not match.');
+            return;
+        }
 
         setSavingPassword(true);
         try {
             await api.post('/auth/change-password', { currentPassword, newPassword });
             setCurrentPassword('');
             setNewPassword('');
+            setConfirmPassword('');
             setSuccess('Password updated successfully.');
         } catch (err: any) {
             setError(err.response?.data?.error || 'Failed to update password');
@@ -163,13 +173,24 @@ const AccountSettingsPage: React.FC = () => {
                             value={currentPassword}
                             onChange={(e) => setCurrentPassword(e.target.value)}
                             placeholder="Enter current password"
+                            autoComplete="current-password"
                         />
                         <Input
                             label="New Password"
                             type="password"
                             value={newPassword}
                             onChange={(e) => setNewPassword(e.target.value)}
-                            placeholder="Enter new password"
+                            placeholder="At least 8 characters"
+                            autoComplete="new-password"
+                            minLength={8}
+                        />
+                        <Input
+                            label="Confirm New Password"
+                            type="password"
+                            value={confirmPassword}
+                            onChange={(e) => setConfirmPassword(e.target.value)}
+                            placeholder="Re-enter new password"
+                            autoComplete="new-password"
                         />
 
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">

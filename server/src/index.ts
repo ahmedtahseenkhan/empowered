@@ -1,6 +1,7 @@
 import express from 'express';
 import http from 'http';
 import cors from 'cors';
+import helmet from 'helmet';
 import dotenv from 'dotenv';
 import path from 'path';
 
@@ -22,6 +23,15 @@ function assertDemoMeetEnv(): void {
     }
 }
 assertDemoMeetEnv();
+
+// Tokens signed with the built-in fallback secret can be forged by anyone who reads the code
+if (!process.env.JWT_SECRET) {
+    if (process.env.NODE_ENV === 'production') {
+        console.error('[Startup] JWT_SECRET is required in production. Add it to .env and restart.');
+        process.exit(1);
+    }
+    console.warn('[Startup] JWT_SECRET is not set — using an insecure development secret.');
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -54,8 +64,27 @@ import { startWalletScheduler } from './services/walletScheduler';
 import { logPlatformGoogleStatus } from './services/googleCalendar';
 import { initWhiteboardSocket } from './services/whiteboardSocket';
 
-// Middleware
-app.use(cors());
+// Security middleware
+app.set('trust proxy', 1);
+app.disable('x-powered-by');
+app.use(helmet({
+    // API only serves JSON and uploads; images are embedded by the client on another origin
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
+
+const allowedOrigins = (process.env.CORS_ORIGINS || [process.env.CLIENT_URL, process.env.CLIENT_BASE_URL].filter(Boolean).join(','))
+    .split(',')
+    .map((o) => o.trim().replace(/\/+$/, ''))
+    .filter(Boolean);
+if (allowedOrigins.length === 0) {
+    console.warn('[Startup] CORS_ORIGINS / CLIENT_URL not set — allowing all origins. Set it in production.');
+}
+app.use(cors({
+    origin: allowedOrigins.length === 0
+        ? true
+        : (origin, cb) => cb(null, !origin || allowedOrigins.includes(origin.replace(/\/+$/, ''))),
+    credentials: true,
+}));
 
 // Webhooks must be mounted BEFORE express.json() to consume raw body
 app.use('/api/stripe', webhookRoutes);
@@ -106,6 +135,11 @@ app.use('/api/beta', betaRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/whiteboards', whiteboardRoutes);
 app.use('/api/wallet', walletRoutes);
+
+// Unknown API routes: JSON, never Express's HTML page
+app.use('/api', (req, res) => {
+    res.status(404).json({ error: 'Not found' });
+});
 
 // Health Check
 app.get('/', (req, res) => {

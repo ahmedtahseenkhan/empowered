@@ -12,7 +12,7 @@ import {
     formatDemoSlot,
     resolveDemoTimezone,
 } from '../services/demoAvailability';
-import { createDemoMeetEvent, updateDemoMeetEvent } from '../services/googleCalendar';
+import { createDemoMeetEvent, updateDemoMeetEvent, getPlatformMeetDiagnostics, upgradeUpcomingLessonsToOpenAccess } from '../services/googleCalendar';
 
 export const adminListMentors = async (req: AuthRequest, res: Response) => {
     try {
@@ -1214,5 +1214,31 @@ export const adminDeleteSubAdmin = async (req: AuthRequest, res: Response) => {
     } catch (error) {
         console.error('adminDeleteSubAdmin error:', error);
         return res.status(500).json({ error: 'Server error' });
+    }
+};
+
+/**
+ * GET /api/admin/google-meet/status
+ * Live report on the platform Google account that generates every Meet link.
+ */
+export const adminGetGoogleMeetStatus = async (_req: AuthRequest, res: Response) => {
+    try {
+        return res.json(await getPlatformMeetDiagnostics());
+    } catch (e) {
+        console.error('adminGetGoogleMeetStatus error:', e);
+        return res.status(500).json({ error: 'Failed to check the Google Meet connection' });
+    }
+};
+
+/**
+ * POST /api/admin/google-meet/upgrade-sessions
+ * Switch upcoming sessions whose link still needs host approval to OPEN access.
+ */
+export const adminUpgradeSessionsToOpenAccess = async (_req: AuthRequest, res: Response) => {
+    try {
+        return res.json(await upgradeUpcomingLessonsToOpenAccess(200));
+    } catch (e) {
+        console.error('adminUpgradeSessionsToOpenAccess error:', e);
+        return res.status(500).json({ error: 'Failed to update the session meeting links' });
     }
 };

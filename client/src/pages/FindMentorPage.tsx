@@ -97,7 +97,7 @@ const FindMentorPage: React.FC = () => {
 
     const canSubmitSignUp = useMemo(() => {
         const emailOk = /\S+@\S+\.\S+/.test(formData.email);
-        const passOk = formData.password.length >= 6;
+        const passOk = formData.password.length >= 8;
         const confirmOk = formData.password === formData.confirmPassword;
         return !!(formData.firstName.trim() && formData.lastName.trim() && emailOk && passOk && confirmOk);
     }, [formData.confirmPassword, formData.email, formData.firstName, formData.lastName, formData.password]);
@@ -248,7 +248,7 @@ const FindMentorPage: React.FC = () => {
         }
         const isLoggedInStudent = user?.role === 'STUDENT';
         if (!isLoggedInStudent && !canSubmitSignUp) {
-            setError('Please complete sign up (name, valid email, password min 6 characters).');
+            setError('Please complete sign up (name, valid email, password min 8 characters).');
             return;
         }
 

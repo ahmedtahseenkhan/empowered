@@ -3,6 +3,7 @@ import prisma from '../config/db';
 import { z } from 'zod';
 import { StripeService } from '../services/stripeService';
 import EmailService from '../services/emailService';
+import { CARD_PLATFORM_FEE_RATE } from '../config/fees';
 
 // Validation Schemas
 const CreateCourseSchema = z.object({
@@ -394,7 +395,7 @@ export const createCourseCheckout = async (req: Request, res: Response) => {
 
         if (course.tutor.stripe_account_id) {
             // Tutor has Connect account — use destination charge with 10% platform fee
-            const platformFeeInCents = Math.round(amountInCents * 0.10);
+            const platformFeeInCents = Math.round(amountInCents * CARD_PLATFORM_FEE_RATE);
             session = await StripeService.createBookingCheckoutSession(
                 amountInCents,
                 'usd',

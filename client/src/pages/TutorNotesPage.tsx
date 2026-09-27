@@ -192,10 +192,22 @@ const TutorNotesPage: React.FC = () => {
         await fetchTimeline(studentId);
     };
 
+    const [placeholderWarning, setPlaceholderWarning] = useState('');
+    const [placeholderConfirmedFor, setPlaceholderConfirmedFor] = useState('');
+
     const createNote = async () => {
         if (!activeStudentId) return;
         const body = noteBody.trim();
         if (!body) return;
+        // AI drafts can leave template placeholders like "[Your Name]" — ask once before sending
+        const placeholder = body.match(/\[[^\]\n]{2,40}\]/)?.[0];
+        if (placeholder && placeholderConfirmedFor !== body) {
+            setPlaceholderWarning(`This note still contains "${placeholder}". Edit it, or click Send Note again to send as is.`);
+            setPlaceholderConfirmedFor(body);
+            return;
+        }
+        setPlaceholderWarning('');
+        setPlaceholderConfirmedFor('');
         setProgressBusy(true);
         try {
             await api.post(`/progress/tutor/students/${activeStudentId}/notes`, {
@@ -532,6 +544,9 @@ const TutorNotesPage: React.FC = () => {
                                                         )}
                                                     </div>
 
+                                                    {placeholderWarning && (
+                                                        <div className="text-sm bg-amber-50 border border-amber-200 text-amber-800 px-3 py-2 rounded-lg">{placeholderWarning}</div>
+                                                    )}
                                                     <div className="flex justify-end">
                                                         <Button onClick={createNote} disabled={!noteBody.trim()}>Send Note</Button>
                                                     </div>

@@ -51,6 +51,16 @@ const TYPE_LABEL: Record<string, string> = {
     USAGE: 'Used',
 };
 
+// Admin grants/adjustments carry the admin's internal reason — never show it to students
+const ADMIN_ENTRY_TYPES = new Set(['PROMO_GRANT', 'MANUAL_ADJUSTMENT']);
+const ISO_TIMESTAMP = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z/g;
+
+const entryDetails = (e: { type: string; description?: string | null }): string | null => {
+    if (ADMIN_ENTRY_TYPES.has(e.type) || !e.description) return null;
+    return e.description.replace(ISO_TIMESTAMP, (iso) =>
+        new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }));
+};
+
 const StudentWalletPage: React.FC = () => {
     const [wallet, setWallet] = useState<WalletData | null>(null);
     const [entries, setEntries] = useState<Entry[]>([]);
@@ -179,7 +189,7 @@ const StudentWalletPage: React.FC = () => {
                 )}
 
                 {wallet && (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 min-w-0">
                         <div className="relative bg-white rounded-2xl border border-gray-100 shadow-sm p-5 overflow-hidden">
                             <div className="absolute left-0 inset-y-0 w-1 rounded-l-2xl bg-purple-500" />
                             <div className="flex items-center gap-3 pl-1">
@@ -292,7 +302,7 @@ const StudentWalletPage: React.FC = () => {
                                             <span className="font-medium text-gray-900">{TYPE_LABEL[e.type] || e.type}</span>
                                             <span>{amountCell(e)}</span>
                                         </div>
-                                        {e.description && <p className="text-xs text-gray-600 mt-1">{e.description}</p>}
+                                        {entryDetails(e) && <p className="text-xs text-gray-600 mt-1">{entryDetails(e)}</p>}
                                         <div className="flex justify-between text-xs text-gray-500 mt-2">
                                             <span>{fmtDate(e.created_at)}</span>
                                             {typeof e.balance_after === 'number' && <span>Balance: {e.balance_after}</span>}
@@ -316,7 +326,7 @@ const StudentWalletPage: React.FC = () => {
                                             <tr key={e.id}>
                                                 <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{fmtDate(e.created_at)}</td>
                                                 <td className="px-4 py-3 font-medium text-gray-900">{TYPE_LABEL[e.type] || e.type}</td>
-                                                <td className="px-4 py-3 text-gray-600">{e.description || '—'}</td>
+                                                <td className="px-4 py-3 text-gray-600">{entryDetails(e) || '—'}</td>
                                                 <td className="px-4 py-3 text-right tabular-nums">{amountCell(e)}</td>
                                                 <td className="px-4 py-3 text-right text-gray-600 tabular-nums">{typeof e.balance_after === 'number' ? e.balance_after : '—'}</td>
                                             </tr>

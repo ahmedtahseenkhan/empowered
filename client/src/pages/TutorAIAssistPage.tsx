@@ -160,7 +160,7 @@ const TutorAIAssistPage: React.FC = () => {
                         </div>
                     </div>
                     <div className="text-xs text-gray-400 bg-gray-50 px-3 py-1 rounded-full border border-gray-100">
-                        Pro Feature
+                        Premium Feature
                     </div>
                 </div>
 

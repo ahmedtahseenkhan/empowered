@@ -240,6 +240,41 @@ async function sendOutboxRow(row: OutboxRow) {
         return;
     }
 
+    if (row.type === 'SESSION_MEETING_LINK_UPDATED') {
+        const lessonId = row.payload?.lessonId as string | undefined;
+        if (!lessonId) throw new Error('Missing lessonId in payload');
+        const forTutor = row.payload?.role === 'tutor';
+
+        const lesson = await prisma.lesson.findUnique({
+            where: { id: lessonId },
+            include: {
+                student: { select: { username: true } },
+                tutor: { select: { username: true, timezone: true } },
+                booking: { select: { client_timezone: true } },
+            },
+        });
+
+        if (!lesson) throw new Error(`Lesson not found: ${lessonId}`);
+        if (!lesson.meeting_link) throw new Error(`Lesson ${lessonId} has no meeting link`);
+
+        const clientBase = (process.env.CLIENT_URL || process.env.CLIENT_BASE_URL || 'https://emplearnings.com').trim().replace(/\/+$/, '');
+        const timeZone = forTutor
+            ? lesson.tutor?.timezone || 'UTC'
+            : lesson.booking?.client_timezone || lesson.tutor?.timezone || 'UTC';
+        await emailService.sendSessionMeetingLinkUpdated({
+            recipientName: (forTutor ? lesson.tutor?.username : lesson.student?.username) || 'there',
+            recipientEmail: row.to_email,
+            otherPartyLabel: forTutor ? 'Student' : 'Mentor',
+            otherPartyName: (forTutor ? lesson.student?.username : lesson.tutor?.username) || (forTutor ? 'your student' : 'your mentor'),
+            sessionDate: formatDatePart(lesson.start_time, timeZone),
+            sessionTime: formatTimePart(lesson.start_time, timeZone),
+            meetingLink: lesson.meeting_link,
+            dashboardUrl: forTutor ? `${clientBase}/sessions/${lesson.id}` : `${clientBase}/student/sessions/${lesson.id}`,
+        });
+
+        return;
+    }
+
     if (row.type === 'SESSION_RESCHEDULED_STUDENT') {
         const lessonId = row.payload?.lessonId as string | undefined;
         if (!lessonId) throw new Error('Missing lessonId in payload');

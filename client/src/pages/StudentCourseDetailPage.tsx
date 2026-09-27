@@ -134,7 +134,7 @@ const StudentCourseDetailPage: React.FC = () => {
                                     <span className="flex items-center gap-1">
                                         <Star size={14} className="text-yellow-400 fill-yellow-400" />
                                         <strong className="text-gray-700">{Number(course.tutor.rating).toFixed(1)}</strong>
-                                        ({course.tutor.review_count} reviews)
+                                        ({course.tutor.review_count} review{course.tutor.review_count !== 1 ? 's' : ''})
                                     </span>
                                 )}
                                 <span className="flex items-center gap-1">

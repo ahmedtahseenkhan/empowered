@@ -19,6 +19,9 @@ interface MyMentor {
         email: string | null;
     };
     totalLessons: number;
+    completedLessons: number;
+    upcomingLessons: number;
+    firstSessionStart: string | null;
     nextSessionStart: string | null;
     lastSessionStart: string | null;
 }
@@ -121,9 +124,9 @@ const StudentMentorsPage: React.FC = () => {
                                         username: m.tutor.username,
                                         profilePhoto: m.tutor.profile_photo || undefined,
                                         isVerified: m.tutor.is_verified,
-                                        enrolledDate: formatDate(m.lastSessionStart) || 'Recent',
-                                        totalSessions: m.totalLessons,
-                                        pendingSessions: 0, // Placeholder
+                                        enrolledDate: formatDate(m.firstSessionStart) || 'Recent',
+                                        totalSessions: m.completedLessons,
+                                        pendingSessions: m.upcomingLessons,
                                         lastSessionDate: formatDate(m.lastSessionStart),
                                         nextSessionDate: formatDate(m.nextSessionStart)
                                     }}

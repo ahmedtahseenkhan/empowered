@@ -3,6 +3,7 @@ import prisma from '../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
 import { ensureMeetLinkForLesson } from '../services/googleCalendar';
 import { isTutorSlotAvailable, isFreeSessionSlotAvailable } from '../services/availability';
+import { SESSION_MINUTES } from '../config/session';
 
 const FREE_SESSION_DURATION_MINUTES = 25;
 
@@ -34,7 +35,7 @@ export const createBooking = async (req: AuthRequest, res: Response) => {
         if (!tutorId) return res.status(400).json({ error: 'tutorId is required' });
         if (!startDate && (!slotStarts || slotStarts.length === 0)) return res.status(400).json({ error: 'startDate or slotStarts is required' });
 
-        const dur = typeof durationMinutes === 'number' && durationMinutes > 0 ? durationMinutes : 60;
+        const dur = typeof durationMinutes === 'number' && durationMinutes > 0 ? durationMinutes : SESSION_MINUTES;
 
         const tutor = await prisma.tutorProfile.findUnique({ where: { id: tutorId } });
         if (!tutor) return res.status(404).json({ error: 'Tutor not found' });

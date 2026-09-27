@@ -6,6 +6,7 @@ import { StripeService } from '../services/stripeService';
 import { isTutorSlotAvailable } from '../services/availability';
 import * as wallet from '../services/walletService';
 import { WalletError, WALLET_CONFIG } from '../services/walletService';
+import { SESSION_MINUTES } from '../config/session';
 
 type Frequency = 'WEEKLY' | 'TWICE_WEEKLY' | 'THRICE_WEEKLY';
 
@@ -125,7 +126,7 @@ export const createCreditsBooking = async (req: AuthRequest, res: Response) => {
             throw new WalletError(`Please select ${requiredSlots} weekly time slot${requiredSlots === 1 ? '' : 's'}`);
         }
 
-        const dur = typeof durationMinutes === 'number' && durationMinutes > 0 ? durationMinutes : 60;
+        const dur = typeof durationMinutes === 'number' && durationMinutes > 0 ? durationMinutes : SESSION_MINUTES;
 
         const tutor = await prisma.tutorProfile.findUnique({ where: { id: tutorId } });
         if (!tutor) throw new WalletError('Tutor not found', 404);

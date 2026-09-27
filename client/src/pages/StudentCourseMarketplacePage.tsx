@@ -140,14 +140,23 @@ const StudentCourseMarketplacePage: React.FC = () => {
                 ) : courses.length === 0 ? (
                     <div className="bg-white rounded-2xl shadow p-16 text-center">
                         <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                        <h3 className="text-xl font-bold text-gray-700 mb-2">No courses found</h3>
-                        <p className="text-gray-500">Try adjusting your search or browse all categories.</p>
-                        <button
-                            onClick={() => { setSearch(''); setSelectedCategory('All'); setMaxPrice(''); }}
-                            className="mt-4 text-[#4A1D96] underline text-sm"
-                        >
-                            Clear filters
-                        </button>
+                        {search || selectedCategory !== 'All' || maxPrice ? (
+                            <>
+                                <h3 className="text-xl font-bold text-gray-700 mb-2">No courses found</h3>
+                                <p className="text-gray-500">Try adjusting your search or browse all categories.</p>
+                                <button
+                                    onClick={() => { setSearch(''); setSelectedCategory('All'); setMaxPrice(''); }}
+                                    className="mt-4 text-[#4A1D96] underline text-sm"
+                                >
+                                    Clear filters
+                                </button>
+                            </>
+                        ) : (
+                            <>
+                                <h3 className="text-xl font-bold text-gray-700 mb-2">No courses yet</h3>
+                                <p className="text-gray-500">Mentors haven't published any courses yet. Check back soon.</p>
+                            </>
+                        )}
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

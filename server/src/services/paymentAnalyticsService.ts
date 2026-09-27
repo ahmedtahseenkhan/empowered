@@ -1,5 +1,25 @@
 import prisma from '../config/db';
 import Stripe from 'stripe';
+import { CARD_PLATFORM_FEE_RATE, splitCardCharge } from '../config/fees';
+
+type LessonRef = { id: string; start_time: Date; status: string };
+
+/**
+ * PaymentSchedule rows aren't linked to a lesson; they're matched by due date
+ * (48h before start for checkout bookings, 24h for legacy bookings).
+ */
+function matchLesson(dueDate: Date, lessons: LessonRef[]): LessonRef | null {
+    const dueMs = dueDate.getTime();
+    let best: LessonRef | null = null;
+    let bestDiff = Infinity;
+    for (const l of lessons) {
+        const leadHours = (l.start_time.getTime() - dueMs) / 3_600_000;
+        if (leadHours < 20 || leadHours > 52) continue;
+        const diff = Math.min(Math.abs(leadHours - 48), Math.abs(leadHours - 24));
+        if (diff < bestDiff) { best = l; bestDiff = diff; }
+    }
+    return best;
+}
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder', {
     apiVersion: '2024-12-18.acacia' as any,
@@ -19,34 +39,20 @@ export class PaymentAnalyticsService {
                     },
                     status: 'paid',
                 },
-                include: {
-                    booking: {
-                        include: {
-                            tutor: {
-                                select: {
-                                    hourly_rate: true,
-                                },
-                            },
-                        },
-                    },
-                },
+                select: { amount: true, created_at: true },
             });
 
-            // Calculate total earnings (all time) - using tutor's hourly_rate, not total payment
-            const totalEarnings = paidSessions.reduce((sum, session) => {
-                const tutorEarning = Number(session.booking.tutor.hourly_rate) * 100; // Convert to cents
-                return sum + tutorEarning;
-            }, 0);
+            // Mentor's share of what was actually charged (amount includes the platform fee),
+            // not the mentor's current rate — rates can change after booking.
+            const totalEarnings = paidSessions.reduce(
+                (sum, session) => sum + Math.round(splitCardCharge(session.amount).tutorEarnings * 100), 0);
 
             // Calculate current month earnings
             const now = new Date();
             const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
             const currentMonthEarnings = paidSessions
                 .filter((session) => session.created_at && session.created_at >= startOfMonth)
-                .reduce((sum, session) => {
-                    const tutorEarning = Number(session.booking.tutor.hourly_rate) * 100; // Convert to cents
-                    return sum + tutorEarning;
-                }, 0);
+                .reduce((sum, session) => sum + Math.round(splitCardCharge(session.amount).tutorEarnings * 100), 0);
 
             // Get Stripe Connect account balance and payout info
             const tutor = await prisma.tutorProfile.findUnique({
@@ -133,10 +139,8 @@ export class PaymentAnalyticsService {
                                         },
                                     },
                                 },
-                                tutor: {
-                                    select: {
-                                        hourly_rate: true,
-                                    },
+                                lessons: {
+                                    select: { id: true, start_time: true, status: true },
                                 },
                             },
                         },
@@ -151,19 +155,19 @@ export class PaymentAnalyticsService {
             ]);
 
             const formattedPayments = payments.map((payment) => {
-                const sessionRate = Number(payment.booking.tutor.hourly_rate);
-                const platformFeePercentage = 0.10;
-                const platformFee = sessionRate * platformFeePercentage;
-                const totalCharged = sessionRate + platformFee;
+                const { tutorEarnings, platformFee } = splitCardCharge(payment.amount);
+                const lesson = matchLesson(payment.due_date, payment.booking.lessons);
 
                 return {
                     id: payment.id,
                     date: payment.created_at,
                     studentName: payment.booking.student.username,
-                    sessionDate: payment.due_date,
-                    amountCharged: totalCharged,
-                    tutorEarnings: sessionRate,
-                    platformFee: platformFee,
+                    // due_date is when the charge was due (before the lesson), not the lesson itself
+                    sessionDate: lesson?.start_time ?? null,
+                    lessonStatus: lesson?.status ?? null,
+                    amountCharged: payment.amount,
+                    tutorEarnings,
+                    platformFee,
                     status: payment.status,
                     paymentIntentId: payment.stripe_pi_id,
                 };
@@ -214,6 +218,9 @@ export class PaymentAnalyticsService {
                                     hourly_rate: true,
                                 },
                             },
+                            lessons: {
+                                select: { id: true, start_time: true, status: true },
+                            },
                         },
                     },
                 },
@@ -223,25 +230,25 @@ export class PaymentAnalyticsService {
                 take: 10, // Limit to next 10 upcoming payments
             });
 
-            const formattedPayments = upcomingPayments.map((payment) => {
-                const sessionRate = Number(payment.booking.tutor.hourly_rate);
-                const platformFeePercentage = 0.10;
-                const platformFee = sessionRate * platformFeePercentage;
-                const totalExpected = sessionRate + platformFee;
+            const formattedPayments = upcomingPayments
+                .map((payment) => {
+                    const sessionRate = Number(payment.booking.tutor.hourly_rate);
+                    const platformFee = sessionRate * CARD_PLATFORM_FEE_RATE;
+                    const lesson = matchLesson(payment.due_date, payment.booking.lessons);
 
-                // Payment is typically charged 48 hours before session
-                const paymentDueDate = new Date(payment.due_date);
-                paymentDueDate.setHours(paymentDueDate.getHours() - 48);
-
-                return {
-                    id: payment.id,
-                    studentName: payment.booking.student.username,
-                    sessionDate: payment.due_date,
-                    expectedAmount: totalExpected,
-                    tutorWillReceive: sessionRate,
-                    paymentDueDate: paymentDueDate,
-                };
-            });
+                    return {
+                        id: payment.id,
+                        studentName: payment.booking.student.username,
+                        sessionDate: lesson?.start_time ?? null,
+                        lessonStatus: lesson?.status ?? null,
+                        expectedAmount: sessionRate + platformFee,
+                        tutorWillReceive: sessionRate,
+                        // due_date already is the charge date (before the lesson)
+                        paymentDueDate: payment.due_date,
+                    };
+                })
+                // A cancelled lesson will never be charged
+                .filter((p) => p.lessonStatus !== 'CANCELLED');
 
             return formattedPayments;
         } catch (error) {
@@ -338,7 +345,7 @@ export class PaymentAnalyticsService {
             const rows = payments.map((payment) => [
                 payment.date?.toISOString().split('T')[0] || '',
                 payment.studentName,
-                payment.sessionDate.toISOString().split('T')[0],
+                payment.sessionDate ? payment.sessionDate.toISOString().split('T')[0] : '',
                 `$${payment.amountCharged.toFixed(2)}`,
                 `$${payment.tutorEarnings.toFixed(2)}`,
                 `$${payment.platformFee.toFixed(2)}`,

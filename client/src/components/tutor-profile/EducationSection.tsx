@@ -564,10 +564,11 @@ export const EducationSection: React.FC<EducationSectionProps> = ({ onBack }) =>
 
                     <textarea
                         className="w-full border border-gray-300 rounded-lg p-4 min-h-[120px] text-sm"
-                        placeholder="Mention skills, experience, or techniques that set you apart..."
+                        placeholder={"One strength per line, e.g.\nPatient with beginners\nExam preparation (IGCSE, SAT)"}
                         value={keyStrengths}
                         onChange={(e) => setKeyStrengths(e.target.value)}
                     ></textarea>
+                    <p className="text-xs text-gray-500 mt-2">Put each strength on its own line — each line shows as one tag on your profile.</p>
                 </Card>
             </div>
 

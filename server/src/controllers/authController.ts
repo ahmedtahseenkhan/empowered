@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import crypto from 'crypto';
 import prisma from '../config/db';
 import { hashPassword, comparePassword, generateToken, generateVerificationToken, verifyToken } from '../utils/auth';
-import { RegisterSchema, LoginSchema } from '../utils/validation';
+import { RegisterSchema, LoginSchema, PASSWORD_MIN_LENGTH } from '../utils/validation';
 import { AuthRequest } from '../middleware/authMiddleware';
 import emailService from '../services/emailService';
 import { ensureBetaPremiumAccess, isApprovedBetaEmail } from '../services/betaService';
@@ -124,6 +124,7 @@ export const changePassword = async (req: AuthRequest, res: Response) => {
         const { currentPassword, newPassword } = req.body as { currentPassword?: string; newPassword?: string };
         if (!currentPassword || !newPassword) return res.status(400).json({ error: 'currentPassword and newPassword are required' });
         if (typeof currentPassword !== 'string' || typeof newPassword !== 'string') return res.status(400).json({ error: 'Invalid payload' });
+        if (newPassword.length < PASSWORD_MIN_LENGTH) return res.status(400).json({ error: `New password must be at least ${PASSWORD_MIN_LENGTH} characters` });
 
         const user = await prisma.user.findUnique({ where: { id: userId } });
         if (!user) return res.status(401).json({ error: 'Unauthorized' });
@@ -225,6 +226,7 @@ export const resetPassword = async (req: Request, res: Response) => {
         const { email, code, newPassword } = req.body as { email?: string; code?: string; newPassword?: string };
         if (!email || !code || !newPassword) return res.status(400).json({ error: 'email, code, and newPassword are required' });
         if (typeof email !== 'string' || typeof code !== 'string' || typeof newPassword !== 'string') return res.status(400).json({ error: 'Invalid payload' });
+        if (newPassword.length < PASSWORD_MIN_LENGTH) return res.status(400).json({ error: `New password must be at least ${PASSWORD_MIN_LENGTH} characters` });
 
         const user = await prisma.user.findUnique({ where: { email } });
         if (!user) return res.status(400).json({ error: 'Invalid code or email' });

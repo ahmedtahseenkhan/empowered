@@ -84,42 +84,56 @@ export const getMyLessons = async (req: AuthRequest, res: Response) => {
             }
         });
 
-        // Enrich each lesson with its payment schedule status
-        const enriched = await Promise.all(
-            lessons.map(async (lesson) => {
-                if (lesson.billing_type === 'FREE_INTRO' || lesson.billing_type === 'FREE_TRIAL') {
-                    return { ...lesson, payment_status: 'not_required' as const };
-                }
-
-                // Sessions reserved with Learning Credits are paid up front — no PaymentSchedule rows exist.
-                if (lesson.booking?.funding === 'CREDITS') {
-                    return { ...lesson, payment_status: 'paid' as const };
-                }
-
-                if (!lesson.booking_id) {
-                    return { ...lesson, payment_status: 'unknown' as const };
-                }
-
-                const dueDate = new Date(lesson.start_time.getTime() - 48 * 60 * 60 * 1000);
-                const dueStart = new Date(dueDate.getTime() - 2 * 60 * 60 * 1000);
-                const dueEnd = new Date(dueDate.getTime() + 2 * 60 * 60 * 1000);
-
-                const schedule = await prisma.paymentSchedule.findFirst({
-                    where: {
-                        booking_id: lesson.booking_id,
-                        due_date: { gte: dueStart, lte: dueEnd },
-                    },
-                    select: { status: true },
-                });
-
-                if (!schedule) {
-                    // First session in a booking is paid at checkout — no schedule row means it was paid upfront
-                    return { ...lesson, payment_status: 'paid' as const };
-                }
-
-                return { ...lesson, payment_status: schedule.status as 'paid' | 'pending' | 'failed' };
+        // Enrich each lesson with its payment schedule status (one query for all bookings)
+        const bookingIds = [...new Set(lessons.map((l) => l.booking_id).filter((id): id is string => !!id))];
+        const schedules = bookingIds.length
+            ? await prisma.paymentSchedule.findMany({
+                where: { booking_id: { in: bookingIds } },
+                select: { booking_id: true, due_date: true, status: true },
             })
-        );
+            : [];
+        const schedulesByBooking = new Map<string, typeof schedules>();
+        for (const sch of schedules) {
+            const list = schedulesByBooking.get(sch.booking_id) || [];
+            list.push(sch);
+            schedulesByBooking.set(sch.booking_id, list);
+        }
+        const DUE_LEAD_MS = 48 * 60 * 60 * 1000;
+        const DUE_WINDOW_MS = 2 * 60 * 60 * 1000;
+
+        const enriched = lessons.map((lesson) => {
+            if (lesson.billing_type === 'FREE_INTRO' || lesson.billing_type === 'FREE_TRIAL') {
+                return { ...lesson, payment_status: 'not_required' as const };
+            }
+
+            // Sessions reserved with Learning Credits are paid up front — no PaymentSchedule rows exist.
+            if (lesson.booking?.funding === 'CREDITS') {
+                if (lesson.reservation?.status === 'RETURNED') {
+                    return { ...lesson, payment_status: 'refunded' as const };
+                }
+                return { ...lesson, payment_status: 'paid' as const };
+            }
+
+            if (!lesson.booking_id) {
+                return { ...lesson, payment_status: 'unknown' as const };
+            }
+
+            const dueMs = lesson.start_time.getTime() - DUE_LEAD_MS;
+            const schedule = (schedulesByBooking.get(lesson.booking_id) || [])
+                .find((sch) => Math.abs(sch.due_date.getTime() - dueMs) <= DUE_WINDOW_MS);
+
+            if (!schedule) {
+                // First session in a booking is paid at checkout — no schedule row means it was paid upfront
+                return { ...lesson, payment_status: 'paid' as const };
+            }
+
+            // A cancelled lesson's unpaid schedule will never be charged
+            if (lesson.status === 'CANCELLED' && schedule.status !== 'paid') {
+                return { ...lesson, payment_status: 'not_required' as const };
+            }
+
+            return { ...lesson, payment_status: schedule.status as 'paid' | 'pending' | 'failed' };
+        });
 
         return res.json({ lessons: enriched });
     } catch (e) {
@@ -237,6 +251,7 @@ export const joinLesson = async (req: AuthRequest, res: Response) => {
                 start_time: true,
                 end_time: true,
                 meeting_link: true,
+                meeting_access_type: true,
                 google_calendar_html_link: true,
                 booking: { select: { funding: true } },
             },
@@ -302,13 +317,13 @@ export const joinLesson = async (req: AuthRequest, res: Response) => {
             }
         }
 
-        // Booking-time calendar creation can fail (e.g. mentor never connected Google
-        // Calendar before the fallback existed). Create the Meet link on demand so
-        // nobody is ever stuck at session time without one.
+        // Make sure the session has a Meet link AND that the link is OPEN access, so
+        // nobody is stuck at session time without a link or waiting for host approval.
+        // Links created before OPEN access existed are switched (or replaced) here.
         let meetingLink = lesson.meeting_link;
-        if (!meetingLink) {
+        if (!meetingLink || lesson.meeting_access_type !== 'OPEN') {
             try {
-                meetingLink = await ensureMeetLinkForLesson(lesson.id);
+                meetingLink = (await ensureMeetLinkForLesson(lesson.id)) || meetingLink;
             } catch (err) {
                 console.error(`joinLesson: on-demand meet link failed for ${lesson.id}:`, err);
             }
@@ -605,6 +620,7 @@ export const sendMeetingLinkToStudent = async (req: AuthRequest, res: Response) 
                 status: true,
                 end_time: true,
                 meeting_link: true,
+                meeting_access_type: true,
                 student: { select: { username: true, user: { select: { email: true } } } },
             },
         });
@@ -617,7 +633,9 @@ export const sendMeetingLinkToStudent = async (req: AuthRequest, res: Response) 
             return res.status(400).json({ error: 'This session has already ended' });
         }
 
-        const meetingLink = lesson.meeting_link || (await ensureMeetLinkForLesson(lesson.id));
+        const meetingLink = lesson.meeting_link && lesson.meeting_access_type === 'OPEN'
+            ? lesson.meeting_link
+            : (await ensureMeetLinkForLesson(lesson.id)) || lesson.meeting_link;
         if (!meetingLink) {
             return res.status(503).json({ error: 'The meeting link could not be created right now. Please try again in a minute.' });
         }

@@ -6,6 +6,7 @@ import { Button } from '../components/ui/Button';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import { Modal } from '../components/ui/Modal';
+import { SESSION_MINUTES, SLOT_STEP_MINUTES } from '../constants/session';
 
 type PublicTutorLite = {
     id: string;
@@ -125,8 +126,8 @@ const BookMentorPage: React.FC = () => {
                     params: {
                         from: from.toISOString(),
                         to: to.toISOString(),
-                        durationMinutes: 60,
-                        stepMinutes: 60,
+                        durationMinutes: SESSION_MINUTES,
+                        stepMinutes: SLOT_STEP_MINUTES,
                     }
                 });
 
@@ -488,7 +489,7 @@ const BookMentorPage: React.FC = () => {
                                         tutorId: mentor.id,
                                         frequency,
                                         slotStarts: selectedSlotStarts,
-                                        durationMinutes: 60,
+                                        durationMinutes: SESSION_MINUTES,
                                         createdAt: new Date().toISOString(),
                                     }));
                                     setConfirmOpen(false);

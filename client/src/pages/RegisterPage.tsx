@@ -80,7 +80,7 @@ const RegisterPage: React.FC = () => {
                                 value={formData.password}
                                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                                 required
-                                placeholder="At least 6 characters"
+                                placeholder="At least 8 characters"
                             />
 
                             <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">

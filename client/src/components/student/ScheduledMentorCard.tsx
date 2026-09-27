@@ -3,6 +3,7 @@ import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { ShieldCheck, Mail, Calendar, ExternalLink, Clock, Star } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { Avatar } from '../ui/Avatar';
 
 interface ScheduledMentorCardProps {
     mentor: {
@@ -34,10 +35,10 @@ export const ScheduledMentorCard: React.FC<ScheduledMentorCardProps> = ({
             <div className="flex flex-col md:flex-row gap-6">
                 {/* Avatar Section */}
                 <div className="flex-shrink-0">
-                    <img loading="lazy" decoding="async"
-                        src={mentor.profilePhoto || `https://ui-avatars.com/api/?name=${mentor.name}&background=random`}
-                        alt={mentor.name}
-                        className="w-20 h-20 rounded-full object-cover border-4 border-gray-50 shadow-sm"
+                    <Avatar
+                        name={mentor.name}
+                        src={mentor.profilePhoto}
+                        className="w-20 h-20 border-4 border-gray-50 shadow-sm"
                     />
                 </div>
 
@@ -67,11 +68,11 @@ export const ScheduledMentorCard: React.FC<ScheduledMentorCardProps> = ({
                         </div>
 
 
-                        <div className="flex items-center gap-2 text-gray-600 col-span-full md:col-span-1">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-gray-600 col-span-full md:col-span-1 min-w-0">
                             <Clock className="w-4 h-4 text-gray-400" />
-                            <span>Total Sessions: <span className="font-medium text-gray-900">{mentor.totalSessions}</span></span>
-                            <span className="mx-1 text-gray-300">|</span>
-                            <span>Pending: <span className="font-medium text-primary-600">{mentor.pendingSessions}</span></span>
+                            <span>Completed: <span className="font-medium text-gray-900">{mentor.totalSessions}</span></span>
+                            <span className="text-gray-300">|</span>
+                            <span>Upcoming: <span className="font-medium text-primary-600">{mentor.pendingSessions}</span></span>
                         </div>
                     </div>
 
