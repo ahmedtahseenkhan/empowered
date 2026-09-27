@@ -1,6 +1,6 @@
 import prisma from '../config/db';
 import { WALLET_CONFIG, processCompletedLessons, settlePendingEarnings, runMonthlySettlement } from './walletService';
-import { ensureMeetLinkForLesson } from './googleCalendar';
+import { ensureMeetLinkForLesson, upgradeUpcomingLessonsToOpenAccess } from './googleCalendar';
 
 /** Ask the student to confirm a just-ended credit-funded session (their confirmation
  *  releases the mentor's payment; the grace-window backstop covers non-responders). */
@@ -58,6 +58,17 @@ async function backfillMissingMeetingLinks() {
         }
     }
     if (fixed) console.log(`[Scheduler] Backfilled meeting links for ${fixed} lesson(s)`);
+
+    // Sessions booked before OPEN access existed still ask for host approval until switched.
+    try {
+        const up = await upgradeUpcomingLessonsToOpenAccess(20);
+        if (up.opened || up.replaced) {
+            console.log(`[Scheduler] Meeting links switched to OPEN access: opened=${up.opened} replaced=${up.replaced} remaining=${up.stillRestricted}`);
+        }
+        if (up.setupError) console.warn(`[Scheduler] Meeting links cannot be switched to OPEN access: ${up.setupError}`);
+    } catch (e) {
+        console.error('[Scheduler] OPEN-access upgrade failed:', e);
+    }
     return { fixed };
 }
 

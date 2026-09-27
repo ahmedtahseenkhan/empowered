@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import api from '../api/axios';
 import { Clock, Ban, Plus, Trash2 } from 'lucide-react';
+import GoogleMeetStatusCard from '../components/GoogleMeetStatusCard';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const DALLAS_TZ = 'America/Chicago';
@@ -170,6 +171,8 @@ const DemoAvailabilityPage: React.FC = () => {
             {success && (
                 <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">{success}</div>
             )}
+
+            <GoogleMeetStatusCard />
 
             {/* Weekly availability windows */}
             <div className="bg-white border border-gray-200 rounded-xl p-6">

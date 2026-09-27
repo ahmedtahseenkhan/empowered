@@ -368,6 +368,30 @@ class EmailService {
         });
     }
 
+    /**
+     * System-triggered: the session's Google Meet link was replaced; tell one participant.
+     */
+    async sendSessionMeetingLinkUpdated(data: {
+        recipientName: string;
+        recipientEmail: string;
+        otherPartyLabel: 'Mentor' | 'Student';
+        otherPartyName: string;
+        sessionDate: string;
+        sessionTime: string;
+        meetingLink: string;
+        dashboardUrl: string;
+    }): Promise<void> {
+        const html = this.renderTemplate('shared/session-meeting-link-updated', {
+            ...data,
+            year: new Date().getFullYear(),
+        });
+        await this.sendEmail({
+            to: data.recipientEmail,
+            subject: `New Google Meet link for your session with ${data.otherPartyName}`,
+            html,
+        });
+    }
+
     async sendSessionRescheduledMentor(data: {
         mentorName: string;
         mentorEmail: string;

@@ -36,6 +36,8 @@ import {
     adminCreateSubAdmin,
     adminUpdateSubAdmin,
     adminDeleteSubAdmin,
+    adminGetGoogleMeetStatus,
+    adminUpgradeSessionsToOpenAccess,
 } from '../controllers/adminController';
 import {
     adminGetStudentWallet,
@@ -95,6 +97,9 @@ router.patch('/demo-bookings/:id/reschedule', requirePermission('demo-requests')
 
 router.get('/demo-availability', requirePermission('demo-availability'), adminGetDemoAvailability);
 router.put('/demo-availability', requirePermission('demo-availability'), adminPutDemoAvailability);
+
+router.get('/google-meet/status', requirePermission('demo-availability', 'demo-requests'), adminGetGoogleMeetStatus);
+router.post('/google-meet/upgrade-sessions', requirePermission('demo-availability', 'demo-requests'), adminUpgradeSessionsToOpenAccess);
 
 router.get('/demo-blocks', requirePermission('demo-availability'), adminListDemoBlocks);
 router.post('/demo-blocks', requirePermission('demo-availability'), adminCreateDemoBlock);

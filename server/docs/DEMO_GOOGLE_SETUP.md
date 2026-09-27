@@ -92,3 +92,22 @@ While the OAuth consent screen is in *Testing* mode, Google expires refresh toke
 | Browser – get demo token | `https://emplearnings.com/api/demo/oauth-start` |
 
 One domain for API and OAuth: **emplearnings.com**. If you get **redirect_uri_mismatch**, set `GOOGLE_DEMO_REDIRECT_URI` in `.env` to the exact URL you added in Google Console and restart the server.
+
+---
+
+## Sessions still ask for host approval ("waiting for the host to let you in")
+
+Open the admin panel → **Demo Availability** → **Google Meet connection**. The card checks the live Google account and tells you which of these is the cause:
+
+| Card says | Cause | Fix |
+|-----------|-------|-----|
+| Google account is NOT connected | Token missing, expired or revoked | **Reconnect Google account**, save the new token as `GOOGLE_DEMO_REFRESH_TOKEN`, restart |
+| Google Meet permission is missing | A permission box was left unticked on the consent screen | Reconnect and tick every permission |
+| Google Meet API is not working | "Google Meet REST API" is not enabled on the Cloud project | Enable it (step 1), then **Check again** |
+| Older link(s) still ask for host approval | Sessions booked **before** the fix keep their old link settings | Click **Fix upcoming sessions** |
+
+Old links are also fixed automatically: the scheduler switches up to 20 upcoming sessions every run, and any session is switched the moment someone presses **Join Session**. If an old link belongs to a different Google account it cannot be switched, so it is replaced with a new link and both the mentor and the student are emailed the new one.
+
+Always join through the **Join Session** button or the newest email. A link copied from an old email may be the pre-fix link.
+
+Participants must be signed in to a Google account in their browser. Meetings hosted by a free Gmail account do not admit people who are not signed in.

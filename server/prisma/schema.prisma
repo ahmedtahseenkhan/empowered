@@ -492,6 +492,9 @@ model Lesson {
   meeting_link              String?
   google_calendar_event_id  String?           @unique
   google_calendar_html_link String?
+  // Google Meet access type applied to meeting_link: "OPEN" = anyone with the link joins without
+  // knocking. NULL = legacy / Calendar-generated link that may still require host approval.
+  meeting_access_type       String?
   category                  String?
 
   completed_at         DateTime? // Set when the session is marked COMPLETED (auto or admin)
