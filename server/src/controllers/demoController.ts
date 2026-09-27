@@ -78,7 +78,7 @@ export async function createDemoBooking(req: Request, res: Response) {
         const looking_for_str = lookingFor.length ? JSON.stringify(lookingFor) : '[]';
 
         // Create Google Meet link first so every demo booking always has a meeting link
-        let meetResult: { meetLink: string; htmlLink: string | null; eventId: string | null };
+        let meetResult: { meetLink: string; htmlLink: string | null; eventId: string | null; accessType: string | null };
         try {
             meetResult = await createDemoMeetEvent({
                 prospectEmail: email,
@@ -106,6 +106,7 @@ export async function createDemoBooking(req: Request, res: Response) {
                 slot_end_time: end,
                 timezone: prospectTimezone,
                 meeting_link: meetResult.meetLink,
+                meeting_access_type: meetResult.accessType,
                 google_event_id: meetResult.eventId,
             },
         });

@@ -341,12 +341,14 @@ export const createCreditsPurchaseCheckout = async (req: AuthRequest, res: Respo
             ? `${successUrl}&purchase_session_id={CHECKOUT_SESSION_ID}`
             : `${successUrl}?purchase_session_id={CHECKOUT_SESSION_ID}`;
 
+        const feeCents = wallet.purchaseFeeCents(amount);
         const session = await StripeService.createCreditsCheckoutSession(
             amount * 100,
             stripeCustomerId,
             successWithSession,
             cancelUrl,
-            { type: 'credits_purchase', studentId: student.id, credits: String(amount) },
+            { type: 'credits_purchase', studentId: student.id, credits: String(amount), feeCents: String(feeCents) },
+            { amountInCents: feeCents, percent: WALLET_CONFIG.purchaseFeePercent },
         );
         return res.json({ url: session.url });
     } catch (e) {
@@ -372,6 +374,7 @@ export const finalizeCreditsPurchase = async (req: AuthRequest, res: Response) =
             studentId: student.id,
             credits: Number(meta.credits),
             amountCents: Number(session.amount_total || 0),
+            feeCents: Number(meta.feeCents || 0),
             stripePaymentIntentId: String(session.payment_intent),
             stripeCheckoutSessionId: session.id,
         });
@@ -385,6 +388,31 @@ export const finalizeCreditsPurchase = async (req: AuthRequest, res: Response) =
 // ---------------------------------------------------------------------------
 // Mentor
 // ---------------------------------------------------------------------------
+
+export const getMentorPayoutSettings = async (req: AuthRequest, res: Response) => {
+    try {
+        const tutor = await requireTutor(req);
+        const settings = await wallet.getMentorPayoutSettings(tutor.id);
+        return res.json(settings);
+    } catch (e) {
+        return fail(res, e, 'Failed to load payout settings');
+    }
+};
+
+export const updateMentorPayoutSettings = async (req: AuthRequest, res: Response) => {
+    try {
+        const tutor = await requireTutor(req);
+        const { method, zelle_contact, bank_name, bank_account_name, bank_account_number, bank_routing, bank_notes } =
+            req.body as Record<string, string | undefined>;
+        const settings = await wallet.updateMentorPayoutSettings(tutor.id, {
+            method: method as 'STRIPE' | 'ZELLE' | 'BANK_TRANSFER',
+            zelle_contact, bank_name, bank_account_name, bank_account_number, bank_routing, bank_notes,
+        });
+        return res.json(settings);
+    } catch (e) {
+        return fail(res, e, 'Failed to save payout settings');
+    }
+};
 
 export const getMentorWalletEarnings = async (req: AuthRequest, res: Response) => {
     try {
@@ -513,8 +541,14 @@ export const adminMarkMentorPaid = async (req: AuthRequest, res: Response) => {
         const adminUserId = req.user?.id;
         if (!adminUserId) throw new WalletError('Unauthorized', 401);
         const { id } = req.params;
-        const { note } = req.body as { note?: string };
-        const result = await wallet.markEarningsPaid({ tutorId: id, note: note || '', adminUserId });
+        const { note, method, proofUrl } = req.body as { note?: string; method?: string; proofUrl?: string };
+        const result = await wallet.markEarningsPaid({
+            tutorId: id,
+            note: note || '',
+            adminUserId,
+            method: method === 'STRIPE' || method === 'ZELLE' || method === 'BANK_TRANSFER' ? method : undefined,
+            proofUrl,
+        });
         return res.json(result);
     } catch (e) {
         return fail(res, e, 'Failed to record payout');

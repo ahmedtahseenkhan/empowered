@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Wallet, CreditCard } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Wallet, ShieldCheck } from 'lucide-react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -34,24 +34,33 @@ type CreditsQuote = {
   available: number;
   sufficient: boolean;
   shortfall: number;
-  config: { weeksPerBooking: number; cancelCutoffHours: number; settlementDays: number };
+  config: {
+    weeksPerBooking: number;
+    cancelCutoffHours: number;
+    settlementDays: number;
+    purchaseMinCredits?: number;
+    purchaseMaxCredits?: number;
+    purchaseFeePercent?: number;
+  };
 };
 
 const PENDING_BOOKING_KEY = 'pendingStudentBooking';
-const PLATFORM_FEE_PERCENTAGE = 0.1;
 
 const currency = (amount: number) =>
   new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(amount);
 
 const StudentBookingPaymentReviewPage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [pending, setPending] = useState<PendingBooking | null>(null);
   const [mentor, setMentor] = useState<PublicTutorLite | null>(null);
   const [quote, setQuote] = useState<CreditsQuote | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [quoteLoading, setQuoteLoading] = useState(true);
+  const [buyBusy, setBuyBusy] = useState(false);
   const [creditsBusy, setCreditsBusy] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
 
   const studentTimezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', []);
 
@@ -87,21 +96,45 @@ const StudentBookingPaymentReviewPage: React.FC = () => {
           hourly_rate: m.hourly_rate,
           timezone: m.timezone || 'UTC',
         });
-      } catch (e: any) {
-        setError(e?.response?.data?.error || 'Failed to load mentor.');
+      } catch (e) {
+        setError(apiError(e, 'Failed to load mentor.'));
         setMentor(null);
       }
     };
     fetchMentor();
   }, [pending?.tutorId]);
 
-  // Learning Credits quote (non-fatal: if the wallet is unavailable, the card flow still works)
+  const refreshQuote = useCallback(async () => {
+    if (!pending?.tutorId) return;
+    try {
+      const res = await api.get('/wallet/quote', { params: { tutorId: pending.tutorId, frequency: pending.frequency } });
+      setQuote(res.data || null);
+    } catch {
+      setQuote(null);
+    } finally {
+      setQuoteLoading(false);
+    }
+  }, [pending?.tutorId, pending?.frequency]);
+
+  // Returning from Stripe Checkout: credit the purchase (idempotent with the webhook), then re-quote.
   useEffect(() => {
     if (!pending?.tutorId) return;
-    api.get('/wallet/quote', { params: { tutorId: pending.tutorId, frequency: pending.frequency } })
-      .then((res) => setQuote(res.data || null))
-      .catch(() => setQuote(null));
-  }, [pending?.tutorId, pending?.frequency]);
+    const sessionId = searchParams.get('purchase_session_id');
+    (async () => {
+      if (sessionId) {
+        try {
+          await api.post('/wallet/purchase/finalize', { sessionId });
+          setNotice('Payment received — your credits have been added. Reserve your sessions below to confirm the booking.');
+        } catch (e) {
+          setError(apiError(e, 'We could not confirm your purchase automatically. It may take a minute — refresh this page.'));
+        } finally {
+          searchParams.delete('purchase_session_id');
+          setSearchParams(searchParams, { replace: true });
+        }
+      }
+      await refreshQuote();
+    })();
+  }, [pending?.tutorId, refreshQuote]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const firstStart = useMemo(() => {
     const starts = (pending?.slotStarts || []).map((s) => new Date(s)).filter((d) => !Number.isNaN(d.getTime()));
@@ -109,14 +142,12 @@ const StudentBookingPaymentReviewPage: React.FC = () => {
     return starts[0] || null;
   }, [pending?.slotStarts]);
 
-  const sessionAmount = useMemo(() => {
-    const rate = Number(mentor?.hourly_rate || 0);
-    // Backend currently charges tutor.hourly_rate for a session (duration defaults to 60).
-    return rate;
-  }, [mentor?.hourly_rate]);
-
-  const platformFee = useMemo(() => sessionAmount * PLATFORM_FEE_PERCENTAGE, [sessionAmount]);
-  const totalPayable = useMemo(() => sessionAmount + platformFee, [sessionAmount, platformFee]);
+  const feePercent = quote?.config.purchaseFeePercent ?? 0;
+  const minBuy = quote?.config.purchaseMinCredits ?? 10;
+  const maxBuy = quote?.config.purchaseMaxCredits ?? 1000;
+  const topUpCredits = quote && !quote.sufficient ? Math.max(quote.shortfall, minBuy) : 0;
+  const topUpFee = Math.round(topUpCredits * feePercent) / 100;
+  const topUpTooLarge = topUpCredits > maxBuy;
 
   const reserveWithCredits = async () => {
     if (!pending || !mentor || !quote?.sufficient) return;
@@ -140,36 +171,23 @@ const StudentBookingPaymentReviewPage: React.FC = () => {
     }
   };
 
-  const continueToStripe = async () => {
-    if (!pending || !mentor) return;
+  const buyTopUp = async () => {
+    if (!topUpCredits || topUpTooLarge) return;
     try {
-      setBusy(true);
+      setBuyBusy(true);
       setError('');
-
-      const baseUrl = window.location.origin;
-      const successUrl = `${baseUrl}/student/booking/confirmation`;
-      const cancelUrl = `${baseUrl}/student/booking/review`;
-
-      const res = await api.post('/payments/student/booking', {
-        tutorId: mentor.id,
-        frequency: pending.frequency,
-        slotStarts: pending.slotStarts,
-        durationMinutes: pending.durationMinutes,
-        successUrl,
-        cancelUrl,
-        clientTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      const reviewUrl = `${window.location.origin}/student/booking/review`;
+      const res = await api.post('/wallet/purchase', {
+        credits: topUpCredits,
+        successUrl: reviewUrl,
+        cancelUrl: reviewUrl,
       });
-
       const url = res.data?.url as string | undefined;
-      if (!url) throw new Error('No Stripe URL returned');
-
-      // Once we redirect to Stripe, clear the pending object.
-      sessionStorage.removeItem(PENDING_BOOKING_KEY);
+      if (!url) throw new Error('No checkout URL returned');
       window.location.href = url;
-    } catch (e: any) {
-      setError(e?.response?.data?.error || 'Failed to start payment.');
-    } finally {
-      setBusy(false);
+    } catch (e) {
+      setError(apiError(e, 'Failed to start the credit purchase.'));
+      setBuyBusy(false);
     }
   };
 
@@ -193,7 +211,8 @@ const StudentBookingPaymentReviewPage: React.FC = () => {
     );
   }
 
-  const showCredits = !!quote?.enabled && quote.required > 0;
+  const creditsAvailable = !!quote?.enabled && quote.required > 0;
+  const busy = buyBusy || creditsBusy;
 
   return (
     <DashboardLayout>
@@ -201,12 +220,16 @@ const StudentBookingPaymentReviewPage: React.FC = () => {
         <div>
           <h1 className="text-xl font-semibold text-gray-900">Review & confirm</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Review the booking details and choose how you'd like to pay.
+            Review the booking details and reserve your sessions with Learning Credits.
           </p>
         </div>
 
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>
+        )}
+
+        {notice && (
+          <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-lg text-sm">{notice}</div>
         )}
 
         <Card>
@@ -233,26 +256,43 @@ const StudentBookingPaymentReviewPage: React.FC = () => {
               <dt className="text-gray-500">Frequency</dt>
               <dd className="font-medium text-gray-900">{pending.frequency === 'TWICE_WEEKLY' ? 'Twice weekly' : 'Weekly'}</dd>
             </div>
+            {creditsAvailable && quote && (
+              <>
+                <div className="flex justify-between py-2 border-b border-gray-100">
+                  <dt className="text-gray-500">Sessions reserved</dt>
+                  <dd className="font-medium text-gray-900">{quote.sessions}</dd>
+                </div>
+                <div className="flex justify-between py-2 border-b border-gray-100">
+                  <dt className="text-gray-500">Credits per session</dt>
+                  <dd className="font-medium text-gray-900">{quote.creditsPerSession}</dd>
+                </div>
+              </>
+            )}
           </dl>
         </Card>
 
-        {showCredits && quote && (
-          <Card className={quote.sufficient ? 'border-purple-200 ring-1 ring-purple-100' : ''}>
+        {quoteLoading ? (
+          <Card>
+            <div className="text-sm text-gray-600">Loading your Learning Credits…</div>
+          </Card>
+        ) : !creditsAvailable || !quote ? (
+          <Card>
+            <div className="text-sm font-semibold text-gray-900">Learning Credits are unavailable right now</div>
+            <p className="text-sm text-gray-600 mt-1">
+              Sessions are reserved with Learning Credits, and we couldn't load your credits for this booking. Please try again in a moment or contact support.
+            </p>
+          </Card>
+        ) : (
+          <Card className="border-purple-200 ring-1 ring-purple-100">
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center text-purple-700 shrink-0">
                 <Wallet className="w-5 h-5" />
               </div>
-              <div className="flex-1">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="text-sm font-semibold text-gray-900">Reserve with Learning Credits</div>
-                  {quote.sufficient && (
-                    <span className="text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-purple-100 text-purple-800">Recommended</span>
-                  )}
-                </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold text-gray-900">Reserve with Learning Credits</div>
                 <p className="text-sm text-gray-600 mt-1">
-                  Reserves your next <span className="font-medium">{quote.sessions} sessions</span> ({quote.creditsPerSession} credits each).
-                  Credits are only released to the mentor after each session is completed, and any session you cancel more than{' '}
-                  {quote.config.cancelCutoffHours} hours ahead returns its credits to your wallet instantly.
+                  Reserves your next <span className="font-medium">{quote.sessions} sessions</span> ({quote.creditsPerSession} credits each, 1 credit = $1).
+                  Credits are released to the mentor only after each session is completed.
                 </p>
                 <dl className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
                   <div className="bg-gray-50 rounded-lg px-3 py-2">
@@ -270,66 +310,88 @@ const StudentBookingPaymentReviewPage: React.FC = () => {
                     </dd>
                   </div>
                 </dl>
-                <div className="mt-4">
+
+                {!quote.sufficient && (
+                  <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+                    <div className="text-sm font-medium text-amber-900">
+                      You need {quote.shortfall} more credit{quote.shortfall === 1 ? '' : 's'} to reserve these sessions.
+                    </div>
+                    {topUpTooLarge ? (
+                      <p className="text-sm text-amber-900 mt-1">
+                        A single purchase is limited to {maxBuy} credits. Add credits from your{' '}
+                        <Link to="/student/wallet" className="underline font-medium">wallet</Link>, then return here to reserve.
+                      </p>
+                    ) : (
+                      <>
+                        <dl className="mt-3 grid grid-cols-1 gap-1 text-sm max-w-sm">
+                          <div className="flex justify-between py-1">
+                            <dt className="text-gray-700">{topUpCredits} Learning Credits</dt>
+                            <dd className="font-medium text-gray-900">{currency(topUpCredits)}</dd>
+                          </div>
+                          {feePercent > 0 && (
+                            <div className="flex justify-between py-1">
+                              <dt className="text-gray-700">Platform fee ({feePercent}%)</dt>
+                              <dd className="font-medium text-gray-900">{currency(topUpFee)}</dd>
+                            </div>
+                          )}
+                          <div className="flex justify-between py-1 border-t border-amber-200">
+                            <dt className="font-semibold text-gray-900">Total charged to card</dt>
+                            <dd className="font-semibold text-gray-900">{currency(topUpCredits + topUpFee)}</dd>
+                          </div>
+                        </dl>
+                        {topUpCredits > quote.shortfall && (
+                          <p className="text-xs text-gray-600 mt-1">
+                            The minimum purchase is {minBuy} credits. Unused credits stay in your wallet and never expire.
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+
+                <div className="mt-4 flex flex-col sm:flex-row gap-3">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => navigate(`/student/book/${pending.tutorId}?frequency=${encodeURIComponent(pending.frequency)}`)}
+                    disabled={busy}
+                  >
+                    Back
+                  </Button>
                   {quote.sufficient ? (
-                    <Button size="sm" onClick={reserveWithCredits} disabled={creditsBusy || busy || !mentor}>
+                    <Button size="sm" onClick={reserveWithCredits} disabled={busy || !mentor}>
                       <Wallet className="w-4 h-4 mr-2" />
                       {creditsBusy ? 'Reserving…' : `Reserve ${quote.sessions} sessions with ${quote.required} credits`}
                     </Button>
-                  ) : (
-                    <div className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex flex-wrap items-center justify-between gap-2">
-                      <span>You need {quote.shortfall} more credits to reserve these sessions.</span>
-                      <Button size="xs" onClick={() => navigate('/student/wallet')} disabled={busy || creditsBusy}>
-                        Buy credits
-                      </Button>
-                    </div>
-                  )}
+                  ) : !topUpTooLarge ? (
+                    <Button size="sm" onClick={buyTopUp} disabled={busy}>
+                      {buyBusy ? 'Redirecting…' : `Buy ${topUpCredits} credits`}
+                    </Button>
+                  ) : null}
                 </div>
               </div>
             </div>
           </Card>
         )}
 
-        <Card>
-          <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center text-gray-700 shrink-0">
-              <CreditCard className="w-5 h-5" />
-            </div>
-            <div className="flex-1">
-              <div className="text-sm font-semibold text-gray-900">{showCredits ? 'Or pay per session by card' : 'Pay by card'}</div>
-              <dl className="mt-3 grid grid-cols-1 gap-2 text-sm max-w-sm">
-                <div className="flex justify-between py-2 border-b border-gray-100">
-                  <dt className="text-gray-500">Session amount</dt>
-                  <dd className="font-medium text-gray-900">{currency(sessionAmount)}</dd>
-                </div>
-                <div className="flex justify-between py-2 border-b border-gray-100">
-                  <dt className="text-gray-500">Platform fee (10%)</dt>
-                  <dd className="font-medium text-gray-900">{currency(platformFee)}</dd>
-                </div>
-                <div className="flex justify-between py-2">
-                  <dt className="text-gray-900 font-semibold">Total payable today</dt>
-                  <dd className="text-gray-900 font-semibold">{currency(totalPayable)}</dd>
-                </div>
-              </dl>
-              <p className="text-xs text-gray-500 mt-2">
-                You are charged today for the <span className="font-medium">first session only</span>. Upcoming sessions are paid separately (pay‑per‑session).
-              </p>
-              <div className="mt-4 flex flex-col sm:flex-row gap-3">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => navigate(`/student/book/${pending.tutorId}?frequency=${encodeURIComponent(pending.frequency)}`)}
-                  disabled={busy || creditsBusy}
-                >
-                  Back
-                </Button>
-                <Button size="sm" variant={showCredits && quote?.sufficient ? 'outline' : 'primary'} onClick={continueToStripe} disabled={busy || creditsBusy || !mentor}>
-                  {busy ? 'Redirecting…' : 'Pay with card via Stripe'}
-                </Button>
+        {creditsAvailable && quote && (
+          <Card className="bg-purple-50/60 border-purple-100">
+            <div className="flex items-start gap-3">
+              <ShieldCheck className="w-5 h-5 text-purple-700 mt-0.5 shrink-0" />
+              <div className="text-sm text-gray-700">
+                <p className="font-semibold text-gray-900">Cancellation & refund policy</p>
+                <ul className="list-disc pl-5 space-y-1 mt-1">
+                  <li>Cancel a session more than {quote.config.cancelCutoffHours} hours before it starts and its credits return to your wallet instantly.</li>
+                  <li>Within {quote.config.cancelCutoffHours} hours of the start time, a session can no longer be cancelled for a credit return.</li>
+                  <li>If your mentor cancels a session, its credits are returned to your wallet.</li>
+                  <li>All refunds are issued as Learning Credits to your EmpowerEd wallet — not as a cash or card refund.</li>
+                  <li>Learning Credits can only be used on EmpowerEd Learnings, cannot be withdrawn as cash, and never expire.</li>
+                  {feePercent > 0 && <li>The {feePercent}% platform fee on credit purchases is non-refundable.</li>}
+                </ul>
               </div>
             </div>
-          </div>
-        </Card>
+          </Card>
+        )}
       </div>
     </DashboardLayout>
   );

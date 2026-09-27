@@ -26,8 +26,6 @@ const requiredWeeklySlotsForFrequency = (frequency: Frequency) => {
     return 1;
 };
 
-const PLATFORM_FEE_PERCENTAGE = 0.1;
-
 const StudentBookMentorPage: React.FC = () => {
     const { id } = useParams();
     const [searchParams] = useSearchParams();
@@ -84,7 +82,6 @@ const StudentBookMentorPage: React.FC = () => {
     const availableDays = useMemo(() => Array.from(slotsByDay.keys()).sort(), [slotsByDay]);
 
     const [monthOffset, setMonthOffset] = useState(0);
-    const [confirmOpen, setConfirmOpen] = useState(false);
     const [confirmReplaceOpen, setConfirmReplaceOpen] = useState(false);
     const [pendingSlotStart, setPendingSlotStart] = useState('');
 
@@ -246,16 +243,6 @@ const StudentBookMentorPage: React.FC = () => {
         setPendingSlotStart('');
     };
 
-    const firstSelectedStart = useMemo(() => {
-        const starts = selectedSlotStarts.map((s) => new Date(s)).filter((d) => !Number.isNaN(d.getTime()));
-        starts.sort((a, b) => a.getTime() - b.getTime());
-        return starts[0] || null;
-    }, [selectedSlotStarts]);
-
-    const sessionAmount = useMemo(() => Number(mentor?.hourly_rate || 0), [mentor?.hourly_rate]);
-    const platformFee = useMemo(() => sessionAmount * PLATFORM_FEE_PERCENTAGE, [sessionAmount]);
-    const totalPayable = useMemo(() => sessionAmount + platformFee, [sessionAmount, platformFee]);
-
     const onContinue = async () => {
         if (!mentor) return;
 
@@ -277,7 +264,14 @@ const StudentBookMentorPage: React.FC = () => {
         }
 
         setError('');
-        setConfirmOpen(true);
+        sessionStorage.setItem('pendingStudentBooking', JSON.stringify({
+            tutorId: mentor.id,
+            frequency,
+            slotStarts: selectedSlotStarts,
+            durationMinutes: SESSION_MINUTES,
+            createdAt: new Date().toISOString(),
+        }));
+        navigate('/student/booking/review');
     };
 
     return (
@@ -517,77 +511,6 @@ const StudentBookMentorPage: React.FC = () => {
                     <div className="flex justify-end">
                         <Button variant="outline" onClick={() => { setConfirmReplaceOpen(false); setPendingSlotStart(''); }}>
                             Cancel
-                        </Button>
-                    </div>
-                </div>
-            </Modal>
-
-            <Modal
-                isOpen={confirmOpen}
-                onClose={() => setConfirmOpen(false)}
-                title="Confirm booking"
-            >
-                <div className="space-y-4">
-                    <p className="text-gray-600">
-                        Please confirm your session details. Next you’ll review charges and continue to Stripe.
-                    </p>
-                    <dl className="grid grid-cols-1 gap-2 text-sm">
-                        <div className="flex justify-between py-2 border-b border-gray-100">
-                            <dt className="text-gray-500">Mentor</dt>
-                            <dd className="font-medium text-gray-900">{mentor?.username}</dd>
-                        </div>
-                        <div className="flex justify-between py-2 border-b border-gray-100">
-                            <dt className="text-gray-500">Date</dt>
-                            <dd className="font-medium text-gray-900">
-                                {firstSelectedStart
-                                    ? firstSelectedStart.toLocaleDateString(undefined, { timeZone: studentTimezone, weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
-                                    : '—'}
-                            </dd>
-                        </div>
-                        <div className="flex justify-between py-2 border-b border-gray-100">
-                            <dt className="text-gray-500">Time</dt>
-                            <dd className="font-medium text-gray-900">
-                                {firstSelectedStart ? formatTimeLabel(firstSelectedStart.toISOString(), studentTimezone) : '—'}
-                            </dd>
-                        </div>
-                        <div className="flex justify-between py-2 border-b border-gray-100">
-                            <dt className="text-gray-500">Duration</dt>
-                            <dd className="font-medium text-gray-900">60 minutes</dd>
-                        </div>
-                        <div className="flex justify-between py-2 border-b border-gray-100">
-                            <dt className="text-gray-500">Session amount</dt>
-                            <dd className="font-medium text-gray-900">${sessionAmount.toFixed(2)}</dd>
-                        </div>
-                        <div className="flex justify-between py-2 border-b border-gray-100">
-                            <dt className="text-gray-500">Platform fee (10%)</dt>
-                            <dd className="font-medium text-gray-900">${platformFee.toFixed(2)}</dd>
-                        </div>
-                        <div className="flex justify-between py-2">
-                            <dt className="text-gray-900 font-semibold">Total payable today</dt>
-                            <dd className="text-gray-900 font-semibold">${totalPayable.toFixed(2)}</dd>
-                        </div>
-                    </dl>
-
-                    <div className="flex gap-3 pt-4">
-                        <Button variant="outline" className="flex-1" onClick={() => setConfirmOpen(false)}>
-                            Cancel
-                        </Button>
-                        <Button
-                            className="flex-1"
-                            onClick={() => {
-                                if (!mentor) return;
-                                sessionStorage.setItem('pendingStudentBooking', JSON.stringify({
-                                    tutorId: mentor.id,
-                                    frequency,
-                                    slotStarts: selectedSlotStarts,
-                                    durationMinutes: SESSION_MINUTES,
-                                    createdAt: new Date().toISOString(),
-                                }));
-                                setConfirmOpen(false);
-                                navigate('/student/booking/review');
-                            }}
-                        >
-                            Confirm
                         </Button>
                     </div>
                 </div>

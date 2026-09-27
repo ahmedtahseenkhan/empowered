@@ -25,6 +25,7 @@ type WalletData = {
         purchaseMinCredits?: number;
         purchaseMaxCredits?: number;
         purchasePackages?: number[];
+        purchaseFeePercent?: number;
     };
 };
 
@@ -114,6 +115,8 @@ const StudentWalletPage: React.FC = () => {
     const packages = useMemo(() => wallet?.config.purchasePackages?.length ? wallet.config.purchasePackages : [25, 50, 100, 200], [wallet]);
     const minBuy = wallet?.config.purchaseMinCredits ?? 10;
     const maxBuy = wallet?.config.purchaseMaxCredits ?? 1000;
+    const feePercent = wallet?.config.purchaseFeePercent ?? 0;
+    const totalFor = (credits: number) => (credits + Math.round(credits * feePercent) / 100).toFixed(2);
 
     const startPurchase = async (credits: number) => {
         try {
@@ -229,7 +232,10 @@ const StudentWalletPage: React.FC = () => {
                             <CreditCard className="w-5 h-5 text-[#4A1D96]" />
                             <h2 className="text-lg font-semibold text-gray-900">Buy Learning Credits</h2>
                         </div>
-                        <p className="text-sm text-gray-600 mb-4">1 credit = $1, paid securely through Stripe. Credits land in your wallet instantly after payment.</p>
+                        <p className="text-sm text-gray-600 mb-4">
+                            1 credit = $1, paid securely through Stripe. Credits land in your wallet instantly after payment.
+                            {feePercent > 0 && ` A ${feePercent}% platform fee is added at checkout; prices below include it.`}
+                        </p>
                         <div className="flex flex-wrap gap-2">
                             {packages.map((p) => (
                                 <button
@@ -240,7 +246,7 @@ const StudentWalletPage: React.FC = () => {
                                     className="px-5 py-3 rounded-xl border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-900 font-semibold text-sm disabled:opacity-50"
                                 >
                                     {p} credits
-                                    <span className="block text-xs font-normal text-purple-700">${p}.00</span>
+                                    <span className="block text-xs font-normal text-purple-700">${totalFor(p)}</span>
                                 </button>
                             ))}
                         </div>
@@ -264,11 +270,14 @@ const StudentWalletPage: React.FC = () => {
                                 disabled={buyBusy || !buyAmount || !Number.isInteger(Number(buyAmount)) || Number(buyAmount) < minBuy || Number(buyAmount) > maxBuy}
                                 onClick={() => startPurchase(Number(buyAmount))}
                             >
-                                {buyBusy ? 'Redirecting…' : `Buy${buyAmount ? ` ${buyAmount} credits ($${buyAmount})` : ' credits'}`}
+                                {buyBusy ? 'Redirecting…' : `Buy${Number(buyAmount) > 0 ? ` ${buyAmount} credits ($${totalFor(Number(buyAmount))})` : ' credits'}`}
                             </Button>
                         </div>
                         {buyError && <div className="mt-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{buyError}</div>}
-                        <p className="mt-3 text-xs text-gray-500">Credits can only be used on EmpowerEd Learnings and can't be withdrawn as cash. They never expire.</p>
+                        <p className="mt-3 text-xs text-gray-500">
+                            Credits can only be used on EmpowerEd Learnings and can't be withdrawn as cash. They never expire.
+                            {feePercent > 0 && ' The platform fee is non-refundable and is not added to your credit balance.'}
+                        </p>
                     </Card>
                 )}
 
@@ -281,6 +290,7 @@ const StudentWalletPage: React.FC = () => {
                                 <li>When you continue with a mentor, credits for <span className="font-medium">{wallet?.config.weeksPerBooking || 4} weekly sessions</span> are reserved up front (mentor rate × sessions).</li>
                                 <li>Credits are only released to the mentor after each session is completed — one session at a time.</li>
                                 <li>Cancel an upcoming session more than {wallet?.config.cancelCutoffHours || 24} hours before it starts and the credits return to your wallet instantly.</li>
+                                <li>All refunds are issued as Learning Credits to your wallet — not as a cash or card refund.</li>
                                 <li>Had a problem with a session? Report it within {wallet?.config.settlementDays || 7} days from your sessions page and our team will review it.</li>
                                 <li>Credits can only be used on EmpowerEd Learnings and cannot be withdrawn as cash. They never expire.</li>
                             </ul>

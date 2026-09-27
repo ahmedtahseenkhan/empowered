@@ -66,6 +66,15 @@ async function backfillMissingMeetingLinks() {
             console.log(`[Scheduler] Meeting links switched to OPEN access: opened=${up.opened} replaced=${up.replaced} remaining=${up.stillRestricted}`);
         }
         if (up.setupError) console.warn(`[Scheduler] Meeting links cannot be switched to OPEN access: ${up.setupError}`);
+
+        // Sessions about to start are re-checked with Google, so a link whose access drifted
+        // is corrected before anyone tries to join.
+        if (!up.setupError) {
+            const soon = await upgradeUpcomingLessonsToOpenAccess(20, { verifyLive: true, startsWithinMs: 3 * 3600 * 1000 });
+            if (soon.opened || soon.replaced) {
+                console.log(`[Scheduler] Sessions starting soon corrected to OPEN access: opened=${soon.opened} replaced=${soon.replaced}`);
+            }
+        }
     } catch (e) {
         console.error('[Scheduler] OPEN-access upgrade failed:', e);
     }

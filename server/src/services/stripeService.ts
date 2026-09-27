@@ -242,6 +242,7 @@ export class StripeService {
         successUrl: string,
         cancelUrl: string,
         metadata: Record<string, string>,
+        fee?: { amountInCents: number; percent: number },
     ) {
         return stripe.checkout.sessions.create({
             customer: customerId,
@@ -259,6 +260,19 @@ export class StripeService {
                     },
                     quantity: 1,
                 },
+                ...(fee && fee.amountInCents > 0
+                    ? [{
+                        price_data: {
+                            currency: 'usd',
+                            product_data: {
+                                name: `EmpowerEd platform fee (${fee.percent}%)`,
+                                description: 'Non-refundable platform fee. It is not added to your Learning Credits balance.',
+                            },
+                            unit_amount: fee.amountInCents,
+                        },
+                        quantity: 1,
+                    }]
+                    : []),
             ],
             success_url: successUrl,
             cancel_url: cancelUrl,

@@ -320,13 +320,13 @@ export const joinLesson = async (req: AuthRequest, res: Response) => {
         // Make sure the session has a Meet link AND that the link is OPEN access, so
         // nobody is stuck at session time without a link or waiting for host approval.
         // Links created before OPEN access existed are switched (or replaced) here.
+        // The access type is confirmed with Google on every join (one quick read), because
+        // what we recorded at booking time can differ from what Google applies now.
         let meetingLink = lesson.meeting_link;
-        if (!meetingLink || lesson.meeting_access_type !== 'OPEN') {
-            try {
-                meetingLink = (await ensureMeetLinkForLesson(lesson.id)) || meetingLink;
-            } catch (err) {
-                console.error(`joinLesson: on-demand meet link failed for ${lesson.id}:`, err);
-            }
+        try {
+            meetingLink = (await ensureMeetLinkForLesson(lesson.id, { verifyLive: true })) || meetingLink;
+        } catch (err) {
+            console.error(`joinLesson: on-demand meet link failed for ${lesson.id}:`, err);
         }
 
         return res.json({
@@ -633,9 +633,7 @@ export const sendMeetingLinkToStudent = async (req: AuthRequest, res: Response) 
             return res.status(400).json({ error: 'This session has already ended' });
         }
 
-        const meetingLink = lesson.meeting_link && lesson.meeting_access_type === 'OPEN'
-            ? lesson.meeting_link
-            : (await ensureMeetLinkForLesson(lesson.id)) || lesson.meeting_link;
+        const meetingLink = (await ensureMeetLinkForLesson(lesson.id, { verifyLive: true })) || lesson.meeting_link;
         if (!meetingLink) {
             return res.status(503).json({ error: 'The meeting link could not be created right now. Please try again in a minute.' });
         }

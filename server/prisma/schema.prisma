@@ -211,6 +211,15 @@ model TutorProfile {
   wallet_disputes            SessionDispute[]
   wallet_payouts             MentorPayout[]
 
+  // How this mentor wants to be paid their Learning Credit earnings.
+  payout_method              PayoutMethod? // null = not chosen yet (Stripe used if connected)
+  payout_zelle_contact       String? // Zelle email or US phone number
+  payout_bank_name           String?
+  payout_bank_account_name   String?
+  payout_bank_account_number String?
+  payout_bank_routing        String? // Routing / IBAN / SWIFT as applicable
+  payout_bank_notes          String? // Country, branch, or any extra instructions
+
   @@index([stripe_subscription_id])
   @@index([stripe_customer_id])
   @@index([stripe_account_id])
@@ -969,6 +978,12 @@ model SessionDispute {
   @@index([tutor_id])
 }
 
+enum PayoutMethod {
+  STRIPE // Automatic monthly Stripe Connect transfer
+  ZELLE // Admin sends via Zelle and records it with proof
+  BANK_TRANSFER // Admin sends a manual bank transfer and records it with proof
+}
+
 enum PayoutStatus {
   PENDING // Created; Stripe transfer not yet attempted/confirmed
   TRANSFERRED // Stripe transfer to the connected account succeeded
@@ -993,6 +1008,8 @@ model MentorPayout {
   failure_reason     String?
   note               String?
   created_by_user_id String? // Admin who triggered/recorded it (null for the scheduler)
+  method             PayoutMethod?
+  proof_url          String? // Uploaded proof of a manual transfer (screenshot / PDF)
 
   created_at DateTime  @default(now())
   paid_at    DateTime?
@@ -1025,21 +1042,22 @@ model StripeEvent {
 }
 
 model DemoBooking {
-  id                 String    @id @default(uuid())
-  full_name          String
-  email              String
-  phone              String?
-  category_alignment String // Academic Tutoring | Life Coaching | Skill Development | All of the above
-  experience_years   String // Just getting started | Less than 1 year | 1–3 years | 3+ years
-  income_status      String // Yes recurring | Yes fluctuates | Not yet building | Planning to start soon
-  looking_for        String    @db.Text // JSON array or comma-separated
-  slot_start_time    DateTime
-  slot_end_time      DateTime
-  timezone           String    @default("America/Chicago")
-  meeting_link       String? // Google Meet link (set for new bookings; optional for backwards compatibility so admin list works)
-  google_event_id    String? // Google Calendar event id, so the event can be moved when a demo is rescheduled
-  rescheduled_at     DateTime? // Set when an admin moves the demo to a new slot
-  created_at         DateTime  @default(now())
+  id                  String    @id @default(uuid())
+  full_name           String
+  email               String
+  phone               String?
+  category_alignment  String // Academic Tutoring | Life Coaching | Skill Development | All of the above
+  experience_years    String // Just getting started | Less than 1 year | 1–3 years | 3+ years
+  income_status       String // Yes recurring | Yes fluctuates | Not yet building | Planning to start soon
+  looking_for         String    @db.Text // JSON array or comma-separated
+  slot_start_time     DateTime
+  slot_end_time       DateTime
+  timezone            String    @default("America/Chicago")
+  meeting_link        String? // Google Meet link (set for new bookings; optional for backwards compatibility so admin list works)
+  google_event_id     String? // Google Calendar event id, so the event can be moved when a demo is rescheduled
+  meeting_access_type String? // "OPEN" = anyone with the link joins without knocking; NULL = legacy link that may need host approval
+  rescheduled_at      DateTime? // Set when an admin moves the demo to a new slot
+  created_at          DateTime  @default(now())
 
   @@index([slot_start_time])
 }

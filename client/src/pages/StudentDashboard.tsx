@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     Calendar, CheckCircle, BookOpen, ChevronLeft, ChevronRight,
-    ArrowRight, CreditCard, Users, Video, ExternalLink, Wallet,
+    ArrowRight, Users, Video, ExternalLink, Wallet,
 } from 'lucide-react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { Button } from '../components/ui/Button';
@@ -85,7 +85,6 @@ const StudentDashboard: React.FC = () => {
     });
 
     const [busy, setBusy] = useState(false);
-    const [payBusy, setPayBusy] = useState(false);
     const [payError, setPayError] = useState('');
     const [errorModalOpen, setErrorModalOpen] = useState(false);
     const [joinBusyId, setJoinBusyId] = useState<string | null>(null);
@@ -151,14 +150,6 @@ const StudentDashboard: React.FC = () => {
 
     const nextLesson = upcomingSessions[0] || null;
 
-    const paymentDue = useMemo(() => {
-        return statsLessons.find(l => {
-            const st = String(l.status || '').toUpperCase();
-            const ps = String((l as any).payment_status || '').toLowerCase();
-            return (st === 'BOOKED' || st === 'PENDING') && (ps === 'pending' || ps === 'failed') && new Date(l.start_time).getTime() > nowMs;
-        }) || null;
-    }, [statsLessons]);
-
     const monthDays = useMemo(() => {
         const first = new Date(monthCursor);
         const start = new Date(first);
@@ -183,22 +174,6 @@ const StudentDashboard: React.FC = () => {
     }, [lessons]);
 
     const selectedDayLessons = useMemo(() => lessonsByDayIso.get(selectedDayIso) || [], [lessonsByDayIso, selectedDayIso]);
-
-    const handlePayNext = async () => {
-        try {
-            setPayBusy(true); setPayError('');
-            const baseUrl = window.location.origin;
-            const res = await api.post('/payments/student/booking/pay-next', {
-                successUrl: `${baseUrl}/student/sessions`,
-                cancelUrl: `${baseUrl}/student/sessions`,
-            });
-            if (res.data?.url) window.location.href = res.data.url;
-            else { setPayError('Failed to start payment – please try again.'); setErrorModalOpen(true); }
-        } catch (e: any) {
-            setPayError(e?.response?.data?.error || 'No due session payment found.');
-            setErrorModalOpen(true);
-        } finally { setPayBusy(false); }
-    };
 
     const handleJoin = async (l: Lesson) => {
         try {
@@ -451,26 +426,6 @@ const StudentDashboard: React.FC = () => {
                                 )}
                             </div>
                         </div>
-
-                        {/* Payment due */}
-                        {paymentDue && (
-                            <div className="bg-amber-50 rounded-2xl border border-amber-200 shadow-sm overflow-hidden">
-                                <div className="px-4 py-3 border-b border-amber-200 bg-amber-100/60 flex items-center gap-2">
-                                    <CreditCard className="w-3.5 h-3.5 text-amber-700" />
-                                    <h3 className="text-sm font-semibold text-amber-800">Payment Due</h3>
-                                </div>
-                                <div className="p-4">
-                                    <p className="text-xs text-amber-700 mb-1">Session with <strong>{paymentDue.tutor?.username || 'your mentor'}</strong></p>
-                                    <p className="text-xs text-amber-600 mb-3">
-                                        {fmt(paymentDue.start_time, { weekday: 'short', month: 'short', day: 'numeric' })} · {fmtTime(paymentDue.start_time)}
-                                    </p>
-                                    <button onClick={handlePayNext} disabled={payBusy}
-                                        className="w-full bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold py-2.5 rounded-xl transition-colors disabled:opacity-60">
-                                        {payBusy ? 'Redirecting…' : 'Pay Now'}
-                                    </button>
-                                </div>
-                            </div>
-                        )}
 
                         {/* My Mentors */}
                         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
