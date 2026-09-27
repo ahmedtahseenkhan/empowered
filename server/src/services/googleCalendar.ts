@@ -239,7 +239,10 @@ const createOpenMeetSpace = async (auth: PlatformAuth): Promise<MeetSpace> => {
  * link was generated before OPEN access existed (Calendar-generated, host approval required).
  * Throws 403/404 when the meeting belongs to a different Google account.
  */
-const openExistingMeetSpace = async (auth: PlatformAuth, meetingLink: string): Promise<{ name: string; accessType: string | null }> => {
+const openExistingMeetSpace = async (
+    auth: PlatformAuth,
+    meetingLink: string
+): Promise<{ name: string; accessType: string | null; previousAccessType: string | null }> => {
     const code = meetingCodeFromLink(meetingLink);
     if (!code) throw new Error(`Not a Google Meet link: ${meetingLink}`);
 
@@ -247,14 +250,25 @@ const openExistingMeetSpace = async (auth: PlatformAuth, meetingLink: string): P
     const current = await meet.spaces.get({ name: `spaces/${code}` });
     const name = current.data.name;
     if (!name) throw new Error(`Google Meet API returned no resource name for ${code}`);
-    if (current.data.config?.accessType === 'OPEN') return { name, accessType: 'OPEN' };
+    const previousAccessType = current.data.config?.accessType || null;
+    if (previousAccessType === 'OPEN') return { name, accessType: 'OPEN', previousAccessType };
 
-    const patched = await meet.spaces.patch({
+    await meet.spaces.patch({
         name,
         updateMask: 'config.accessType',
         requestBody: { config: { accessType: 'OPEN' } },
     });
-    return { name, accessType: patched.data.config?.accessType || null };
+    // Read back instead of trusting the patch response: this is what participants will get.
+    const after = await meet.spaces.get({ name });
+    return { name, accessType: after.data.config?.accessType || null, previousAccessType };
+};
+
+/** What Google reports for a meeting right now (read-only). */
+const readLiveMeetSpace = async (auth: PlatformAuth, meetingLink: string) => {
+    const code = meetingCodeFromLink(meetingLink);
+    if (!code) throw new Error(`Not a Google Meet link: ${meetingLink}`);
+    const resp = await google.meet({ version: 'v2', auth }).spaces.get({ name: `spaces/${code}` });
+    return { name: resp.data.name || null, accessType: resp.data.config?.accessType || null };
 };
 
 /**
@@ -277,6 +291,49 @@ const addSpaceMembers = async (auth: PlatformAuth, spaceName: string, members: A
             return;
         }
     }
+};
+
+/**
+ * Second half of creating an OPEN meeting: write the platform calendar event and confirm
+ * with Google that the meeting really is OPEN, correcting it if not.
+ *
+ * The link goes into the event as plain text (location + description). The space is
+ * deliberately NOT attached as the event's conference: Calendar manages the settings of
+ * conferences it owns and must not be able to reset this meeting's OPEN access.
+ */
+const finishOpenMeeting = async (
+    auth: PlatformAuth,
+    space: MeetSpace,
+    baseEvent: calendar_v3.Schema$Event,
+    label: string
+): Promise<LessonMeetResult> => {
+    const description = `${baseEvent.description || ''}\n\nGoogle Meet: ${space.meetingUri}`.trim();
+
+    let eventId: string | null = null;
+    let htmlLink: string | null = null;
+    try {
+        const resp = await google.calendar({ version: 'v3', auth }).events.insert({
+            calendarId: getPlatformCalendarId(),
+            requestBody: { ...baseEvent, description, location: space.meetingUri },
+        });
+        eventId = resp.data.id || null;
+        htmlLink = resp.data.htmlLink || null;
+    } catch (e) {
+        console.error(`[GoogleCalendar] Calendar event creation failed for ${label} (${describeGoogleError(e)}); keeping the Meet link without a calendar event.`);
+    }
+
+    let accessType = space.accessType;
+    try {
+        const live = await openExistingMeetSpace(auth, space.meetingUri);
+        accessType = live.accessType;
+        if (live.previousAccessType !== 'OPEN') {
+            console.warn(`[GoogleMeet] ${label}: meeting was ${live.previousAccessType} right after creation; now ${live.accessType}`);
+        }
+    } catch (e) {
+        console.warn(`[GoogleMeet] ${label}: could not confirm the meeting's access type: ${describeGoogleError(e)}`);
+    }
+
+    return { eventId, htmlLink, meetLink: space.meetingUri, accessType };
 };
 
 type LessonMeetArgs = {
@@ -338,54 +395,7 @@ const createPlatformMeetEventForLesson = async (args: LessonMeetArgs): Promise<L
 
     if (space) {
         if (space.name) await addSpaceMembers(auth, space.name, lessonMembers(args));
-
-        const description = `${args.description || ''}\n\nGoogle Meet: ${space.meetingUri}`.trim();
-
-        // Attach the existing space to the event so it shows as a proper Meet conference.
-        try {
-            const resp = await calendar.events.insert({
-                calendarId,
-                conferenceDataVersion: 1,
-                requestBody: {
-                    ...baseEvent,
-                    description,
-                    location: space.meetingUri,
-                    conferenceData: {
-                        conferenceId: space.meetingCode || undefined,
-                        conferenceSolution: { key: { type: 'hangoutsMeet' }, name: 'Google Meet' },
-                        entryPoints: [{
-                            entryPointType: 'video',
-                            uri: space.meetingUri,
-                            label: space.meetingUri.replace(/^https?:\/\//, ''),
-                        }],
-                    },
-                },
-            });
-            return {
-                eventId: resp.data.id || null,
-                htmlLink: resp.data.htmlLink || null,
-                meetLink: space.meetingUri,
-                accessType: space.accessType,
-            };
-        } catch (e) {
-            console.warn(`[GoogleCalendar] Event insert with attached Meet space failed for lesson ${args.lessonId} (${describeGoogleError(e)}); retrying without conferenceData.`);
-        }
-
-        try {
-            const resp = await calendar.events.insert({
-                calendarId,
-                requestBody: { ...baseEvent, description, location: space.meetingUri },
-            });
-            return {
-                eventId: resp.data.id || null,
-                htmlLink: resp.data.htmlLink || null,
-                meetLink: space.meetingUri,
-                accessType: space.accessType,
-            };
-        } catch (e) {
-            console.error(`[GoogleCalendar] Calendar event creation failed for lesson ${args.lessonId} (${describeGoogleError(e)}); keeping the Meet link without a calendar event.`);
-            return { eventId: null, htmlLink: null, meetLink: space.meetingUri, accessType: space.accessType };
-        }
+        return finishOpenMeeting(auth, space, baseEvent, `lesson ${args.lessonId}`);
     }
 
     const resp = await calendar.events.insert({
@@ -419,7 +429,21 @@ const createPlatformMeetEventForLesson = async (args: LessonMeetArgs): Promise<L
  *  - none:       no link could be produced
  */
 export type LessonMeetingState = 'open' | 'replaced' | 'restricted' | 'none';
-export type LessonMeetingOutcome = { link: string | null; state: LessonMeetingState; setupError?: string };
+export type LessonMeetingOutcome = {
+    link: string | null;
+    state: LessonMeetingState;
+    setupError?: string;
+    /** The meeting was recorded as OPEN but Google reported otherwise, and it was corrected. */
+    corrected?: boolean;
+};
+
+export type EnsureMeetingOptions = {
+    /**
+     * Ask Google for the meeting's access type even when the lesson is already recorded as
+     * OPEN, and correct it if it drifted. Used at join time and by the admin tools.
+     */
+    verifyLive?: boolean;
+};
 
 const INACTIVE_STATUSES = ['CANCELLED', 'MISSED', 'COMPLETED'];
 
@@ -428,7 +452,7 @@ const INACTIVE_STATUSES = ['CANCELLED', 'MISSED', 'COMPLETED'];
  * that the link is OPEN access, creating or upgrading it as needed. Safe to call repeatedly
  * from booking, webhooks, the wallet flow, the scheduler, join and "send link". Never throws.
  */
-export const ensureLessonMeeting = async (lessonId: string): Promise<LessonMeetingOutcome> => {
+export const ensureLessonMeeting = async (lessonId: string, options: EnsureMeetingOptions = {}): Promise<LessonMeetingOutcome> => {
     const lesson = await prisma.lesson.findUnique({
         where: { id: lessonId },
         include: {
@@ -458,7 +482,8 @@ export const ensureLessonMeeting = async (lessonId: string): Promise<LessonMeeti
 
     // --- Existing link: make sure it is OPEN access ---------------------------------
     if (lesson.meeting_link) {
-        if (lesson.meeting_access_type === 'OPEN') return { link: lesson.meeting_link, state: 'open' };
+        const recordedOpen = lesson.meeting_access_type === 'OPEN';
+        if (recordedOpen && (!options.verifyLive || inactive)) return { link: lesson.meeting_link, state: 'open' };
         if (inactive) return { link: lesson.meeting_link, state: 'restricted' };
 
         let auth: PlatformAuth;
@@ -470,25 +495,29 @@ export const ensureLessonMeeting = async (lessonId: string): Promise<LessonMeeti
 
         try {
             const opened = await openExistingMeetSpace(auth, lesson.meeting_link);
+            const changed = opened.previousAccessType !== 'OPEN';
             if (opened.accessType === 'OPEN') {
-                await addSpaceMembers(auth, opened.name, lessonMembers(eventArgs));
-                await prisma.lesson.update({ where: { id: lesson.id }, data: { meeting_access_type: 'OPEN' } });
-                console.log(`[GoogleMeet] Lesson ${lesson.id}: existing link switched to OPEN access`);
-                return { link: lesson.meeting_link, state: 'open' };
+                if (changed || !recordedOpen) await addSpaceMembers(auth, opened.name, lessonMembers(eventArgs));
+                if (!recordedOpen) await prisma.lesson.update({ where: { id: lesson.id }, data: { meeting_access_type: 'OPEN' } });
+                if (changed) {
+                    console.log(`[GoogleMeet] Lesson ${lesson.id}: link switched to OPEN access (Google had it as ${opened.previousAccessType}${recordedOpen ? ', although it was recorded as OPEN' : ''})`);
+                }
+                return { link: lesson.meeting_link, state: 'open', corrected: changed && recordedOpen };
             }
             console.warn(`[GoogleMeet] Lesson ${lesson.id}: Google kept accessType=${opened.accessType} after requesting OPEN`);
+            if (recordedOpen) await prisma.lesson.update({ where: { id: lesson.id }, data: { meeting_access_type: opened.accessType } });
             return { link: lesson.meeting_link, state: 'restricted' };
         } catch (e) {
             if (isPlatformSetupError(e)) {
                 const setupError = describeGoogleError(e);
                 console.error(`[GoogleMeet] Lesson ${lesson.id}: cannot switch link to OPEN access: ${setupError}`);
-                return { link: lesson.meeting_link, state: 'restricted', setupError };
+                return { link: lesson.meeting_link, state: recordedOpen ? 'open' : 'restricted', setupError };
             }
 
             const status = googleStatusOf(e);
             if (status !== 403 && status !== 404) {
                 console.error(`[GoogleMeet] Lesson ${lesson.id}: switching link to OPEN access failed: ${describeGoogleError(e)}`);
-                return { link: lesson.meeting_link, state: 'restricted' };
+                return { link: lesson.meeting_link, state: recordedOpen ? 'open' : 'restricted' };
             }
 
             // The meeting belongs to a different Google account (e.g. the token owner changed),
@@ -569,9 +598,9 @@ export const ensureLessonMeeting = async (lessonId: string): Promise<LessonMeeti
 };
 
 /** Convenience wrapper: the lesson's meeting link (created / opened as needed) or null. */
-export const ensureMeetLinkForLesson = async (lessonId: string): Promise<string | null> => {
+export const ensureMeetLinkForLesson = async (lessonId: string, options: EnsureMeetingOptions = {}): Promise<string | null> => {
     try {
-        return (await ensureLessonMeeting(lessonId)).link;
+        return (await ensureLessonMeeting(lessonId, options)).link;
     } catch (e) {
         console.error(`[GoogleMeet] ensureMeetLinkForLesson failed for ${lessonId}:`, e);
         return null;
@@ -583,32 +612,60 @@ export const ensureMeetLinkForLesson = async (lessonId: string): Promise<string 
  * a link that still asks for host approval until it is switched. Stops early when the
  * platform Google setup itself is broken (no point retrying every lesson).
  */
-export const upgradeUpcomingLessonsToOpenAccess = async (limit = 20) => {
+export const upgradeUpcomingLessonsToOpenAccess = async (
+    limit = 20,
+    options: {
+        /** Re-check with Google even sessions already recorded as OPEN. */
+        verifyLive?: boolean;
+        /** Only sessions starting within this many milliseconds from now. */
+        startsWithinMs?: number;
+    } = {}
+) => {
     const lessons = await prisma.lesson.findMany({
         where: {
             status: { in: ['BOOKED', 'PENDING'] },
             end_time: { gte: new Date() },
             meeting_link: { not: null },
-            OR: [{ meeting_access_type: null }, { meeting_access_type: { not: 'OPEN' } }],
+            ...(options.startsWithinMs ? { start_time: { lte: new Date(Date.now() + options.startsWithinMs) } } : {}),
+            ...(options.verifyLive ? {} : { OR: [{ meeting_access_type: null }, { meeting_access_type: { not: 'OPEN' } }] }),
         },
         orderBy: { start_time: 'asc' },
-        select: { id: true },
+        select: { id: true, meeting_access_type: true },
         take: limit,
     });
 
-    const result = { checked: 0, opened: 0, replaced: 0, stillRestricted: 0, setupError: null as string | null };
-    for (const l of lessons) {
+    const demos = await prisma.demoBooking.findMany({
+        where: {
+            slot_end_time: { gte: new Date() },
+            meeting_link: { not: null },
+            ...(options.startsWithinMs ? { slot_start_time: { lte: new Date(Date.now() + options.startsWithinMs) } } : {}),
+            ...(options.verifyLive ? {} : { OR: [{ meeting_access_type: null }, { meeting_access_type: { not: 'OPEN' } }] }),
+        },
+        orderBy: { slot_start_time: 'asc' },
+        select: { id: true, meeting_access_type: true },
+        take: limit,
+    });
+
+    const work = [
+        ...lessons.map(l => ({ recorded: l.meeting_access_type, run: () => ensureLessonMeeting(l.id, { verifyLive: options.verifyLive }) })),
+        ...demos.map(d => ({ recorded: d.meeting_access_type, run: () => ensureDemoMeeting(d.id, { verifyLive: options.verifyLive }) })),
+    ];
+
+    const result = { checked: 0, opened: 0, alreadyOpen: 0, replaced: 0, stillRestricted: 0, setupError: null as string | null };
+    for (const item of work) {
         result.checked += 1;
-        const outcome = await ensureLessonMeeting(l.id).catch((e): LessonMeetingOutcome => ({
+        const outcome = await item.run().catch((e): LessonMeetingOutcome => ({
             link: null, state: 'restricted', setupError: isPlatformSetupError(e) ? describeGoogleError(e) : undefined,
         }));
-        if (outcome.state === 'open') result.opened += 1;
-        else if (outcome.state === 'replaced') result.replaced += 1;
-        else result.stillRestricted += 1;
         if (outcome.setupError) {
             result.setupError = outcome.setupError;
             break;
         }
+        if (outcome.state === 'replaced') result.replaced += 1;
+        else if (outcome.state === 'open') {
+            if (outcome.corrected || item.recorded !== 'OPEN') result.opened += 1;
+            else result.alreadyOpen += 1;
+        } else result.stillRestricted += 1;
     }
     return result;
 };
@@ -631,20 +688,40 @@ export const getPlatformMeetDiagnostics = async () => {
         probeAccessType: null as string | null,
         error: null as string | null,
         sessions: { upcomingWithLink: 0, upcomingOpen: 0, upcomingNeedingUpgrade: 0, upcomingWithoutLink: 0 },
+        /** True when the session numbers above come from asking Google, not from our records. */
+        sessionsVerifiedLive: false,
+        /** Per-session truth as reported by Google right now (next 25 upcoming sessions). */
+        sessionChecks: [] as Array<{
+            kind: 'session' | 'demo';
+            lessonId: string;
+            startTime: string;
+            mentor: string | null;
+            student: string | null;
+            link: string;
+            recordedAccess: string | null;
+            liveAccess: string | null;
+            error: string | null;
+        }>,
     };
 
     try {
         const upcoming = { status: { in: ['BOOKED', 'PENDING'] as ('BOOKED' | 'PENDING')[] }, end_time: { gte: new Date() } };
-        const [withLink, open, withoutLink] = await Promise.all([
+        const upcomingDemo = { slot_end_time: { gte: new Date() } };
+        const [lessonsWithLink, lessonsOpen, lessonsWithoutLink, demosWithLink, demosOpen, demosWithoutLink] = await Promise.all([
             prisma.lesson.count({ where: { ...upcoming, meeting_link: { not: null } } }),
             prisma.lesson.count({ where: { ...upcoming, meeting_link: { not: null }, meeting_access_type: 'OPEN' } }),
             prisma.lesson.count({ where: { ...upcoming, meeting_link: null } }),
+            prisma.demoBooking.count({ where: { ...upcomingDemo, meeting_link: { not: null } } }),
+            prisma.demoBooking.count({ where: { ...upcomingDemo, meeting_link: { not: null }, meeting_access_type: 'OPEN' } }),
+            prisma.demoBooking.count({ where: { ...upcomingDemo, meeting_link: null } }),
         ]);
+        const withLink = lessonsWithLink + demosWithLink;
+        const open = lessonsOpen + demosOpen;
         report.sessions = {
             upcomingWithLink: withLink,
             upcomingOpen: open,
             upcomingNeedingUpgrade: withLink - open,
-            upcomingWithoutLink: withoutLink,
+            upcomingWithoutLink: lessonsWithoutLink + demosWithoutLink,
         };
     } catch (e) {
         console.error('[GoogleMeet] diagnostics: session counts failed:', e);
@@ -676,6 +753,73 @@ export const getPlatformMeetDiagnostics = async () => {
         report.account = cal.data.id || null;
     } catch (e) {
         console.warn(`[GoogleMeet] diagnostics: could not read the account's calendar: ${describeGoogleError(e)}`);
+    }
+
+    // Ask Google about every upcoming session instead of trusting what we recorded.
+    try {
+        const upcomingLessons = await prisma.lesson.findMany({
+            where: { status: { in: ['BOOKED', 'PENDING'] }, end_time: { gte: new Date() }, meeting_link: { not: null } },
+            orderBy: { start_time: 'asc' },
+            take: 25,
+            select: {
+                id: true,
+                start_time: true,
+                meeting_link: true,
+                meeting_access_type: true,
+                tutor: { select: { username: true } },
+                student: { select: { username: true } },
+            },
+        });
+        const upcomingDemos = await prisma.demoBooking.findMany({
+            where: { slot_end_time: { gte: new Date() }, meeting_link: { not: null } },
+            orderBy: { slot_start_time: 'asc' },
+            take: 25,
+            select: { id: true, slot_start_time: true, meeting_link: true, meeting_access_type: true, full_name: true },
+        });
+        const meetings = [
+            ...upcomingLessons.map(l => ({
+                kind: 'session' as const, id: l.id, start: l.start_time, link: l.meeting_link as string,
+                recorded: l.meeting_access_type, mentor: l.tutor?.username || null, student: l.student?.username || null,
+            })),
+            ...upcomingDemos.map(d => ({
+                kind: 'demo' as const, id: d.id, start: d.slot_start_time, link: d.meeting_link as string,
+                recorded: d.meeting_access_type, mentor: d.full_name, student: null,
+            })),
+        ].sort((a, b) => a.start.getTime() - b.start.getTime());
+
+        for (const l of meetings) {
+            const link = l.link;
+            let liveAccess: string | null = null;
+            let error: string | null = null;
+            try {
+                liveAccess = (await readLiveMeetSpace(auth, link)).accessType;
+            } catch (e) {
+                const status = googleStatusOf(e);
+                error = status === 403 || status === 404
+                    ? 'This link belongs to a different Google account and cannot be managed from here.'
+                    : describeGoogleError(e);
+            }
+            report.sessionChecks.push({
+                kind: l.kind,
+                lessonId: l.id,
+                startTime: l.start.toISOString(),
+                mentor: l.mentor,
+                student: l.student,
+                link,
+                recordedAccess: l.recorded,
+                liveAccess,
+                error,
+            });
+        }
+        // Only replace the recorded numbers when every upcoming meeting was looked at.
+        if (meetings.length === report.sessions.upcomingWithLink) {
+            const liveOpen = report.sessionChecks.filter(c => c.liveAccess === 'OPEN').length;
+            report.sessions.upcomingOpen = liveOpen;
+            report.sessions.upcomingNeedingUpgrade = report.sessions.upcomingWithLink - liveOpen;
+            report.sessionsVerifiedLive = true;
+        }
+    } catch (e) {
+        console.error('[GoogleMeet] diagnostics: live session check failed:', e);
     }
 
     try {
@@ -777,23 +921,43 @@ export const createDemoMeetEvent = async (args: {
     prospectName: string;
     start: Date;
     end: Date;
-}): Promise<{ meetLink: string; htmlLink: string | null; eventId: string | null }> => {
+    /** Throw instead of falling back to a Calendar-generated (knock-required) link. */
+    requireOpen?: boolean;
+}): Promise<{ meetLink: string; htmlLink: string | null; eventId: string | null; accessType: string | null }> => {
     const oauth2Client = getPlatformOAuthClient();
     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
     const calendarId = getPlatformCalendarId();
 
+    // Do not add prospect as attendee — we send one confirmation email ourselves.
+    // Adding them would trigger a separate Google Calendar invite ("unknown sender").
+    const baseEvent: calendar_v3.Schema$Event = {
+        summary: `EmpowerEd Demo – ${args.prospectName}`,
+        description: `Demo call with ${args.prospectName} (${args.prospectEmail})`,
+        start: { dateTime: args.start.toISOString() },
+        end: { dateTime: args.end.toISOString() },
+    };
+
+    // Preferred: an OPEN-access meeting, so the prospect and the team both join without
+    // waiting for anyone's approval — the same flow mentoring sessions use.
+    let space: MeetSpace | null = null;
+    try {
+        space = await createOpenMeetSpace(oauth2Client);
+    } catch (e) {
+        if (args.requireOpen) throw e;
+        console.error(`[GoogleMeet] Open-access space creation failed for the demo with ${args.prospectEmail}: ${describeGoogleError(e)}. Falling back to a Calendar-generated Meet link (participants may have to knock).`);
+    }
+    if (space) {
+        const result = await finishOpenMeeting(oauth2Client, space, baseEvent, `demo with ${args.prospectEmail}`);
+        return { meetLink: space.meetingUri, htmlLink: result.htmlLink, eventId: result.eventId, accessType: result.accessType };
+    }
+
     const requestId = `demo-${args.start.getTime()}-${args.prospectEmail}`;
     try {
-        // Do not add prospect as attendee — we send one confirmation email ourselves.
-        // Adding them would trigger a separate Google Calendar invite ("unknown sender").
         const resp = await calendar.events.insert({
             calendarId,
             conferenceDataVersion: 1,
             requestBody: {
-                summary: `EmpowerEd Demo – ${args.prospectName}`,
-                description: `Demo call with ${args.prospectName} (${args.prospectEmail})`,
-                start: { dateTime: args.start.toISOString() },
-                end: { dateTime: args.end.toISOString() },
+                ...baseEvent,
                 conferenceData: {
                     createRequest: {
                         requestId,
@@ -812,6 +976,7 @@ export const createDemoMeetEvent = async (args: {
             meetLink,
             htmlLink: resp.data.htmlLink || null,
             eventId: resp.data.id || null,
+            accessType: null,
         };
     } catch (e: unknown) {
         const err = e as { response?: { data?: { error?: string }; status?: number }; message?: string };
@@ -835,6 +1000,122 @@ export const createDemoMeetEvent = async (args: {
         }
 
         throw e;
+    }
+};
+
+/**
+ * Demo-call counterpart of ensureLessonMeeting: makes sure an upcoming demo has a Meet link
+ * and that the link is OPEN access. A link that belongs to a different Google account (the
+ * platform account was changed) cannot be managed, so it is replaced and the prospect and
+ * the admin are emailed the new link. Never throws.
+ */
+export const ensureDemoMeeting = async (bookingId: string, options: EnsureMeetingOptions = {}): Promise<LessonMeetingOutcome> => {
+    const booking = await prisma.demoBooking.findUnique({ where: { id: bookingId } });
+    if (!booking) return { link: null, state: 'none' };
+
+    const past = booking.slot_end_time.getTime() < Date.now();
+    const recordedOpen = booking.meeting_access_type === 'OPEN';
+    const label = `demo ${booking.id}`;
+
+    if (booking.meeting_link) {
+        if (recordedOpen && (!options.verifyLive || past)) return { link: booking.meeting_link, state: 'open' };
+        if (past) return { link: booking.meeting_link, state: 'restricted' };
+
+        let auth: PlatformAuth;
+        try {
+            auth = getPlatformOAuthClient();
+        } catch (e) {
+            return { link: booking.meeting_link, state: recordedOpen ? 'open' : 'restricted', setupError: describeGoogleError(e) };
+        }
+
+        try {
+            const opened = await openExistingMeetSpace(auth, booking.meeting_link);
+            const changed = opened.previousAccessType !== 'OPEN';
+            if (opened.accessType === 'OPEN') {
+                if (!recordedOpen) await prisma.demoBooking.update({ where: { id: booking.id }, data: { meeting_access_type: 'OPEN' } });
+                if (changed) console.log(`[GoogleMeet] ${label}: link switched to OPEN access (Google had it as ${opened.previousAccessType})`);
+                return { link: booking.meeting_link, state: 'open', corrected: changed && recordedOpen };
+            }
+            console.warn(`[GoogleMeet] ${label}: Google kept accessType=${opened.accessType} after requesting OPEN`);
+            if (recordedOpen) await prisma.demoBooking.update({ where: { id: booking.id }, data: { meeting_access_type: opened.accessType } });
+            return { link: booking.meeting_link, state: 'restricted' };
+        } catch (e) {
+            if (isPlatformSetupError(e)) {
+                const setupError = describeGoogleError(e);
+                console.error(`[GoogleMeet] ${label}: cannot switch link to OPEN access: ${setupError}`);
+                return { link: booking.meeting_link, state: recordedOpen ? 'open' : 'restricted', setupError };
+            }
+            const status = googleStatusOf(e);
+            if (status !== 403 && status !== 404) {
+                console.error(`[GoogleMeet] ${label}: switching link to OPEN access failed: ${describeGoogleError(e)}`);
+                return { link: booking.meeting_link, state: recordedOpen ? 'open' : 'restricted' };
+            }
+
+            // Owned by a different Google account: replace with a fresh OPEN meeting.
+            try {
+                const created = await createDemoMeetEvent({
+                    prospectEmail: booking.email,
+                    prospectName: booking.full_name,
+                    start: booking.slot_start_time,
+                    end: booking.slot_end_time,
+                    requireOpen: true,
+                });
+                if (created.accessType !== 'OPEN') return { link: booking.meeting_link, state: 'restricted' };
+
+                const oldEventId = booking.google_event_id;
+                await prisma.demoBooking.update({
+                    where: { id: booking.id },
+                    data: { meeting_link: created.meetLink, meeting_access_type: 'OPEN', google_event_id: created.eventId },
+                });
+                if (oldEventId) {
+                    google.calendar({ version: 'v3', auth }).events
+                        .delete({ calendarId: getPlatformCalendarId(), eventId: oldEventId })
+                        .catch(() => undefined); // old event lives on the other account's calendar
+                }
+
+                const code = meetingCodeFromLink(created.meetLink) || String(Date.now());
+                const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER;
+                const recipients: Array<{ email: string | undefined; role: 'prospect' | 'admin' }> = [
+                    { email: booking.email, role: 'prospect' },
+                    { email: adminEmail, role: 'admin' },
+                ];
+                await prisma.emailOutbox.createMany({
+                    data: recipients.filter(r => r.email).map(r => ({
+                        type: 'DEMO_MEETING_LINK_UPDATED',
+                        to_email: r.email as string,
+                        payload: { demoBookingId: booking.id, role: r.role },
+                        idempotency_key: `demo-link-updated:${booking.id}:${r.role}:${code}`,
+                    })),
+                    skipDuplicates: true,
+                });
+
+                console.log(`[GoogleMeet] ${label}: old link was not manageable (HTTP ${status}); replaced with a new OPEN link and notified the prospect and admin`);
+                return { link: created.meetLink, state: 'replaced' };
+            } catch (e2) {
+                const setupError = isPlatformSetupError(e2) ? describeGoogleError(e2) : undefined;
+                console.error(`[GoogleMeet] ${label}: could not replace the meeting link: ${describeGoogleError(e2)}`);
+                return { link: booking.meeting_link, state: 'restricted', setupError };
+            }
+        }
+    }
+
+    if (past) return { link: null, state: 'none' };
+    try {
+        const created = await createDemoMeetEvent({
+            prospectEmail: booking.email,
+            prospectName: booking.full_name,
+            start: booking.slot_start_time,
+            end: booking.slot_end_time,
+        });
+        await prisma.demoBooking.update({
+            where: { id: booking.id },
+            data: { meeting_link: created.meetLink, meeting_access_type: created.accessType, google_event_id: created.eventId },
+        });
+        return { link: created.meetLink, state: created.accessType === 'OPEN' ? 'open' : 'restricted' };
+    } catch (e) {
+        const setupError = isPlatformSetupError(e) ? describeGoogleError(e) : undefined;
+        console.error(`[GoogleMeet] ${label}: could not create a meeting link: ${describeGoogleError(e)}`);
+        return { link: null, state: 'none', setupError };
     }
 };
 

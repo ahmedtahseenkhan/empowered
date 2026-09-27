@@ -374,20 +374,23 @@ class EmailService {
     async sendSessionMeetingLinkUpdated(data: {
         recipientName: string;
         recipientEmail: string;
-        otherPartyLabel: 'Mentor' | 'Student';
+        otherPartyLabel: string;
         otherPartyName: string;
         sessionDate: string;
         sessionTime: string;
         meetingLink: string;
-        dashboardUrl: string;
+        dashboardUrl?: string;
+        meetingKind?: 'session' | 'demo call';
     }): Promise<void> {
+        const meetingKind = data.meetingKind || 'session';
         const html = this.renderTemplate('shared/session-meeting-link-updated', {
             ...data,
+            meetingKind,
             year: new Date().getFullYear(),
         });
         await this.sendEmail({
             to: data.recipientEmail,
-            subject: `New Google Meet link for your session with ${data.otherPartyName}`,
+            subject: `New Google Meet link for your ${meetingKind} with ${data.otherPartyName}`,
             html,
         });
     }

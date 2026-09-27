@@ -104,9 +104,13 @@ Open the admin panel → **Demo Availability** → **Google Meet connection**. T
 | Google account is NOT connected | Token missing, expired or revoked | **Reconnect Google account**, save the new token as `GOOGLE_DEMO_REFRESH_TOKEN`, restart |
 | Google Meet permission is missing | A permission box was left unticked on the consent screen | Reconnect and tick every permission |
 | Google Meet API is not working | "Google Meet REST API" is not enabled on the Cloud project | Enable it (step 1), then **Check again** |
-| Older link(s) still ask for host approval | Sessions booked **before** the fix keep their old link settings | Click **Fix upcoming sessions** |
+| Link(s) still ask for host approval | The meeting's access in Google differs from Open (older booking, or the setting was changed) | Click **Check & fix upcoming sessions** |
 
-Old links are also fixed automatically: the scheduler switches up to 20 upcoming sessions every run, and any session is switched the moment someone presses **Join Session**. If an old link belongs to a different Google account it cannot be switched, so it is replaced with a new link and both the mentor and the student are emailed the new one.
+The card lists every upcoming session with what **Google itself** reports for its link right now, so the table is the source of truth.
+
+Links are also fixed automatically: the access type is confirmed with Google every time someone presses **Join Session**, and the scheduler re-checks sessions starting within the next 3 hours. If an old link belongs to a different Google account it cannot be switched, so it is replaced with a new link and both the mentor and the student are emailed the new one.
+
+This covers **demo calls as well as mentoring sessions**. A link that was created while a different Google account was connected (for example before the switch to emplearnings@gmail.com) only lets that old account in directly and cannot be changed from here. **Check & fix upcoming sessions** replaces such links and emails the new link to both sides.
 
 Always join through the **Join Session** button or the newest email. A link copied from an old email may be the pre-fix link.
 

@@ -673,6 +673,30 @@ async function sendOutboxRow(row: OutboxRow) {
         return;
     }
 
+    if (row.type === 'DEMO_MEETING_LINK_UPDATED') {
+        const demoBookingId = row.payload?.demoBookingId as string | undefined;
+        if (!demoBookingId) throw new Error('Missing demoBookingId in payload');
+        const forAdmin = row.payload?.role === 'admin';
+
+        const demoBooking = await prisma.demoBooking.findUnique({ where: { id: demoBookingId } });
+        if (!demoBooking) throw new Error(`DemoBooking not found: ${demoBookingId}`);
+        if (!demoBooking.meeting_link) throw new Error(`DemoBooking ${demoBookingId} has no meeting link`);
+
+        // The prospect reads their own timezone; the admin reads Dallas time.
+        const timeZone = forAdmin ? resolveDemoTimezone(null) : resolveDemoTimezone(demoBooking.timezone);
+        await emailService.sendSessionMeetingLinkUpdated({
+            recipientName: forAdmin ? 'EmpowerEd team' : demoBooking.full_name,
+            recipientEmail: row.to_email,
+            otherPartyLabel: forAdmin ? 'Prospect' : 'Host',
+            otherPartyName: forAdmin ? demoBooking.full_name : 'the EmpowerEd Learnings team',
+            sessionDate: formatDatePart(demoBooking.slot_start_time, timeZone),
+            sessionTime: formatTimePart(demoBooking.slot_start_time, timeZone),
+            meetingLink: demoBooking.meeting_link,
+            meetingKind: 'demo call',
+        });
+        return;
+    }
+
     if (row.type === 'DEMO_CALL_REMINDER_MENTOR') {
         const demoBookingId = row.payload?.demoBookingId as string | undefined;
         const reminderType = row.payload?.reminderType as '24h' | '3h' | undefined;

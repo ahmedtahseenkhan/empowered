@@ -19,11 +19,24 @@ type MeetStatus = {
         upcomingNeedingUpgrade: number;
         upcomingWithoutLink: number;
     };
+    sessionsVerifiedLive?: boolean;
+    sessionChecks?: Array<{
+        kind?: 'session' | 'demo';
+        lessonId: string;
+        startTime: string;
+        mentor: string | null;
+        student: string | null;
+        link: string;
+        recordedAccess: string | null;
+        liveAccess: string | null;
+        error: string | null;
+    }>;
 };
 
 type UpgradeResult = {
     checked: number;
     opened: number;
+    alreadyOpen?: number;
     replaced: number;
     stillRestricted: number;
     setupError: string | null;
@@ -81,11 +94,11 @@ const GoogleMeetStatusCard: React.FC = () => {
             const r = res.data as UpgradeResult;
             if (r.setupError) {
                 setError(`Sessions could not be updated: ${r.setupError}`);
-            } else if (r.checked === 0) {
-                setUpgradeNote('All upcoming sessions already let people join without approval.');
+            } else if (r.opened === 0 && r.replaced === 0 && r.stillRestricted === 0) {
+                setUpgradeNote('Checked with Google: all upcoming sessions and demo calls already let people join without approval.');
             } else {
                 setUpgradeNote(
-                    `${r.opened} session link(s) switched to join-without-approval, ${r.replaced} replaced with a new link (both sides emailed), ${r.stillRestricted} could not be changed.`
+                    `${r.opened} link(s) switched to join-without-approval, ${r.replaced} replaced with a new link (both sides emailed), ${r.stillRestricted} could not be changed.`
                 );
             }
             await load();
@@ -122,7 +135,7 @@ const GoogleMeetStatusCard: React.FC = () => {
             </div>
 
             <p className="text-sm text-gray-500 mb-4">
-                Every Google Meet link (demo calls and mentoring sessions) is created from this Google account. Session links are set so mentors and students join without waiting for approval.
+                Every Google Meet link (demo calls and mentoring sessions) is created from this Google account, and set so everyone with the link joins without waiting for approval.
             </p>
 
             {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm mb-4 break-words">{error}</div>}
@@ -161,20 +174,59 @@ const GoogleMeetStatusCard: React.FC = () => {
                         />
                         <Row
                             state={status.sessions.upcomingNeedingUpgrade === 0 ? 'ok' : 'warn'}
-                            label={`${status.sessions.upcomingOpen} of ${status.sessions.upcomingWithLink} upcoming session link(s) allow joining without approval`}
+                            label={`${status.sessions.upcomingOpen} of ${status.sessions.upcomingWithLink} upcoming meeting link(s) (sessions and demo calls) allow joining without approval`}
                             detail={status.sessions.upcomingNeedingUpgrade > 0
-                                ? `${status.sessions.upcomingNeedingUpgrade} older link(s) still ask for host approval. Use "Fix upcoming sessions".`
-                                : undefined}
+                                ? `${status.sessions.upcomingNeedingUpgrade} link(s) still ask for host approval. Use "Check & fix upcoming sessions".`
+                                : status.sessionsVerifiedLive ? 'Confirmed with Google just now.' : 'From our records (not confirmed with Google).'}
                         />
                     </ul>
+
+                    {status.sessionChecks && status.sessionChecks.length > 0 && (
+                        <div className="overflow-x-auto mb-4 border border-gray-200 rounded-lg">
+                            <table className="min-w-full text-sm">
+                                <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+                                    <tr>
+                                        <th className="px-3 py-2">Meeting</th>
+                                        <th className="px-3 py-2">Starts</th>
+                                        <th className="px-3 py-2">Meet link</th>
+                                        <th className="px-3 py-2">Google says</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {status.sessionChecks.map((c) => (
+                                        <tr key={`${c.kind || 'session'}-${c.lessonId}`}>
+                                            <td className="px-3 py-2 text-gray-800">
+                                                {c.kind === 'demo'
+                                                    ? `Demo call: ${c.mentor || 'Prospect'}`
+                                                    : `Session: ${c.mentor || 'Mentor'} with ${c.student || 'Student'}`}
+                                            </td>
+                                            <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{new Date(c.startTime).toLocaleString()}</td>
+                                            <td className="px-3 py-2">
+                                                <a href={c.link} target="_blank" rel="noreferrer" className="text-purple-700 hover:underline break-all">{c.link.replace(/^https?:\/\//, '')}</a>
+                                            </td>
+                                            <td className="px-3 py-2">
+                                                {c.liveAccess === 'OPEN' ? (
+                                                    <span className="text-green-700 font-medium">Open, no approval</span>
+                                                ) : c.liveAccess ? (
+                                                    <span className="text-red-700 font-medium">{c.liveAccess}, approval needed</span>
+                                                ) : (
+                                                    <span className="text-amber-700">{c.error || 'Could not check'}</span>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
 
                     <div className="flex flex-wrap gap-2">
                         <button
                             onClick={() => void upgrade()}
-                            disabled={upgrading || !healthy || status.sessions.upcomingNeedingUpgrade === 0}
+                            disabled={upgrading || !healthy || status.sessions.upcomingWithLink === 0}
                             className="text-sm px-4 py-2 rounded-lg bg-purple-600 text-white font-medium hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            {upgrading ? 'Updating sessions…' : 'Fix upcoming sessions'}
+                            {upgrading ? 'Checking sessions…' : 'Check & fix upcoming sessions'}
                         </button>
                         <a
                             href={reconnectUrl}

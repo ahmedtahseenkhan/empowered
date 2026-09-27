@@ -734,6 +734,7 @@ export const adminRescheduleDemoBooking = async (req: AuthRequest, res: Response
         // event ids were stored (or whose event was deleted) get a fresh event.
         let meetingLink = booking.meeting_link;
         let googleEventId = booking.google_event_id;
+        let meetingAccessType = booking.meeting_access_type;
         try {
             const moved = booking.google_event_id
                 ? await updateDemoMeetEvent({
@@ -756,6 +757,7 @@ export const adminRescheduleDemoBooking = async (req: AuthRequest, res: Response
                 });
                 meetingLink = created.meetLink;
                 googleEventId = created.eventId;
+                meetingAccessType = created.accessType;
             }
         } catch (e) {
             console.error('Demo Meet reschedule failed:', e);
@@ -770,6 +772,7 @@ export const adminRescheduleDemoBooking = async (req: AuthRequest, res: Response
                 slot_start_time: start,
                 slot_end_time: end,
                 meeting_link: meetingLink,
+                meeting_access_type: meetingAccessType,
                 google_event_id: googleEventId,
                 rescheduled_at: new Date(),
             },
@@ -1236,7 +1239,7 @@ export const adminGetGoogleMeetStatus = async (_req: AuthRequest, res: Response)
  */
 export const adminUpgradeSessionsToOpenAccess = async (_req: AuthRequest, res: Response) => {
     try {
-        return res.json(await upgradeUpcomingLessonsToOpenAccess(200));
+        return res.json(await upgradeUpcomingLessonsToOpenAccess(200, { verifyLive: true }));
     } catch (e) {
         console.error('adminUpgradeSessionsToOpenAccess error:', e);
         return res.status(500).json({ error: 'Failed to update the session meeting links' });
