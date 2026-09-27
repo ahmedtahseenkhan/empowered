@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, ExternalLink, CreditCard, Clock } from 'lucide-react';
+import { Calendar, ExternalLink, Clock } from 'lucide-react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -160,9 +160,6 @@ const StudentSessionsPage: React.FC = () => {
         copy.sort((a, b) => (tab === 'upcoming' ? a.startMs - b.startMs : b.startMs - a.startMs));
         return copy;
     }, [filtered, tab]);
-
-    const [payBusyId, setPayBusyId] = useState<string | null>(null);
-    const [payError, setPayError] = useState<string>('');
 
     // Reschedule state
     const [rescheduleTarget, setRescheduleTarget] = useState<Lesson | null>(null);
@@ -383,13 +380,6 @@ const StudentSessionsPage: React.FC = () => {
         return <span className={`${pill} bg-amber-50 text-amber-700 border-amber-200`}>Payment Pending</span>;
     };
 
-    const needsPayment = (lesson: Lesson) => {
-        const ps = lesson.payment_status;
-        const st = (lesson.status || '').toUpperCase();
-        if (['CANCELLED', 'COMPLETED', 'MISSED'].includes(st)) return false;
-        return ps === 'pending'; // 'failed' means the payment window closed — no action available
-    };
-
     return (
         <DashboardLayout>
             <div className="w-full">
@@ -457,39 +447,7 @@ const StudentSessionsPage: React.FC = () => {
                                     onCardClick={() => navigate(`/student/sessions/${l.id}`)}
                                     actions={
                                         <>
-                                            {needsPayment(l) && tab === 'upcoming' ? (
-                                                <Button
-                                                    className="flex items-center gap-2 bg-amber-600 hover:bg-amber-700 text-white"
-                                                    disabled={payBusyId === l.id}
-                                                    onClick={async () => {
-                                                        try {
-                                                            setPayBusyId(l.id);
-                                                            setPayError('');
-                                                            const baseUrl = window.location.origin;
-                                                            const res = await api.post('/payments/student/booking/pay-next', {
-                                                                lessonId: l.id,
-                                                                bookingId: l.booking_id || l.booking?.id,
-                                                                successUrl: `${baseUrl}/student/sessions/${l.id}`,
-                                                                cancelUrl: `${baseUrl}/student/sessions/${l.id}`,
-                                                            });
-                                                            if (res.data?.url) {
-                                                                window.location.href = res.data.url;
-                                                            } else {
-                                                                setPayError('Failed to start payment – please try again.');
-                                                                setErrorModalOpen(true);
-                                                            }
-                                                        } catch (e: any) {
-                                                            setPayError(e?.response?.data?.error || 'Unable to process payment.');
-                                                            setErrorModalOpen(true);
-                                                        } finally {
-                                                            setPayBusyId(null);
-                                                        }
-                                                    }}
-                                                >
-                                                    <CreditCard className="w-4 h-4" />
-                                                    {payBusyId === l.id ? 'Processing…' : 'Pay Now'}
-                                                </Button>
-                                            ) : (() => {
+                                            {(() => {
                                                 const startMs = new Date(l.start_time).getTime();
                                                 const nowMs2 = Date.now();
                                                 const isJoinable = nowMs2 >= startMs - 15 * 60 * 1000 && nowMs2 <= new Date(l.end_time).getTime() + 15 * 60 * 1000 && !['COMPLETED', 'CANCELLED', 'MISSED'].includes(l.status.toUpperCase());
@@ -607,7 +565,7 @@ const StudentSessionsPage: React.FC = () => {
                 onClose={() => setErrorModalOpen(false)}
                 title="Error"
             >
-                <p>{joinError || payError}</p>
+                <p>{joinError}</p>
             </Modal>
 
             <Modal

@@ -188,6 +188,7 @@ export async function handleCheckoutSessionCompleted(session: any) {
             studentId,
             credits,
             amountCents: Number(session.amount_total || 0),
+            feeCents: Number(metadata.feeCents || 0),
             stripePaymentIntentId: String(session.payment_intent),
             stripeCheckoutSessionId: session.id as string,
         });

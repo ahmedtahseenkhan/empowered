@@ -35,7 +35,12 @@ export const WALLET_CONFIG = {
     purchaseMaxCredits: Number(process.env.WALLET_PURCHASE_MAX || 1000),
     purchasePackages: (process.env.WALLET_PURCHASE_PACKAGES || '25,50,100,200')
         .split(',').map((v) => Number(v.trim())).filter((v) => Number.isInteger(v) && v > 0),
+    /** Platform fee charged to the learner on top of a credit purchase (percent). Not credited to the wallet. */
+    purchaseFeePercent: Math.max(0, Number(process.env.WALLET_PURCHASE_FEE_PERCENT || 10)),
 };
+
+export const purchaseFeeCents = (credits: number) =>
+    Math.round((credits * 100 * WALLET_CONFIG.purchaseFeePercent) / 100);
 
 export class WalletError extends Error {
     status: number;
@@ -87,6 +92,7 @@ export function publicConfig() {
         purchaseMinCredits: WALLET_CONFIG.purchaseMinCredits,
         purchaseMaxCredits: WALLET_CONFIG.purchaseMaxCredits,
         purchasePackages: WALLET_CONFIG.purchasePackages,
+        purchaseFeePercent: WALLET_CONFIG.purchaseFeePercent,
     };
 }
 
@@ -619,8 +625,10 @@ export async function applyCreditsPurchase(args: {
     amountCents: number;
     stripePaymentIntentId: string;
     stripeCheckoutSessionId?: string;
+    feeCents?: number;
 }) {
     const { studentId, credits, amountCents, stripePaymentIntentId, stripeCheckoutSessionId } = args;
+    const feeCents = Number.isInteger(args.feeCents) && args.feeCents! > 0 ? args.feeCents! : 0;
     if (!Number.isInteger(credits) || credits <= 0) throw new WalletError('Invalid credit amount');
     if (!stripePaymentIntentId) throw new WalletError('Missing payment reference');
 
@@ -638,10 +646,12 @@ export async function applyCreditsPurchase(args: {
                     type: 'PURCHASE',
                     source: 'PURCHASED',
                     balance_after: updated.credits_balance,
-                    description: `Purchased ${credits} Learning Credits ($${(amountCents / 100).toFixed(2)})`,
+                    description: feeCents
+                        ? `Purchased ${credits} Learning Credits ($${(amountCents / 100).toFixed(2)} incl. $${(feeCents / 100).toFixed(2)} platform fee)`
+                        : `Purchased ${credits} Learning Credits ($${(amountCents / 100).toFixed(2)})`,
                     stripe_payment_intent_id: stripePaymentIntentId,
                     stripe_checkout_session_id: stripeCheckoutSessionId || null,
-                    metadata: { amount_cents: amountCents },
+                    metadata: { amount_cents: amountCents, fee_cents: feeCents },
                 },
             });
             return { applied: true as const, entry };

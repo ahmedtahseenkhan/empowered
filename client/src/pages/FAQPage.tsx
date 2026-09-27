@@ -14,15 +14,15 @@ const studentFaqs: FAQItem[] = [
     },
     {
         question: 'How do payments work?',
-        answer: 'Sessions are paid weekly, per upcoming session. A session is confirmed only after payment is completed. After finishing a session, you must pay to confirm the next session. There is no automatic recurring billing.',
+        answer: 'Sessions are reserved with Learning Credits (1 credit = $1), which you buy by card through Stripe. When you book a mentor, credits for four weeks of sessions are reserved up front, and they are released to the mentor one session at a time after each session is completed. There is no automatic recurring billing.',
     },
     {
         question: 'Is there a platform fee?',
-        answer: 'Yes. A 10% platform fee is added to each payment. This supports the dashboard tools and technology provided by EmpowerEd Learnings.',
+        answer: 'Yes. A platform fee is added when you buy Learning Credits and is shown as its own line before you pay. This supports the dashboard tools and technology provided by EmpowerEd Learnings.',
     },
     {
-        question: 'What happens if I don’t pay for the next session?',
-        answer: 'If payment is not completed by the required time shown in your dashboard or reminders, the session may be unconfirmed and the time slot released.',
+        question: 'What happens if I cancel a session?',
+        answer: 'Cancel a session more than 24 hours before it starts and its credits return to your wallet instantly. Refunds are issued as Learning Credits to your EmpowerEd wallet, not as a cash or card refund.',
     },
     {
         question: 'What payment methods are accepted?',
@@ -38,11 +38,11 @@ const studentFaqs: FAQItem[] = [
     },
     {
         question: 'Do I need to commit to multiple sessions?',
-        answer: 'There is no required commitment. However, consistency helps students make meaningful progress, and many families choose to book multiple sessions for better results.',
+        answer: 'Bookings reserve four weeks of sessions at a time, because consistency helps students make meaningful progress. You can cancel any upcoming session more than 24 hours before it starts and its credits return to your wallet.',
     },
     {
         question: 'What if I want to stop sessions?',
-        answer: 'You can stop booking at any time. Since payments are per session, there is no subscription to cancel.',
+        answer: 'You can stop at any time. Cancel your upcoming sessions more than 24 hours ahead and their credits return to your wallet. There is no subscription to cancel.',
     },
     {
         question: 'Can I reschedule a session?',

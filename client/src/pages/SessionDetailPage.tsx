@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Calendar, Clock, User, CreditCard, ExternalLink, CalendarDays, Video, Copy, Check, Send } from 'lucide-react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { ArrowLeft, Calendar, Clock, User, ExternalLink, CalendarDays, Video, Copy, Check, Send } from 'lucide-react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -51,9 +51,6 @@ const SessionDetailPage: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
-    const [payBusy, setPayBusy] = useState(false);
-    const [payError, setPayError] = useState('');
-
     const [joinBusy, setJoinBusy] = useState(false);
     const [joinError, setJoinError] = useState('');
     const [errorModalOpen, setErrorModalOpen] = useState(false);
@@ -77,30 +74,6 @@ const SessionDetailPage: React.FC = () => {
     }, []);
 
     const graceHours = Math.max(1, Math.round((walletCfg?.completionGraceMinutes ?? 1440) / 60));
-
-    const [searchParams, setSearchParams] = useSearchParams();
-    const [finalizeStatus, setFinalizeStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
-
-    // Auto-finalize after returning from Stripe checkout
-    useEffect(() => {
-        const sessionId = searchParams.get('session_id');
-        if (!sessionId) return;
-        setFinalizeStatus('loading');
-        api.post('/payments/student/booking/finalize', { sessionId })
-            .then(() => {
-                setFinalizeStatus('success');
-                // Re-fetch lesson to get updated payment status
-                if (id) {
-                    api.get(`/lessons/${id}/detail`).then((r) => setLesson(r.data?.lesson || null));
-                }
-            })
-            .catch(() => setFinalizeStatus('error'))
-            .finally(() => {
-                // Remove session_id from URL
-                searchParams.delete('session_id');
-                setSearchParams(searchParams, { replace: true });
-            });
-    }, []);// eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
         if (!id) return;
@@ -142,10 +115,6 @@ const SessionDetailPage: React.FC = () => {
         return d.toLocaleString(undefined, { timeZone: tz, year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
     };
 
-    const needsPayment = lesson
-        && !['CANCELLED', 'COMPLETED', 'MISSED'].includes(lesson.status.toUpperCase())
-        && (lesson.payment_status === 'pending' || lesson.payment_status === 'failed');
-    const isUpcoming = lesson && new Date(lesson.start_time).getTime() > Date.now();
     // Session is joinable from start_time until 50 minutes after it begins
     const isJoinable = lesson && (() => {
         const start = new Date(lesson.start_time).getTime();
@@ -182,32 +151,6 @@ const SessionDetailPage: React.FC = () => {
         if (ps === 'paid') return <span className="px-3 py-1 rounded-full text-sm font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">Paid</span>;
         if (ps === 'failed') return <span className="px-3 py-1 rounded-full text-sm font-medium bg-red-50 text-red-700 border border-red-200">Payment Failed</span>;
         return <span className="px-3 py-1 rounded-full text-sm font-medium bg-amber-50 text-amber-700 border border-amber-200">Payment Pending</span>;
-    };
-
-    const handlePay = async () => {
-        if (!lesson) return;
-        try {
-            setPayBusy(true);
-            setPayError('');
-            const baseUrl = window.location.origin;
-            const res = await api.post('/payments/student/booking/pay-next', {
-                lessonId: lesson.id,
-                bookingId: lesson.booking_id || lesson.booking?.id,
-                successUrl: `${baseUrl}/student/sessions/${lesson.id}`,
-                cancelUrl: `${baseUrl}/student/sessions/${lesson.id}`,
-            });
-            if (res.data?.url) {
-                window.location.href = res.data.url;
-            } else {
-                setPayError('Failed to start payment – please try again.');
-                setErrorModalOpen(true);
-            }
-        } catch (e) {
-            setPayError(apiError(e, 'Unable to process payment.'));
-            setErrorModalOpen(true);
-        } finally {
-            setPayBusy(false);
-        }
     };
 
     const handleJoin = async () => {
@@ -411,46 +354,6 @@ const SessionDetailPage: React.FC = () => {
                         {/* Errors */}
                         {/* Removed error div, now using modal */}
 
-                        {/* Finalize status after Stripe redirect */}
-                        {finalizeStatus === 'loading' && (
-                            <div className="text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
-                                Confirming your payment...
-                            </div>
-                        )}
-                        {finalizeStatus === 'success' && (
-                            <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
-                                Payment confirmed! Your session is booked.
-                            </div>
-                        )}
-                        {finalizeStatus === 'error' && (
-                            <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
-                                We couldn't confirm your payment automatically. It may take a moment to update — please refresh the page.
-                            </div>
-                        )}
-
-                        {/* Payment CTA for students */}
-                        {isStudent && needsPayment && isUpcoming && (
-                            <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
-                                <div className="flex items-start gap-3">
-                                    <CreditCard className="w-6 h-6 text-amber-600 flex-shrink-0 mt-0.5" />
-                                    <div className="flex-1">
-                                        <h3 className="font-semibold text-amber-900">Payment Required</h3>
-                                        <p className="text-sm text-amber-800 mt-1">
-                                            Please complete payment to confirm this session. Once paid, you'll be able to join the meeting.
-                                        </p>
-                                        <Button
-                                            className="mt-3 bg-amber-600 hover:bg-amber-700 text-white"
-                                            disabled={payBusy}
-                                            onClick={handlePay}
-                                        >
-                                            <CreditCard className="w-4 h-4 mr-2" />
-                                            {payBusy ? 'Processing…' : 'Pay Now & Confirm Session'}
-                                        </Button>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
                         {/* Session details */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="flex items-start gap-3">
@@ -492,7 +395,6 @@ const SessionDetailPage: React.FC = () => {
                             const status = lesson.status.toUpperCase();
                             if (['COMPLETED', 'CANCELLED', 'MISSED'].includes(status)) return null;
                             if (Date.now() > new Date(lesson.end_time).getTime() + 15 * 60 * 1000) return null;
-                            if (isStudent && needsPayment) return null;
                             const link = lesson.meeting_link;
                             return (
                                 <div className="bg-gray-50 border border-gray-200 rounded-xl p-5">
@@ -576,7 +478,7 @@ const SessionDetailPage: React.FC = () => {
 
                         {/* Action buttons */}
                         <div className="flex flex-wrap gap-3 pt-2">
-                            {isStudent && !needsPayment && isJoinable && (
+                            {isStudent && isJoinable && (
                                 <Button
                                     className="flex items-center gap-2"
                                     disabled={joinBusy}
@@ -623,7 +525,7 @@ const SessionDetailPage: React.FC = () => {
                 onClose={() => setErrorModalOpen(false)}
                 title="Error"
             >
-                <p>{payError || joinError}</p>
+                <p>{joinError}</p>
             </Modal>
             <Modal isOpen={cancelOpen} onClose={() => { if (!cancelBusy) setCancelOpen(false); }} title="Cancel this session?">
                 {lesson && (

@@ -341,12 +341,14 @@ export const createCreditsPurchaseCheckout = async (req: AuthRequest, res: Respo
             ? `${successUrl}&purchase_session_id={CHECKOUT_SESSION_ID}`
             : `${successUrl}?purchase_session_id={CHECKOUT_SESSION_ID}`;
 
+        const feeCents = wallet.purchaseFeeCents(amount);
         const session = await StripeService.createCreditsCheckoutSession(
             amount * 100,
             stripeCustomerId,
             successWithSession,
             cancelUrl,
-            { type: 'credits_purchase', studentId: student.id, credits: String(amount) },
+            { type: 'credits_purchase', studentId: student.id, credits: String(amount), feeCents: String(feeCents) },
+            { amountInCents: feeCents, percent: WALLET_CONFIG.purchaseFeePercent },
         );
         return res.json({ url: session.url });
     } catch (e) {
@@ -372,6 +374,7 @@ export const finalizeCreditsPurchase = async (req: AuthRequest, res: Response) =
             studentId: student.id,
             credits: Number(meta.credits),
             amountCents: Number(session.amount_total || 0),
+            feeCents: Number(meta.feeCents || 0),
             stripePaymentIntentId: String(session.payment_intent),
             stripeCheckoutSessionId: session.id,
         });
