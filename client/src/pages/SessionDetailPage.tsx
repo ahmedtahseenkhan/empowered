@@ -409,8 +409,8 @@ const SessionDetailPage: React.FC = () => {
                                             )}
                                             <p className="text-xs text-gray-500 mt-1">
                                                 {isStudent
-                                                    ? 'Open the link at session time — you will be let straight in.'
-                                                    : 'You and the student use this same link. Anyone with the link is let straight in, no approval needed.'}
+                                                    ? 'Open the link at session time. Sign in to Google with the email you registered with to go straight in; otherwise your mentor will let you in.'
+                                                    : 'You and the student use this same link. Join signed in to Google with your registered email: you are the co-host and can admit the student if they are asked to wait.'}
                                             </p>
                                             <div className="flex flex-wrap gap-2 mt-3">
                                                 <Button variant="outline" size="sm" className="flex items-center gap-2" disabled={linkBusy} onClick={handleCopyLink}>

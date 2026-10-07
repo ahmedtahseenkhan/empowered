@@ -207,61 +207,53 @@ const meetingCodeFromLink = (link: string): string | null => {
 };
 
 /**
- * Create a Google Meet space owned by the platform account with OPEN access:
- * anyone with the link joins immediately, without knocking and without a host present.
+ * Meet access types this service hands out.
+ *  - OPEN:    anyone with the link joins without knocking, no host needed. Meet shows the
+ *             participant "This call is open to anyone".
+ *  - TRUSTED: only registered members join without knocking; everyone else knocks and a
+ *             co-host admits them. Sessions use this when the mentor could be registered
+ *             as co-host, so the mentor runs the room and the platform account never has to.
  */
-const createOpenMeetSpace = async (auth: PlatformAuth): Promise<MeetSpace> => {
+export type MeetAccessType = 'OPEN' | 'TRUSTED';
+const READY_ACCESS: ReadonlyArray<string | null> = ['OPEN', 'TRUSTED'];
+/** True when a recorded/live access type means "the invited people can get in". */
+export const isReadyAccess = (accessType: string | null | undefined) => READY_ACCESS.includes(accessType ?? null);
+
+/** Access policy for mentoring sessions: SESSION_MEET_ACCESS=TRUSTED (default) or OPEN. */
+export const sessionAccessPolicy = (): MeetAccessType =>
+    (process.env.SESSION_MEET_ACCESS || 'TRUSTED').trim().toUpperCase() === 'OPEN' ? 'OPEN' : 'TRUSTED';
+/** Demo calls stay OPEN: the EmpowerEd team joins with the platform account anyway. */
+const DEMO_ACCESS: MeetAccessType = 'OPEN';
+
+type MeetMember = { email: string; role?: 'COHOST' };
+
+/** Create a Google Meet space owned by the platform account with the given access type. */
+const createMeetSpace = async (auth: PlatformAuth, accessType: MeetAccessType): Promise<MeetSpace> => {
     const meet = google.meet({ version: 'v2', auth });
     const resp = await meet.spaces.create({
         requestBody: {
-            config: { accessType: 'OPEN', entryPointAccess: 'ALL' },
+            config: { accessType, entryPointAccess: 'ALL' },
         },
     });
 
     const meetingUri = resp.data.meetingUri;
     if (!meetingUri) throw new Error('Google Meet API returned a space without a meetingUri');
 
-    const accessType = resp.data.config?.accessType || null;
-    if (accessType !== 'OPEN') {
-        console.warn(`[GoogleMeet] Space ${resp.data.name} was created with accessType=${accessType} although OPEN was requested; participants may have to knock.`);
+    const applied = resp.data.config?.accessType || null;
+    if (applied !== accessType) {
+        console.warn(`[GoogleMeet] Space ${resp.data.name} was created with accessType=${applied} although ${accessType} was requested.`);
     }
 
     return {
         name: resp.data.name || null,
         meetingUri,
         meetingCode: resp.data.meetingCode || null,
-        accessType,
+        accessType: applied,
     };
 };
 
-/**
- * Switch an EXISTING meeting to OPEN access, keeping the same link. Used for sessions whose
- * link was generated before OPEN access existed (Calendar-generated, host approval required).
- * Throws 403/404 when the meeting belongs to a different Google account.
- */
-const openExistingMeetSpace = async (
-    auth: PlatformAuth,
-    meetingLink: string
-): Promise<{ name: string; accessType: string | null; previousAccessType: string | null }> => {
-    const code = meetingCodeFromLink(meetingLink);
-    if (!code) throw new Error(`Not a Google Meet link: ${meetingLink}`);
-
-    const meet = google.meet({ version: 'v2', auth });
-    const current = await meet.spaces.get({ name: `spaces/${code}` });
-    const name = current.data.name;
-    if (!name) throw new Error(`Google Meet API returned no resource name for ${code}`);
-    const previousAccessType = current.data.config?.accessType || null;
-    if (previousAccessType === 'OPEN') return { name, accessType: 'OPEN', previousAccessType };
-
-    await meet.spaces.patch({
-        name,
-        updateMask: 'config.accessType',
-        requestBody: { config: { accessType: 'OPEN' } },
-    });
-    // Read back instead of trusting the patch response: this is what participants will get.
-    const after = await meet.spaces.get({ name });
-    return { name, accessType: after.data.config?.accessType || null, previousAccessType };
-};
+/** Kept for the admin probe: an OPEN space, nothing else. */
+const createOpenMeetSpace = (auth: PlatformAuth) => createMeetSpace(auth, 'OPEN');
 
 /** What Google reports for a meeting right now (read-only). */
 const readLiveMeetSpace = async (auth: PlatformAuth, meetingLink: string) => {
@@ -271,13 +263,15 @@ const readLiveMeetSpace = async (auth: PlatformAuth, meetingLink: string) => {
     return { name: resp.data.name || null, accessType: resp.data.config?.accessType || null };
 };
 
+type MemberRegistration = { cohost: boolean; registered: string[]; reason: string | null };
+
 /**
- * Best effort second line of defence: register the mentor as co-host and the student as a
- * member of the meeting. Members join without knocking, and a co-host can admit anyone who
- * does knock, so the session works even if Google does not honour OPEN access.
- * Only effective when they join signed in to Google with these email addresses.
+ * Register people on the meeting. Members join without knocking; a COHOST can also admit
+ * anyone who knocks and use the host controls. Only effective when they join signed in to
+ * Google with these exact email addresses. Returns whether the co-host could be registered.
  */
-const addSpaceMembers = async (auth: PlatformAuth, spaceName: string, members: Array<{ email: string; role?: 'COHOST' }>) => {
+const addSpaceMembers = async (auth: PlatformAuth, spaceName: string, members: MeetMember[]): Promise<MemberRegistration> => {
+    const result: MemberRegistration = { cohost: false, registered: [], reason: null };
     for (const member of members) {
         try {
             await auth.request({
@@ -285,27 +279,107 @@ const addSpaceMembers = async (auth: PlatformAuth, spaceName: string, members: A
                 method: 'POST',
                 data: { email: member.email, ...(member.role ? { role: member.role } : {}) },
             });
+            result.registered.push(member.email);
+            if (member.role === 'COHOST') result.cohost = true;
         } catch (e) {
-            if (googleStatusOf(e) === 409) continue; // already a member
-            console.warn(`[GoogleMeet] Could not add members to ${spaceName} (non-fatal): ${describeGoogleError(e)}`);
-            return;
+            if (googleStatusOf(e) === 409) { // already a member
+                result.registered.push(member.email);
+                if (member.role === 'COHOST') result.cohost = true;
+                continue;
+            }
+            const why = describeGoogleError(e);
+            if (member.role === 'COHOST') result.reason = why;
+            console.warn(`[GoogleMeet] Could not register ${member.email}${member.role ? ` as ${member.role}` : ''} on ${spaceName} (non-fatal): ${why}`);
         }
+    }
+    return result;
+};
+
+/** Members currently registered on a meeting (best effort; null when Google refuses the listing). */
+const listSpaceMembers = async (auth: PlatformAuth, spaceName: string): Promise<Array<{ email: string; role: string | null }> | null> => {
+    try {
+        const resp = await auth.request<{ members?: Array<{ email?: string; role?: string }> }>({
+            url: `https://meet.googleapis.com/v2/${spaceName}/members`,
+            method: 'GET',
+        });
+        return (resp.data.members || []).filter(m => m.email).map(m => ({ email: m.email as string, role: m.role || null }));
+    } catch {
+        return null;
     }
 };
 
+type SettledAccess = {
+    name: string;
+    accessType: string | null;
+    previousAccessType: string | null;
+    /** The mentor is registered as co-host (only meaningful for TRUSTED). */
+    cohost: boolean;
+    changed: boolean;
+};
+
 /**
- * Second half of creating an OPEN meeting: write the platform calendar event and confirm
- * with Google that the meeting really is OPEN, correcting it if not.
+ * Bring an EXISTING meeting (same link) to the wanted access type and register its members.
+ * Under TRUSTED the mentor must be a co-host, otherwise nobody could admit the student; when
+ * that registration fails (mentor email is not a Google account, API refused) the meeting
+ * is kept OPEN instead, so a session never ends up with nobody able to let people in.
+ * Throws 403/404 when the meeting belongs to a different Google account.
+ */
+const settleMeetAccess = async (
+    auth: PlatformAuth,
+    meetingLink: string,
+    members: MeetMember[],
+    desired: MeetAccessType,
+    label: string
+): Promise<SettledAccess> => {
+    const code = meetingCodeFromLink(meetingLink);
+    if (!code) throw new Error(`Not a Google Meet link: ${meetingLink}`);
+
+    const meet = google.meet({ version: 'v2', auth });
+    const current = await meet.spaces.get({ name: `spaces/${code}` });
+    const name = current.data.name;
+    if (!name) throw new Error(`Google Meet API returned no resource name for ${code}`);
+    const previousAccessType = current.data.config?.accessType || null;
+
+    const registration = members.length > 0
+        ? await addSpaceMembers(auth, name, members)
+        : { cohost: false, registered: [], reason: null };
+
+    let target: MeetAccessType = desired;
+    if (desired === 'TRUSTED' && !registration.cohost) {
+        target = 'OPEN';
+        console.warn(`[GoogleMeet] ${label}: mentor could not be registered as co-host (${registration.reason || 'no mentor email'}); keeping the meeting OPEN so nobody gets locked out.`);
+    }
+
+    if (previousAccessType === target) {
+        return { name, accessType: previousAccessType, previousAccessType, cohost: registration.cohost, changed: false };
+    }
+
+    await meet.spaces.patch({
+        name,
+        updateMask: 'config.accessType',
+        requestBody: { config: { accessType: target } },
+    });
+    // Read back instead of trusting the patch response: this is what participants will get.
+    const after = await meet.spaces.get({ name });
+    const accessType = after.data.config?.accessType || null;
+    return { name, accessType, previousAccessType, cohost: registration.cohost, changed: accessType !== previousAccessType };
+};
+
+/**
+ * Second half of creating a meeting: write the platform calendar event, register members and
+ * confirm with Google what access participants will really get.
  *
  * The link goes into the event as plain text (location + description). The space is
  * deliberately NOT attached as the event's conference: Calendar manages the settings of
- * conferences it owns and must not be able to reset this meeting's OPEN access.
+ * conferences it owns and must not be able to reset this meeting's access.
  */
-const finishOpenMeeting = async (
+const finishMeeting = async (
     auth: PlatformAuth,
     space: MeetSpace,
     baseEvent: calendar_v3.Schema$Event,
-    label: string
+    label: string,
+    members: MeetMember[],
+    desired: MeetAccessType
 ): Promise<LessonMeetResult> => {
     const description = `${baseEvent.description || ''}\n\nGoogle Meet: ${space.meetingUri}`.trim();
 
@@ -324,11 +398,8 @@ const finishOpenMeeting = async (
 
     let accessType = space.accessType;
     try {
-        const live = await openExistingMeetSpace(auth, space.meetingUri);
-        accessType = live.accessType;
-        if (live.previousAccessType !== 'OPEN') {
-            console.warn(`[GoogleMeet] ${label}: meeting was ${live.previousAccessType} right after creation; now ${live.accessType}`);
-        }
+        const settled = await settleMeetAccess(auth, space.meetingUri, members, desired, label);
+        accessType = settled.accessType;
     } catch (e) {
         console.warn(`[GoogleMeet] ${label}: could not confirm the meeting's access type: ${describeGoogleError(e)}`);
     }
@@ -345,19 +416,19 @@ type LessonMeetArgs = {
     mentorEmail?: string | null;
     studentEmail?: string | null;
     /** Throw instead of falling back to a Calendar-generated (knock-required) link. */
-    requireOpen?: boolean;
+    requireManaged?: boolean;
 };
 
 type LessonMeetResult = {
     eventId: string | null;
     htmlLink: string | null;
     meetLink: string | null;
-    /** Meet access type actually applied (OPEN = join without knocking); null when the Calendar fallback was used. */
+    /** Meet access type actually applied (OPEN / TRUSTED); null when the Calendar fallback was used. */
     accessType: string | null;
 };
 
 const lessonMembers = (args: { mentorEmail?: string | null; studentEmail?: string | null }) => {
-    const members: Array<{ email: string; role?: 'COHOST' }> = [];
+    const members: MeetMember[] = [];
     if (args.mentorEmail) members.push({ email: args.mentorEmail, role: 'COHOST' });
     if (args.studentEmail && args.studentEmail !== args.mentorEmail) members.push({ email: args.studentEmail });
     return members;
@@ -366,7 +437,8 @@ const lessonMembers = (args: { mentorEmail?: string | null; studentEmail?: strin
 /**
  * Create the Meet link + platform calendar event for a session.
  *
- * Preferred path: OPEN-access Meet space (Meet REST API) attached to a Calendar event.
+ * Preferred path: a Meet REST API space under the session access policy (TRUSTED with the
+ * mentor as co-host, or OPEN), plus a plain calendar event on the platform calendar.
  * Fallback path (Meet API unavailable — not enabled, scopes missing): a Calendar-generated
  * Meet link. That link still works, but uninvited participants must knock, so the fallback
  * is logged loudly.
@@ -376,12 +448,13 @@ const createPlatformMeetEventForLesson = async (args: LessonMeetArgs): Promise<L
     const calendar = google.calendar({ version: 'v3', auth });
     const calendarId = getPlatformCalendarId();
 
+    const desired = sessionAccessPolicy();
     let space: MeetSpace | null = null;
     try {
-        space = await createOpenMeetSpace(auth);
+        space = await createMeetSpace(auth, desired);
     } catch (e) {
-        if (args.requireOpen) throw e;
-        console.error(`[GoogleMeet] Open-access space creation failed for lesson ${args.lessonId}: ${describeGoogleError(e)}. Falling back to a Calendar-generated Meet link (participants may have to knock).`);
+        if (args.requireManaged) throw e;
+        console.error(`[GoogleMeet] Meet space creation failed for lesson ${args.lessonId}: ${describeGoogleError(e)}. Falling back to a Calendar-generated Meet link (participants may have to knock).`);
     }
 
     const attendeesEmails = [args.studentEmail, args.mentorEmail].filter(Boolean) as string[];
@@ -394,8 +467,7 @@ const createPlatformMeetEventForLesson = async (args: LessonMeetArgs): Promise<L
     };
 
     if (space) {
-        if (space.name) await addSpaceMembers(auth, space.name, lessonMembers(args));
-        return finishOpenMeeting(auth, space, baseEvent, `lesson ${args.lessonId}`);
+        return finishMeeting(auth, space, baseEvent, `lesson ${args.lessonId}`, lessonMembers(args), desired);
     }
 
     const resp = await calendar.events.insert({
@@ -422,10 +494,10 @@ const createPlatformMeetEventForLesson = async (args: LessonMeetArgs): Promise<L
 
 /**
  * Outcome of making sure a session has a usable meeting:
- *  - open:       link exists and is OPEN access (no knocking)
- *  - replaced:   the old link could not be opened (owned by another Google account), so a
- *                new OPEN link replaced it and both sides were emailed
- *  - restricted: link exists but could not be switched to OPEN (host approval may be needed)
+ *  - open:       link is ready — TRUSTED with the mentor as co-host, or OPEN
+ *  - replaced:   the old link could not be managed (owned by another Google account), so a
+ *                new link replaced it and both sides were emailed
+ *  - restricted: link exists but could not be brought to a ready state (host approval may be needed)
  *  - none:       no link could be produced
  */
 export type LessonMeetingState = 'open' | 'replaced' | 'restricted' | 'none';
@@ -433,14 +505,14 @@ export type LessonMeetingOutcome = {
     link: string | null;
     state: LessonMeetingState;
     setupError?: string;
-    /** The meeting was recorded as OPEN but Google reported otherwise, and it was corrected. */
+    /** The meeting was recorded as ready but Google reported otherwise, and it was corrected. */
     corrected?: boolean;
 };
 
 export type EnsureMeetingOptions = {
     /**
      * Ask Google for the meeting's access type even when the lesson is already recorded as
-     * OPEN, and correct it if it drifted. Used at join time and by the admin tools.
+     * ready, and correct it if it drifted. Used at join time and by the admin tools.
      */
     verifyLive?: boolean;
 };
@@ -449,7 +521,8 @@ const INACTIVE_STATUSES = ['CANCELLED', 'MISSED', 'COMPLETED'];
 
 /**
  * THE single entry point for session meetings. Makes sure the lesson has a Meet link and
- * that the link is OPEN access, creating or upgrading it as needed. Safe to call repeatedly
+ * that the link is ready (TRUSTED with the mentor as co-host, or OPEN), creating or
+ * upgrading it as needed. Safe to call repeatedly
  * from booking, webhooks, the wallet flow, the scheduler, join and "send link". Never throws.
  */
 export const ensureLessonMeeting = async (lessonId: string, options: EnsureMeetingOptions = {}): Promise<LessonMeetingOutcome> => {
@@ -480,9 +553,9 @@ export const ensureLessonMeeting = async (lessonId: string, options: EnsureMeeti
         studentEmail,
     };
 
-    // --- Existing link: make sure it is OPEN access ---------------------------------
+    // --- Existing link: make sure it is ready ---------------------------------------
     if (lesson.meeting_link) {
-        const recordedOpen = lesson.meeting_access_type === 'OPEN';
+        const recordedOpen = isReadyAccess(lesson.meeting_access_type);
         if (recordedOpen && (!options.verifyLive || inactive)) return { link: lesson.meeting_link, state: 'open' };
         if (inactive) return { link: lesson.meeting_link, state: 'restricted' };
 
@@ -494,37 +567,38 @@ export const ensureLessonMeeting = async (lessonId: string, options: EnsureMeeti
         }
 
         try {
-            const opened = await openExistingMeetSpace(auth, lesson.meeting_link);
-            const changed = opened.previousAccessType !== 'OPEN';
-            if (opened.accessType === 'OPEN') {
-                if (changed || !recordedOpen) await addSpaceMembers(auth, opened.name, lessonMembers(eventArgs));
-                if (!recordedOpen) await prisma.lesson.update({ where: { id: lesson.id }, data: { meeting_access_type: 'OPEN' } });
-                if (changed) {
-                    console.log(`[GoogleMeet] Lesson ${lesson.id}: link switched to OPEN access (Google had it as ${opened.previousAccessType}${recordedOpen ? ', although it was recorded as OPEN' : ''})`);
+            const settled = await settleMeetAccess(auth, lesson.meeting_link, lessonMembers(eventArgs), sessionAccessPolicy(), `lesson ${lesson.id}`);
+            const driftedFromReady = recordedOpen && !isReadyAccess(settled.previousAccessType);
+            if (isReadyAccess(settled.accessType)) {
+                if (settled.accessType !== lesson.meeting_access_type) {
+                    await prisma.lesson.update({ where: { id: lesson.id }, data: { meeting_access_type: settled.accessType } });
                 }
-                return { link: lesson.meeting_link, state: 'open', corrected: changed && recordedOpen };
+                if (settled.changed) {
+                    console.log(`[GoogleMeet] Lesson ${lesson.id}: link set to ${settled.accessType}${settled.cohost ? ' with mentor as co-host' : ''} (Google had it as ${settled.previousAccessType}${driftedFromReady ? ', although it was recorded as ready' : ''})`);
+                }
+                return { link: lesson.meeting_link, state: 'open', corrected: driftedFromReady };
             }
-            console.warn(`[GoogleMeet] Lesson ${lesson.id}: Google kept accessType=${opened.accessType} after requesting OPEN`);
-            if (recordedOpen) await prisma.lesson.update({ where: { id: lesson.id }, data: { meeting_access_type: opened.accessType } });
+            console.warn(`[GoogleMeet] Lesson ${lesson.id}: Google kept accessType=${settled.accessType}`);
+            if (recordedOpen) await prisma.lesson.update({ where: { id: lesson.id }, data: { meeting_access_type: settled.accessType } });
             return { link: lesson.meeting_link, state: 'restricted' };
         } catch (e) {
             if (isPlatformSetupError(e)) {
                 const setupError = describeGoogleError(e);
-                console.error(`[GoogleMeet] Lesson ${lesson.id}: cannot switch link to OPEN access: ${setupError}`);
+                console.error(`[GoogleMeet] Lesson ${lesson.id}: cannot verify the link's access: ${setupError}`);
                 return { link: lesson.meeting_link, state: recordedOpen ? 'open' : 'restricted', setupError };
             }
 
             const status = googleStatusOf(e);
             if (status !== 403 && status !== 404) {
-                console.error(`[GoogleMeet] Lesson ${lesson.id}: switching link to OPEN access failed: ${describeGoogleError(e)}`);
+                console.error(`[GoogleMeet] Lesson ${lesson.id}: verifying the link's access failed: ${describeGoogleError(e)}`);
                 return { link: lesson.meeting_link, state: recordedOpen ? 'open' : 'restricted' };
             }
 
             // The meeting belongs to a different Google account (e.g. the token owner changed),
-            // so it can never be opened from here. Replace it with a fresh OPEN meeting.
+            // so it can never be managed from here. Replace it with a fresh meeting.
             try {
-                const event = await createPlatformMeetEventForLesson({ ...eventArgs, requireOpen: true });
-                if (!event.meetLink || event.accessType !== 'OPEN') {
+                const event = await createPlatformMeetEventForLesson({ ...eventArgs, requireManaged: true });
+                if (!event.meetLink || !isReadyAccess(event.accessType)) {
                     return { link: lesson.meeting_link, state: 'restricted' };
                 }
                 const oldEventId = lesson.google_calendar_event_id;
@@ -532,7 +606,7 @@ export const ensureLessonMeeting = async (lessonId: string, options: EnsureMeeti
                     where: { id: lesson.id },
                     data: {
                         meeting_link: event.meetLink,
-                        meeting_access_type: 'OPEN',
+                        meeting_access_type: event.accessType,
                         google_calendar_event_id: event.eventId,
                         google_calendar_html_link: event.htmlLink,
                     },
@@ -558,7 +632,7 @@ export const ensureLessonMeeting = async (lessonId: string, options: EnsureMeeti
                     skipDuplicates: true,
                 });
 
-                console.log(`[GoogleMeet] Lesson ${lesson.id}: old link was not manageable (HTTP ${status}); replaced with a new OPEN link and notified both sides`);
+                console.log(`[GoogleMeet] Lesson ${lesson.id}: old link was not manageable (HTTP ${status}); replaced with a new ${event.accessType} link and notified both sides`);
                 return { link: event.meetLink, state: 'replaced' };
             } catch (e2) {
                 const setupError = isPlatformSetupError(e2) ? describeGoogleError(e2) : undefined;
@@ -594,7 +668,7 @@ export const ensureLessonMeeting = async (lessonId: string, options: EnsureMeeti
 
     console.log(`[GoogleMeet] Lesson ${lesson.id}: meeting link ready (access=${event.accessType || 'calendar-fallback'})`);
     if (!event.meetLink) return { link: null, state: 'none' };
-    return { link: event.meetLink, state: event.accessType === 'OPEN' ? 'open' : 'restricted' };
+    return { link: event.meetLink, state: isReadyAccess(event.accessType) ? 'open' : 'restricted' };
 };
 
 /** Convenience wrapper: the lesson's meeting link (created / opened as needed) or null. */
@@ -608,14 +682,14 @@ export const ensureMeetLinkForLesson = async (lessonId: string, options: EnsureM
 };
 
 /**
- * Bring upcoming sessions up to OPEN access: sessions booked before OPEN access existed keep
- * a link that still asks for host approval until it is switched. Stops early when the
+ * Bring upcoming sessions and demo calls to a ready state: links booked before this flow
+ * existed keep asking for host approval until they are switched. Stops early when the
  * platform Google setup itself is broken (no point retrying every lesson).
  */
 export const upgradeUpcomingLessonsToOpenAccess = async (
     limit = 20,
     options: {
-        /** Re-check with Google even sessions already recorded as OPEN. */
+        /** Re-check with Google even sessions already recorded as ready. */
         verifyLive?: boolean;
         /** Only sessions starting within this many milliseconds from now. */
         startsWithinMs?: number;
@@ -627,7 +701,7 @@ export const upgradeUpcomingLessonsToOpenAccess = async (
             end_time: { gte: new Date() },
             meeting_link: { not: null },
             ...(options.startsWithinMs ? { start_time: { lte: new Date(Date.now() + options.startsWithinMs) } } : {}),
-            ...(options.verifyLive ? {} : { OR: [{ meeting_access_type: null }, { meeting_access_type: { not: 'OPEN' } }] }),
+            ...(options.verifyLive ? {} : { OR: [{ meeting_access_type: null }, { meeting_access_type: { notIn: ['OPEN', 'TRUSTED'] } }] }),
         },
         orderBy: { start_time: 'asc' },
         select: { id: true, meeting_access_type: true },
@@ -639,7 +713,7 @@ export const upgradeUpcomingLessonsToOpenAccess = async (
             slot_end_time: { gte: new Date() },
             meeting_link: { not: null },
             ...(options.startsWithinMs ? { slot_start_time: { lte: new Date(Date.now() + options.startsWithinMs) } } : {}),
-            ...(options.verifyLive ? {} : { OR: [{ meeting_access_type: null }, { meeting_access_type: { not: 'OPEN' } }] }),
+            ...(options.verifyLive ? {} : { OR: [{ meeting_access_type: null }, { meeting_access_type: { notIn: ['OPEN', 'TRUSTED'] } }] }),
         },
         orderBy: { slot_start_time: 'asc' },
         select: { id: true, meeting_access_type: true },
@@ -663,7 +737,7 @@ export const upgradeUpcomingLessonsToOpenAccess = async (
         }
         if (outcome.state === 'replaced') result.replaced += 1;
         else if (outcome.state === 'open') {
-            if (outcome.corrected || item.recorded !== 'OPEN') result.opened += 1;
+            if (outcome.corrected || !isReadyAccess(item.recorded)) result.opened += 1;
             else result.alreadyOpen += 1;
         } else result.stillRestricted += 1;
     }
@@ -686,6 +760,11 @@ export const getPlatformMeetDiagnostics = async () => {
         meetApiWorking: false,
         openAccessApplied: false,
         probeAccessType: null as string | null,
+        /** Access policy for new sessions (SESSION_MEET_ACCESS). */
+        sessionPolicy: sessionAccessPolicy() as string,
+        /** Could a co-host be registered on a test meeting? null = not tested. */
+        cohostRegistrationWorking: null as boolean | null,
+        cohostProbeDetail: null as string | null,
         error: null as string | null,
         sessions: { upcomingWithLink: 0, upcomingOpen: 0, upcomingNeedingUpgrade: 0, upcomingWithoutLink: 0 },
         /** True when the session numbers above come from asking Google, not from our records. */
@@ -700,6 +779,12 @@ export const getPlatformMeetDiagnostics = async () => {
             link: string;
             recordedAccess: string | null;
             liveAccess: string | null;
+            /** Registered members as "email (role)"; null when Google refused the listing. */
+            members: string[] | null;
+            /** Mentor registered as co-host (sessions only). */
+            cohost: boolean | null;
+            /** The invited people can get in: OPEN, or TRUSTED with the mentor as co-host. */
+            ready: boolean;
             error: string | null;
         }>,
     };
@@ -709,10 +794,10 @@ export const getPlatformMeetDiagnostics = async () => {
         const upcomingDemo = { slot_end_time: { gte: new Date() } };
         const [lessonsWithLink, lessonsOpen, lessonsWithoutLink, demosWithLink, demosOpen, demosWithoutLink] = await Promise.all([
             prisma.lesson.count({ where: { ...upcoming, meeting_link: { not: null } } }),
-            prisma.lesson.count({ where: { ...upcoming, meeting_link: { not: null }, meeting_access_type: 'OPEN' } }),
+            prisma.lesson.count({ where: { ...upcoming, meeting_link: { not: null }, meeting_access_type: { in: ['OPEN', 'TRUSTED'] } } }),
             prisma.lesson.count({ where: { ...upcoming, meeting_link: null } }),
             prisma.demoBooking.count({ where: { ...upcomingDemo, meeting_link: { not: null } } }),
-            prisma.demoBooking.count({ where: { ...upcomingDemo, meeting_link: { not: null }, meeting_access_type: 'OPEN' } }),
+            prisma.demoBooking.count({ where: { ...upcomingDemo, meeting_link: { not: null }, meeting_access_type: { in: ['OPEN', 'TRUSTED'] } } }),
             prisma.demoBooking.count({ where: { ...upcomingDemo, meeting_link: null } }),
         ]);
         const withLink = lessonsWithLink + demosWithLink;
@@ -766,7 +851,7 @@ export const getPlatformMeetDiagnostics = async () => {
                 start_time: true,
                 meeting_link: true,
                 meeting_access_type: true,
-                tutor: { select: { username: true } },
+                tutor: { select: { username: true, user: { select: { email: true } } } },
                 student: { select: { username: true } },
             },
         });
@@ -780,10 +865,11 @@ export const getPlatformMeetDiagnostics = async () => {
             ...upcomingLessons.map(l => ({
                 kind: 'session' as const, id: l.id, start: l.start_time, link: l.meeting_link as string,
                 recorded: l.meeting_access_type, mentor: l.tutor?.username || null, student: l.student?.username || null,
+                mentorEmail: l.tutor?.user?.email?.toLowerCase() || null,
             })),
             ...upcomingDemos.map(d => ({
                 kind: 'demo' as const, id: d.id, start: d.slot_start_time, link: d.meeting_link as string,
-                recorded: d.meeting_access_type, mentor: d.full_name, student: null,
+                recorded: d.meeting_access_type, mentor: d.full_name, student: null, mentorEmail: null as string | null,
             })),
         ].sort((a, b) => a.start.getTime() - b.start.getTime());
 
@@ -791,8 +877,16 @@ export const getPlatformMeetDiagnostics = async () => {
             const link = l.link;
             let liveAccess: string | null = null;
             let error: string | null = null;
+            let members: string[] | null = null;
+            let cohost: boolean | null = null;
             try {
-                liveAccess = (await readLiveMeetSpace(auth, link)).accessType;
+                const live = await readLiveMeetSpace(auth, link);
+                liveAccess = live.accessType;
+                if (l.kind === 'session' && live.name) {
+                    const list = await listSpaceMembers(auth, live.name);
+                    members = list ? list.map(m => `${m.email}${m.role ? ` (${m.role.toLowerCase()})` : ''}`) : null;
+                    cohost = list ? list.some(m => m.role === 'COHOST' && (!l.mentorEmail || m.email.toLowerCase() === l.mentorEmail)) : null;
+                }
             } catch (e) {
                 const status = googleStatusOf(e);
                 error = status === 403 || status === 404
@@ -808,12 +902,16 @@ export const getPlatformMeetDiagnostics = async () => {
                 link,
                 recordedAccess: l.recorded,
                 liveAccess,
+                members,
+                cohost,
+                // TRUSTED counts as ready unless we positively know the co-host is missing.
+                ready: liveAccess === 'OPEN' || (liveAccess === 'TRUSTED' && cohost !== false),
                 error,
             });
         }
         // Only replace the recorded numbers when every upcoming meeting was looked at.
         if (meetings.length === report.sessions.upcomingWithLink) {
-            const liveOpen = report.sessionChecks.filter(c => c.liveAccess === 'OPEN').length;
+            const liveOpen = report.sessionChecks.filter(c => c.ready).length;
             report.sessions.upcomingOpen = liveOpen;
             report.sessions.upcomingNeedingUpgrade = report.sessions.upcomingWithLink - liveOpen;
             report.sessionsVerifiedLive = true;
@@ -823,16 +921,29 @@ export const getPlatformMeetDiagnostics = async () => {
     }
 
     try {
-        const space = await createOpenMeetSpace(auth);
+        const policy = sessionAccessPolicy();
+        const space = await createMeetSpace(auth, policy);
         report.meetApiWorking = true;
         report.probeAccessType = space.accessType;
         if (space.name) {
             const back = await google.meet({ version: 'v2', auth }).spaces.get({ name: space.name });
             report.probeAccessType = back.data.config?.accessType || space.accessType;
         }
-        report.openAccessApplied = report.probeAccessType === 'OPEN';
+        report.openAccessApplied = report.probeAccessType === policy;
         if (!report.openAccessApplied) {
-            report.error = `Google created the test meeting with access type ${report.probeAccessType || 'unknown'} instead of OPEN.`;
+            report.error = `Google created the test meeting with access type ${report.probeAccessType || 'unknown'} instead of ${policy}.`;
+        }
+
+        // Can a co-host be registered? Use a real Google address the platform knows.
+        const probeEmail = (process.env.MEET_COHOST_PROBE_EMAIL || process.env.ADMIN_EMAIL || '').trim();
+        if (space.name && probeEmail) {
+            const reg = await addSpaceMembers(auth, space.name, [{ email: probeEmail, role: 'COHOST' }]);
+            report.cohostRegistrationWorking = reg.cohost;
+            report.cohostProbeDetail = reg.cohost
+                ? `${probeEmail} was registered as co-host on a test meeting.`
+                : `Could not register ${probeEmail} as co-host: ${reg.reason || 'unknown error'}`;
+        } else if (space.name) {
+            report.cohostProbeDetail = 'Set ADMIN_EMAIL (or MEET_COHOST_PROBE_EMAIL) to a Google address to test co-host registration.';
         }
     } catch (e) {
         report.error = describeGoogleError(e);
@@ -941,13 +1052,13 @@ export const createDemoMeetEvent = async (args: {
     // waiting for anyone's approval — the same flow mentoring sessions use.
     let space: MeetSpace | null = null;
     try {
-        space = await createOpenMeetSpace(oauth2Client);
+        space = await createMeetSpace(oauth2Client, DEMO_ACCESS);
     } catch (e) {
         if (args.requireOpen) throw e;
         console.error(`[GoogleMeet] Open-access space creation failed for the demo with ${args.prospectEmail}: ${describeGoogleError(e)}. Falling back to a Calendar-generated Meet link (participants may have to knock).`);
     }
     if (space) {
-        const result = await finishOpenMeeting(oauth2Client, space, baseEvent, `demo with ${args.prospectEmail}`);
+        const result = await finishMeeting(oauth2Client, space, baseEvent, `demo with ${args.prospectEmail}`, [], DEMO_ACCESS);
         return { meetLink: space.meetingUri, htmlLink: result.htmlLink, eventId: result.eventId, accessType: result.accessType };
     }
 
@@ -1014,7 +1125,7 @@ export const ensureDemoMeeting = async (bookingId: string, options: EnsureMeetin
     if (!booking) return { link: null, state: 'none' };
 
     const past = booking.slot_end_time.getTime() < Date.now();
-    const recordedOpen = booking.meeting_access_type === 'OPEN';
+    const recordedOpen = isReadyAccess(booking.meeting_access_type);
     const label = `demo ${booking.id}`;
 
     if (booking.meeting_link) {
@@ -1029,25 +1140,27 @@ export const ensureDemoMeeting = async (bookingId: string, options: EnsureMeetin
         }
 
         try {
-            const opened = await openExistingMeetSpace(auth, booking.meeting_link);
-            const changed = opened.previousAccessType !== 'OPEN';
-            if (opened.accessType === 'OPEN') {
-                if (!recordedOpen) await prisma.demoBooking.update({ where: { id: booking.id }, data: { meeting_access_type: 'OPEN' } });
-                if (changed) console.log(`[GoogleMeet] ${label}: link switched to OPEN access (Google had it as ${opened.previousAccessType})`);
+            const opened = await settleMeetAccess(auth, booking.meeting_link, [], DEMO_ACCESS, label);
+            const changed = !isReadyAccess(opened.previousAccessType);
+            if (isReadyAccess(opened.accessType)) {
+                if (opened.accessType !== booking.meeting_access_type) {
+                    await prisma.demoBooking.update({ where: { id: booking.id }, data: { meeting_access_type: opened.accessType } });
+                }
+                if (opened.changed) console.log(`[GoogleMeet] ${label}: link set to ${opened.accessType} (Google had it as ${opened.previousAccessType})`);
                 return { link: booking.meeting_link, state: 'open', corrected: changed && recordedOpen };
             }
-            console.warn(`[GoogleMeet] ${label}: Google kept accessType=${opened.accessType} after requesting OPEN`);
+            console.warn(`[GoogleMeet] ${label}: Google kept accessType=${opened.accessType}`);
             if (recordedOpen) await prisma.demoBooking.update({ where: { id: booking.id }, data: { meeting_access_type: opened.accessType } });
             return { link: booking.meeting_link, state: 'restricted' };
         } catch (e) {
             if (isPlatformSetupError(e)) {
                 const setupError = describeGoogleError(e);
-                console.error(`[GoogleMeet] ${label}: cannot switch link to OPEN access: ${setupError}`);
+                console.error(`[GoogleMeet] ${label}: cannot verify the link's access: ${setupError}`);
                 return { link: booking.meeting_link, state: recordedOpen ? 'open' : 'restricted', setupError };
             }
             const status = googleStatusOf(e);
             if (status !== 403 && status !== 404) {
-                console.error(`[GoogleMeet] ${label}: switching link to OPEN access failed: ${describeGoogleError(e)}`);
+                console.error(`[GoogleMeet] ${label}: verifying the link's access failed: ${describeGoogleError(e)}`);
                 return { link: booking.meeting_link, state: recordedOpen ? 'open' : 'restricted' };
             }
 
@@ -1060,12 +1173,12 @@ export const ensureDemoMeeting = async (bookingId: string, options: EnsureMeetin
                     end: booking.slot_end_time,
                     requireOpen: true,
                 });
-                if (created.accessType !== 'OPEN') return { link: booking.meeting_link, state: 'restricted' };
+                if (!isReadyAccess(created.accessType)) return { link: booking.meeting_link, state: 'restricted' };
 
                 const oldEventId = booking.google_event_id;
                 await prisma.demoBooking.update({
                     where: { id: booking.id },
-                    data: { meeting_link: created.meetLink, meeting_access_type: 'OPEN', google_event_id: created.eventId },
+                    data: { meeting_link: created.meetLink, meeting_access_type: created.accessType, google_event_id: created.eventId },
                 });
                 if (oldEventId) {
                     google.calendar({ version: 'v3', auth }).events
@@ -1111,7 +1224,7 @@ export const ensureDemoMeeting = async (bookingId: string, options: EnsureMeetin
             where: { id: booking.id },
             data: { meeting_link: created.meetLink, meeting_access_type: created.accessType, google_event_id: created.eventId },
         });
-        return { link: created.meetLink, state: created.accessType === 'OPEN' ? 'open' : 'restricted' };
+        return { link: created.meetLink, state: isReadyAccess(created.accessType) ? 'open' : 'restricted' };
     } catch (e) {
         const setupError = isPlatformSetupError(e) ? describeGoogleError(e) : undefined;
         console.error(`[GoogleMeet] ${label}: could not create a meeting link: ${describeGoogleError(e)}`);

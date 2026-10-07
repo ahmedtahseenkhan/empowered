@@ -12,6 +12,9 @@ type MeetStatus = {
     meetApiWorking: boolean;
     openAccessApplied: boolean;
     probeAccessType: string | null;
+    sessionPolicy?: string;
+    cohostRegistrationWorking?: boolean | null;
+    cohostProbeDetail?: string | null;
     error: string | null;
     sessions: {
         upcomingWithLink: number;
@@ -29,6 +32,9 @@ type MeetStatus = {
         link: string;
         recordedAccess: string | null;
         liveAccess: string | null;
+        members?: string[] | null;
+        cohost?: boolean | null;
+        ready?: boolean;
         error: string | null;
     }>;
 };
@@ -95,10 +101,10 @@ const GoogleMeetStatusCard: React.FC = () => {
             if (r.setupError) {
                 setError(`Sessions could not be updated: ${r.setupError}`);
             } else if (r.opened === 0 && r.replaced === 0 && r.stillRestricted === 0) {
-                setUpgradeNote('Checked with Google: all upcoming sessions and demo calls already let people join without approval.');
+                setUpgradeNote('Checked with Google: every upcoming session and demo call is ready.');
             } else {
                 setUpgradeNote(
-                    `${r.opened} link(s) switched to join-without-approval, ${r.replaced} replaced with a new link (both sides emailed), ${r.stillRestricted} could not be changed.`
+                    `${r.opened} link(s) fixed, ${r.replaced} replaced with a new link (both sides emailed), ${r.stillRestricted} could not be changed.`
                 );
             }
             await load();
@@ -135,7 +141,10 @@ const GoogleMeetStatusCard: React.FC = () => {
             </div>
 
             <p className="text-sm text-gray-500 mb-4">
-                Every Google Meet link (demo calls and mentoring sessions) is created from this Google account, and set so everyone with the link joins without waiting for approval.
+                Every Google Meet link (demo calls and mentoring sessions) is created from this Google account.
+                {status?.sessionPolicy === 'OPEN'
+                    ? ' Sessions are open: anyone with the link joins without approval.'
+                    : ' Sessions are trusted: the mentor is registered as co-host and the student as member, so both go straight in and the mentor admits anyone else. Demo calls stay open.'}
             </p>
 
             {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm mb-4 break-words">{error}</div>}
@@ -166,15 +175,26 @@ const GoogleMeetStatusCard: React.FC = () => {
                         <Row
                             state={status.openAccessApplied ? 'ok' : 'bad'}
                             label={status.openAccessApplied
-                                ? 'New meetings let people join without approval'
-                                : 'New meetings still require host approval'}
+                                ? `New meetings get the ${status.sessionPolicy === 'OPEN' ? 'open' : 'trusted'} access type`
+                                : 'New meetings do not get the expected access type'}
                             detail={!status.openAccessApplied && status.meetApiWorking
                                 ? `Google applied access type ${status.probeAccessType || 'unknown'} to a test meeting.`
                                 : undefined}
                         />
+                        {status.sessionPolicy !== 'OPEN' && (
+                            <Row
+                                state={status.cohostRegistrationWorking === true ? 'ok' : status.cohostRegistrationWorking === false ? 'bad' : 'warn'}
+                                label={status.cohostRegistrationWorking === true
+                                    ? 'Mentor co-host registration works'
+                                    : status.cohostRegistrationWorking === false
+                                        ? 'Mentor co-host registration is NOT working (sessions fall back to open access)'
+                                        : 'Mentor co-host registration not tested'}
+                                detail={status.cohostProbeDetail || undefined}
+                            />
+                        )}
                         <Row
                             state={status.sessions.upcomingNeedingUpgrade === 0 ? 'ok' : 'warn'}
-                            label={`${status.sessions.upcomingOpen} of ${status.sessions.upcomingWithLink} upcoming meeting link(s) (sessions and demo calls) allow joining without approval`}
+                            label={`${status.sessions.upcomingOpen} of ${status.sessions.upcomingWithLink} upcoming meeting link(s) (sessions and demo calls) are ready`}
                             detail={status.sessions.upcomingNeedingUpgrade > 0
                                 ? `${status.sessions.upcomingNeedingUpgrade} link(s) still ask for host approval. Use "Check & fix upcoming sessions".`
                                 : status.sessionsVerifiedLive ? 'Confirmed with Google just now.' : 'From our records (not confirmed with Google).'}
@@ -206,7 +226,14 @@ const GoogleMeetStatusCard: React.FC = () => {
                                             </td>
                                             <td className="px-3 py-2">
                                                 {c.liveAccess === 'OPEN' ? (
-                                                    <span className="text-green-700 font-medium">Open, no approval</span>
+                                                    <span className="text-green-700 font-medium">Open, anyone with the link</span>
+                                                ) : c.liveAccess === 'TRUSTED' && c.cohost !== false ? (
+                                                    <span className="text-green-700 font-medium">
+                                                        Trusted{c.cohost ? ', mentor is co-host' : ''}
+                                                        {c.members && c.members.length > 0 ? <span className="block text-xs text-gray-500">{c.members.join(', ')}</span> : null}
+                                                    </span>
+                                                ) : c.liveAccess === 'TRUSTED' ? (
+                                                    <span className="text-red-700 font-medium">Trusted, but mentor is not co-host (approval needed)</span>
                                                 ) : c.liveAccess ? (
                                                     <span className="text-red-700 font-medium">{c.liveAccess}, approval needed</span>
                                                 ) : (
