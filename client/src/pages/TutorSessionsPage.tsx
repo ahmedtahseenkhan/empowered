@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Calendar, Users, ExternalLink, Copy, Check, Send } from 'lucide-react';
+import { Calendar, Users, ExternalLink, Copy, Check, Send, CalendarPlus } from 'lucide-react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import SessionListCard from '../components/sessions/SessionListCard';
+import CustomSessionModal from '../components/sessions/CustomSessionModal';
+import type { CustomSessionPrefill, CreatedCustomSession } from '../components/sessions/CustomSessionModal';
 import api from '../api/axios';
 
 // Earliest date the Past tab looks back to (before the platform launched)
@@ -18,10 +20,15 @@ type Lesson = {
     end_time: string;
     created_at?: string;
     status: string;
-    billing_type?: 'FREE_TRIAL' | 'FREE_INTRO' | 'PAID';
+    billing_type?: 'FREE_TRIAL' | 'FREE_INTRO' | 'PAID' | 'CUSTOM_FREE';
     payment_status?: 'paid' | 'pending' | 'failed' | 'not_required' | 'refunded' | 'unknown';
     meeting_link?: string | null;
     google_calendar_html_link?: string | null;
+    origin?: 'BOOKING' | 'MENTOR_OFFER';
+    custom_kind?: string | null;
+    makeup_for_lesson_id?: string | null;
+    offer_expires_at?: string | null;
+    cancel_reason?: string | null;
     student?: { username?: string | null };
     booking?: { frequency?: string; created_at?: string; funding?: string | null } | null;
     student_confirmed_at?: string | null;
@@ -51,6 +58,59 @@ const TutorSessionsPage: React.FC = () => {
     const [sendBusyId, setSendBusyId] = useState<string | null>(null);
     const [copiedId, setCopiedId] = useState<string | null>(null);
     const [notice, setNotice] = useState<{ title: string; message: string } | null>(null);
+
+    // Custom (mentor-offered) sessions
+    const [scheduleOpen, setScheduleOpen] = useState(false);
+    const [schedulePrefill, setSchedulePrefill] = useState<CustomSessionPrefill | null>(null);
+    const [confirmAction, setConfirmAction] = useState<{ kind: 'withdraw' | 'cancel'; lesson: Lesson } | null>(null);
+    const [actionBusy, setActionBusy] = useState(false);
+
+    const isOffer = (l: Lesson) => l.origin === 'MENTOR_OFFER' && (l.status || '').toUpperCase() === 'PENDING';
+    const isCustom = (l: Lesson) => l.origin === 'MENTOR_OFFER';
+
+    const openSchedule = (prefill: CustomSessionPrefill | null = null) => {
+        setSchedulePrefill(prefill);
+        setScheduleOpen(true);
+    };
+
+    const onOfferCreated = (created: CreatedCustomSession) => {
+        setLessons((prev) => [{
+            id: created.id,
+            student_id: schedulePrefill?.studentId,
+            start_time: created.start_time,
+            end_time: created.end_time,
+            created_at: new Date().toISOString(),
+            status: created.status,
+            billing_type: 'CUSTOM_FREE',
+            payment_status: 'not_required',
+            meeting_link: created.meeting_link,
+            origin: 'MENTOR_OFFER',
+            custom_kind: created.custom_kind,
+            makeup_for_lesson_id: created.makeup_for_lesson_id,
+            offer_expires_at: created.offer_expires_at,
+            student: { username: created.student?.username },
+        }, ...prev]);
+        setTab('upcoming');
+        setNotice({ title: 'Offer sent', message: `${created.student?.username || 'The student'} has been emailed the offer and can accept it from their dashboard.` });
+    };
+
+    const runConfirmAction = async () => {
+        if (!confirmAction) return;
+        const { kind, lesson } = confirmAction;
+        try {
+            setActionBusy(true);
+            const res = await api.post(`/custom-sessions/${lesson.id}/${kind}`);
+            const upd = res.data?.lesson;
+            setLessons((prev) => prev.map((x) => (x.id === lesson.id
+                ? { ...x, status: upd?.status || 'CANCELLED', cancel_reason: kind === 'withdraw' ? 'Withdrawn by mentor' : 'Cancelled by mentor' }
+                : x)));
+            setConfirmAction(null);
+        } catch (e) {
+            setNotice({ title: 'Error', message: apiError(e, kind === 'withdraw' ? 'Unable to withdraw the offer.' : 'Unable to cancel the session.') });
+        } finally {
+            setActionBusy(false);
+        }
+    };
 
     const apiError = (e: unknown, fallback: string) =>
         (e as { response?: { data?: { error?: string } } })?.response?.data?.error || fallback;
@@ -111,6 +171,16 @@ const TutorSessionsPage: React.FC = () => {
         const v = params.get('studentId');
         return v && v.trim() ? v.trim() : null;
     }, [location.search]);
+
+    const makeupForParam = useMemo(() => new URLSearchParams(location.search).get('makeupFor'), [location.search]);
+    useEffect(() => {
+        if (!makeupForParam) return;
+        const params = new URLSearchParams(location.search);
+        const sid = params.get('studentId') || undefined;
+        openSchedule({ studentId: sid, makeupForLessonId: makeupForParam, kind: 'MAKEUP' });
+        navigate('/sessions', { replace: true });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [makeupForParam]);
 
     useEffect(() => {
         // Each tab fetches its own range: Past has no 2-month floor, Upcoming starts a day back
@@ -217,6 +287,15 @@ const TutorSessionsPage: React.FC = () => {
         const startMs = new Date(lesson.start_time).getTime();
         const endMs = new Date(lesson.end_time).getTime();
         const nowMs2 = Date.now();
+        if (isOffer(lesson)) {
+            return <span className={`${pill} bg-amber-50 text-amber-700 border-amber-200`}>Offer sent — waiting for student</span>;
+        }
+        if (isCustom(lesson) && lessonStatus === 'CANCELLED') {
+            return <span className={`${pill} bg-gray-50 text-gray-600 border-gray-200`}>{lesson.cancel_reason || 'Cancelled'}</span>;
+        }
+        if (isCustom(lesson) && lessonStatus === 'BOOKED' && nowMs2 < startMs) {
+            return <span className={`${pill} bg-purple-50 text-purple-700 border-purple-200`}>{lesson.custom_kind === 'MAKEUP' ? 'Make-up session' : 'Extra session'} · Free</span>;
+        }
         if (lessonStatus === 'BOOKED' && nowMs2 >= startMs && nowMs2 <= endMs + 15 * 60 * 1000) {
             return <span className={`${pill} bg-green-600 text-white border-green-600 animate-pulse`}>In progress — join now</span>;
         }
@@ -262,7 +341,12 @@ const TutorSessionsPage: React.FC = () => {
                         </div>
                         <p className="text-sm text-gray-600 mt-1">Your upcoming and past sessions.</p>
                     </div>
-                    <Link to="/students"><Button variant="outline" className="flex items-center gap-2"><Users className="w-4 h-4" />Students</Button></Link>
+                    <div className="flex items-center gap-2 flex-wrap justify-end">
+                        <Button className="flex items-center gap-2" onClick={() => openSchedule(null)}>
+                            <CalendarPlus className="w-4 h-4" />Schedule a session
+                        </Button>
+                        <Link to="/students"><Button variant="outline" className="flex items-center gap-2"><Users className="w-4 h-4" />Students</Button></Link>
+                    </div>
                 </div>
 
                 <div className="flex gap-2 mb-4">
@@ -305,7 +389,7 @@ const TutorSessionsPage: React.FC = () => {
                                         <>
                                             {(() => {
                                                 const status = l.status.toUpperCase();
-                                                if (['COMPLETED', 'CANCELLED', 'MISSED'].includes(status)) return null;
+                                                if (['COMPLETED', 'CANCELLED', 'MISSED'].includes(status) || isOffer(l)) return null;
                                                 const startMs = new Date(l.start_time).getTime();
                                                 const endMs = new Date(l.end_time).getTime();
                                                 const nowMs = Date.now();
@@ -345,7 +429,7 @@ const TutorSessionsPage: React.FC = () => {
                                             })()}
                                             {(() => {
                                                 const status = l.status.toUpperCase();
-                                                if (['COMPLETED', 'CANCELLED', 'MISSED'].includes(status)) return null;
+                                                if (['COMPLETED', 'CANCELLED', 'MISSED'].includes(status) || isOffer(l)) return null;
                                                 if (Date.now() > new Date(l.end_time).getTime() + 15 * 60 * 1000) return null;
                                                 return (
                                                     <>
@@ -398,6 +482,21 @@ const TutorSessionsPage: React.FC = () => {
                                                     {confirmBusyId === l.id ? 'Confirming…' : 'Confirm completion'}
                                                 </Button>
                                             ) : null}
+                                            {isOffer(l) ? (
+                                                <Button variant="outline" className="text-red-700 border-red-200 hover:bg-red-50" onClick={(e) => { e.stopPropagation(); setConfirmAction({ kind: 'withdraw', lesson: l }); }}>
+                                                    Withdraw offer
+                                                </Button>
+                                            ) : null}
+                                            {isCustom(l) && l.status.toUpperCase() === 'BOOKED' && Date.now() < new Date(l.start_time).getTime() ? (
+                                                <Button variant="outline" className="text-red-700 border-red-200 hover:bg-red-50" onClick={(e) => { e.stopPropagation(); setConfirmAction({ kind: 'cancel', lesson: l }); }}>
+                                                    Cancel session
+                                                </Button>
+                                            ) : null}
+                                            {!isCustom(l) && ['MISSED', 'CANCELLED'].includes(l.status.toUpperCase()) ? (
+                                                <Button variant="outline" className="flex items-center gap-2" onClick={(e) => { e.stopPropagation(); openSchedule({ studentId: l.student_id, makeupForLessonId: l.id, kind: 'MAKEUP', durationMinutes: durationMinutes(l.start_time, l.end_time) }); }}>
+                                                    <CalendarPlus className="w-4 h-4" />Offer make-up session
+                                                </Button>
+                                            ) : null}
                                             {l.google_calendar_html_link ? (
                                                 <a href={l.google_calendar_html_link} target="_blank" rel="noreferrer">
                                                     <Button variant="outline">Open in Calendar</Button>
@@ -413,6 +512,28 @@ const TutorSessionsPage: React.FC = () => {
             </div>
             <Modal isOpen={!!notice} onClose={() => setNotice(null)} title={notice?.title || ''}>
                 <p className="text-sm text-gray-700 break-words">{notice?.message}</p>
+            </Modal>
+            <CustomSessionModal open={scheduleOpen} onClose={() => setScheduleOpen(false)} onCreated={onOfferCreated} prefill={schedulePrefill} />
+            <Modal
+                isOpen={!!confirmAction}
+                onClose={() => { if (!actionBusy) setConfirmAction(null); }}
+                title={confirmAction?.kind === 'withdraw' ? 'Withdraw this offer?' : 'Cancel this session?'}
+            >
+                {confirmAction && (
+                    <div className="space-y-4">
+                        <p className="text-sm text-gray-700">
+                            {confirmAction.kind === 'withdraw'
+                                ? `${confirmAction.lesson.student?.username || 'The student'} will be told the offer for ${formatDateLong(confirmAction.lesson.start_time)} was withdrawn.`
+                                : `${confirmAction.lesson.student?.username || 'The student'} will be told the session on ${formatDateLong(confirmAction.lesson.start_time)} is cancelled.`}
+                        </p>
+                        <div className="flex gap-3">
+                            <Button variant="outline" className="flex-1" onClick={() => setConfirmAction(null)} disabled={actionBusy}>Keep it</Button>
+                            <Button className="flex-1 bg-red-600 hover:bg-red-700" onClick={runConfirmAction} disabled={actionBusy}>
+                                {actionBusy ? 'Working…' : confirmAction.kind === 'withdraw' ? 'Withdraw offer' : 'Cancel session'}
+                            </Button>
+                        </div>
+                    </div>
+                )}
             </Modal>
         </DashboardLayout>
     );

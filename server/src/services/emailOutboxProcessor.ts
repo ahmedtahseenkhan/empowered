@@ -275,6 +275,93 @@ async function sendOutboxRow(row: OutboxRow) {
         return;
     }
 
+    if (row.type === 'SESSION_OFFER_STUDENT' || row.type === 'CUSTOM_SESSION_CONFIRMED' || row.type === 'CUSTOM_SESSION_CLOSED') {
+        const lessonId = row.payload?.lessonId as string | undefined;
+        if (!lessonId) throw new Error('Missing lessonId in payload');
+        const forTutor = row.payload?.role === 'tutor';
+
+        const lesson = await prisma.lesson.findUnique({
+            where: { id: lessonId },
+            include: {
+                student: { select: { id: true, username: true } },
+                tutor: { select: { username: true, timezone: true } },
+            },
+        });
+        if (!lesson) throw new Error(`Lesson not found: ${lessonId}`);
+
+        // Students have no stored timezone; use the one from their latest booking, else the mentor's.
+        let timeZone = lesson.tutor?.timezone || 'UTC';
+        if (!forTutor) {
+            const latest = await prisma.booking.findFirst({
+                where: { student_id: lesson.student_id },
+                orderBy: { created_at: 'desc' },
+                select: { client_timezone: true },
+            });
+            timeZone = latest?.client_timezone || timeZone;
+        }
+
+        const clientBase = (process.env.CLIENT_URL || process.env.CLIENT_BASE_URL || 'https://emplearnings.com').trim().replace(/\/+$/, '');
+        const sessionUrl = forTutor ? `${clientBase}/sessions/${lesson.id}` : `${clientBase}/student/sessions/${lesson.id}`;
+        const kindLabel = lesson.custom_kind === 'MAKEUP' ? 'Make-up' : 'Extra';
+        const common = {
+            sessionDate: formatDatePart(lesson.start_time, timeZone),
+            sessionTime: formatTimePart(lesson.start_time, timeZone),
+            durationMinutes: lesson.duration,
+            kindLabel,
+            sessionUrl,
+        };
+        const recipientName = (forTutor ? lesson.tutor?.username : lesson.student?.username) || 'there';
+        const otherPartyName = (forTutor ? lesson.student?.username : lesson.tutor?.username) || (forTutor ? 'your student' : 'your mentor');
+        const otherPartyLabel = forTutor ? 'Student' as const : 'Mentor' as const;
+
+        if (row.type === 'SESSION_OFFER_STUDENT') {
+            await emailService.sendSessionOffer({
+                ...common,
+                studentName: lesson.student?.username || 'there',
+                studentEmail: row.to_email,
+                mentorName: lesson.tutor?.username || 'Your mentor',
+                message: lesson.offer_message,
+                expiresAt: lesson.offer_expires_at
+                    ? `${formatDatePart(lesson.offer_expires_at, timeZone)} at ${formatTimePart(lesson.offer_expires_at, timeZone)}`
+                    : 'the session start time',
+            });
+            return;
+        }
+
+        if (row.type === 'CUSTOM_SESSION_CONFIRMED') {
+            await emailService.sendCustomSessionConfirmed({
+                ...common,
+                recipientName,
+                recipientEmail: row.to_email,
+                otherPartyLabel,
+                otherPartyName,
+                meetingLink: lesson.meeting_link || '',
+            });
+            return;
+        }
+
+        const reason = String(row.payload?.reason || '');
+        const texts: Record<string, { title: string; headline: string; note?: string }> = {
+            declined: { title: 'Offer declined', headline: `${otherPartyName} declined your session offer.`, note: 'You can offer another time from your Sessions page.' },
+            withdrawn: { title: 'Offer withdrawn', headline: `${otherPartyName} withdrew the session offer below.` },
+            expired: { title: 'Offer expired', headline: forTutor
+                ? `${otherPartyName} did not respond to your session offer in time, so it has expired.`
+                : `The session offer from ${otherPartyName} expired before you responded.` },
+            cancelled_by_mentor: { title: 'Session cancelled', headline: `${otherPartyName} cancelled the session below.`, note: 'The time has been freed on your calendar.' },
+            cancelled_by_student: { title: 'Session cancelled', headline: `${otherPartyName} cancelled the session below.`, note: 'The time has been freed on your calendar.' },
+        };
+        const text = texts[reason] || { title: 'Session update', headline: 'The session below is no longer scheduled.' };
+        await emailService.sendCustomSessionClosed({
+            ...common,
+            recipientName,
+            recipientEmail: row.to_email,
+            otherPartyLabel,
+            otherPartyName,
+            ...text,
+        });
+        return;
+    }
+
     if (row.type === 'SESSION_RESCHEDULED_STUDENT') {
         const lessonId = row.payload?.lessonId as string | undefined;
         if (!lessonId) throw new Error('Missing lessonId in payload');

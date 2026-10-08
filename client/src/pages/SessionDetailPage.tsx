@@ -20,8 +20,13 @@ type LessonDetail = {
     end_time: string;
     duration: number;
     status: string;
-    billing_type: 'FREE_TRIAL' | 'FREE_INTRO' | 'PAID';
+    billing_type: 'FREE_TRIAL' | 'FREE_INTRO' | 'PAID' | 'CUSTOM_FREE';
     payment_status: 'paid' | 'pending' | 'failed' | 'not_required' | 'unknown';
+    origin?: 'BOOKING' | 'MENTOR_OFFER';
+    custom_kind?: string | null;
+    offer_message?: string | null;
+    offer_expires_at?: string | null;
+    cancel_reason?: string | null;
     meeting_link?: string | null;
     google_calendar_html_link?: string | null;
     category?: string | null;
@@ -119,14 +124,56 @@ const SessionDetailPage: React.FC = () => {
     const isJoinable = lesson && (() => {
         const start = new Date(lesson.start_time).getTime();
         const now = Date.now();
-        return now >= start - 15 * 60 * 1000 && now <= new Date(lesson.end_time).getTime() + 15 * 60 * 1000 && !['COMPLETED', 'CANCELLED', 'MISSED'].includes(lesson.status.toUpperCase());
+        return now >= start - 15 * 60 * 1000 && now <= new Date(lesson.end_time).getTime() + 15 * 60 * 1000 && !['COMPLETED', 'CANCELLED', 'MISSED', 'PENDING'].includes(lesson.status.toUpperCase());
     })();
+
+    const isCustom = !!lesson && lesson.origin === 'MENTOR_OFFER';
+    const isOffer = isCustom && lesson!.status.toUpperCase() === 'PENDING';
+    const [customBusy, setCustomBusy] = useState(false);
+    const [customConfirm, setCustomConfirm] = useState<'decline' | 'withdraw' | 'cancel' | null>(null);
+
+    const runCustomAction = async (action: 'accept' | 'decline' | 'withdraw' | 'cancel') => {
+        if (!lesson) return;
+        try {
+            setCustomBusy(true);
+            setActionError('');
+            const res = action === 'accept' || action === 'decline'
+                ? await api.post(`/custom-sessions/${lesson.id}/respond`, { action })
+                : await api.post(`/custom-sessions/${lesson.id}/${action}`);
+            const upd = res.data?.lesson;
+            setLesson({
+                ...lesson,
+                status: upd?.status || lesson.status,
+                meeting_link: upd?.meeting_link ?? lesson.meeting_link,
+                cancel_reason: action === 'decline' ? 'Declined by student' : action === 'withdraw' ? 'Withdrawn by mentor' : action === 'cancel' ? (isStudent ? 'Cancelled by student' : 'Cancelled by mentor') : lesson.cancel_reason,
+            });
+            setCustomConfirm(null);
+            setActionNotice(action === 'accept'
+                ? 'Session confirmed. The meeting link is below and a confirmation email is on its way.'
+                : action === 'decline' ? 'Offer declined. Your mentor has been told.'
+                    : action === 'withdraw' ? 'Offer withdrawn. The student has been told.'
+                        : 'Session cancelled. The other side has been told.');
+        } catch (e) {
+            setActionError(apiError(e, 'Unable to update this session.'));
+        } finally {
+            setCustomBusy(false);
+        }
+    };
 
     const paymentBadge = () => {
         if (!lesson) return null;
         const ps = lesson.payment_status;
         const ls = lesson.status.toUpperCase();
         const bt = lesson.billing_type.toUpperCase();
+        if (isOffer) {
+            return <span className="px-3 py-1 rounded-full text-sm font-medium bg-amber-50 text-amber-700 border border-amber-200">{isStudent ? 'Session offer — please respond' : 'Offer sent — waiting for student'}</span>;
+        }
+        if (isCustom && ls === 'CANCELLED') {
+            return <span className="px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-600 border border-gray-200">{lesson.cancel_reason || 'Cancelled'}</span>;
+        }
+        if (isCustom && ls === 'BOOKED' && Date.now() < new Date(lesson.start_time).getTime()) {
+            return <span className="px-3 py-1 rounded-full text-sm font-medium bg-purple-50 text-purple-700 border border-purple-200">{lesson.custom_kind === 'MAKEUP' ? 'Make-up session' : 'Extra session'} · Free</span>;
+        }
 
         const startMs = new Date(lesson.start_time).getTime();
         const endMs = new Date(lesson.end_time).getTime();
@@ -430,6 +477,31 @@ const SessionDetailPage: React.FC = () => {
                             );
                         })()}
 
+                        {isOffer && (
+                            <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
+                                <h3 className="font-semibold text-amber-900">
+                                    {isStudent ? `${lesson.tutor?.username || 'Your mentor'} offered you a free ${lesson.custom_kind === 'MAKEUP' ? 'make-up' : 'extra'} session` : 'Waiting for the student to respond'}
+                                </h3>
+                                {lesson.offer_message && <p className="text-sm text-amber-900 mt-2 italic">“{lesson.offer_message}”</p>}
+                                <p className="text-xs text-amber-800 mt-2">
+                                    {lesson.offer_expires_at ? `This offer expires on ${formatDate(lesson.offer_expires_at)} at ${formatTime(lesson.offer_expires_at)}.` : ''} There is no charge for this session.
+                                </p>
+                                {actionError && <div className="mt-2 text-sm text-red-700">{actionError}</div>}
+                                <div className="flex flex-wrap gap-2 mt-3">
+                                    {isStudent ? (
+                                        <>
+                                            <Button className="bg-green-600 hover:bg-green-700 text-white" disabled={customBusy} onClick={() => void runCustomAction('accept')}>
+                                                {customBusy ? 'Working…' : 'Accept offer'}
+                                            </Button>
+                                            <Button variant="outline" className="text-red-700 border-red-200 hover:bg-red-50" disabled={customBusy} onClick={() => setCustomConfirm('decline')}>Decline</Button>
+                                        </>
+                                    ) : (
+                                        <Button variant="outline" className="text-red-700 border-red-200 hover:bg-red-50" disabled={customBusy} onClick={() => setCustomConfirm('withdraw')}>Withdraw offer</Button>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
                         {actionNotice && (
                             <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-lg text-sm">{actionNotice}</div>
                         )}
@@ -494,6 +566,16 @@ const SessionDetailPage: React.FC = () => {
                                     Cancel session
                                 </Button>
                             )}
+                            {isCustom && lesson.status.toUpperCase() === 'BOOKED' && Date.now() < new Date(lesson.start_time).getTime() && (
+                                <Button variant="outline" className="text-red-700 border-red-200 hover:bg-red-50" disabled={customBusy} onClick={() => { setActionError(''); setCustomConfirm('cancel'); }}>
+                                    Cancel session
+                                </Button>
+                            )}
+                            {!isStudent && !isCustom && ['MISSED', 'CANCELLED'].includes(lesson.status.toUpperCase()) && (
+                                <Button variant="outline" onClick={() => navigate(`/sessions?makeupFor=${lesson.id}&studentId=${lesson.student_id}`)}>
+                                    Offer make-up session
+                                </Button>
+                            )}
                             {canReportCredits && (
                                 <Button variant="outline" onClick={() => { setActionError(''); setReportReason(''); setReportOpen(true); }}>
                                     Report a problem
@@ -526,6 +608,28 @@ const SessionDetailPage: React.FC = () => {
                 title="Error"
             >
                 <p>{joinError}</p>
+            </Modal>
+            <Modal
+                isOpen={!!customConfirm}
+                onClose={() => { if (!customBusy) setCustomConfirm(null); }}
+                title={customConfirm === 'decline' ? 'Decline this offer?' : customConfirm === 'withdraw' ? 'Withdraw this offer?' : 'Cancel this session?'}
+            >
+                {lesson && customConfirm && (
+                    <div className="space-y-4">
+                        <p className="text-sm text-gray-700">
+                            {customConfirm === 'decline' && `${lesson.tutor?.username || 'Your mentor'} will be told you declined the session on ${formatDate(lesson.start_time)}.`}
+                            {customConfirm === 'withdraw' && `${lesson.student?.username || 'The student'} will be told the offer for ${formatDate(lesson.start_time)} was withdrawn.`}
+                            {customConfirm === 'cancel' && `${otherPerson} will be told the session on ${formatDate(lesson.start_time)} is cancelled.`}
+                        </p>
+                        {actionError && <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{actionError}</div>}
+                        <div className="flex gap-3">
+                            <Button variant="outline" className="flex-1" onClick={() => setCustomConfirm(null)} disabled={customBusy}>Go back</Button>
+                            <Button className="flex-1 bg-red-600 hover:bg-red-700" disabled={customBusy} onClick={() => void runCustomAction(customConfirm)}>
+                                {customBusy ? 'Working…' : customConfirm === 'decline' ? 'Decline offer' : customConfirm === 'withdraw' ? 'Withdraw offer' : 'Cancel session'}
+                            </Button>
+                        </div>
+                    </div>
+                )}
             </Modal>
             <Modal isOpen={cancelOpen} onClose={() => { if (!cancelBusy) setCancelOpen(false); }} title="Cancel this session?">
                 {lesson && (
