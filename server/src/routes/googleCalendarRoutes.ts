@@ -5,11 +5,13 @@ import {
     googleCalendarOAuthCallback,
     disconnectGoogleCalendar,
     getTutorFreeBusy,
+    getGoogleCalendarStatus,
 } from '../controllers/googleCalendarController';
 
 const router = Router();
 
 router.get('/connect', authenticateToken, startConnectGoogleCalendar);
+router.get('/status', authenticateToken, getGoogleCalendarStatus);
 router.get('/callback', googleCalendarOAuthCallback);
 router.post('/disconnect', authenticateToken, disconnectGoogleCalendar);
 

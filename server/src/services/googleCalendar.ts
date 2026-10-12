@@ -14,8 +14,13 @@ import { decryptString, encryptString } from '../utils/crypto';
  *    has to be in the room (the platform account never joins). A Calendar event is also
  *    written to the platform calendar for admin visibility and rescheduling.
  *
- * 2. MENTOR calendar connections (`GoogleCalendarConnection`): optional, used only to read
- *    free/busy so booked-elsewhere time is masked out of a mentor's availability.
+ * 2. MENTOR Google connections (`GoogleCalendarConnection`): when a mentor connects their
+ *    Google account, their sessions are created as events on THEIR calendar with a Meet
+ *    conference, the student invited as a guest. The mentor is the host, so Meet uses the
+ *    account's normal (trusted) access: invited people join directly, anyone else asks to
+ *    join and the mentor admits them — Meet never shows "This call is open to anyone".
+ *    Mentors who have not connected keep getting platform-hosted links (point 1).
+ *    The connection is also used to read free/busy for availability.
  */
 
 const getOAuthClient = () => {
@@ -30,13 +35,19 @@ const getOAuthClient = () => {
     return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
 };
 
+/** What a mentor grants: create/update their session events, read free/busy, and their email. */
+export const MENTOR_OAUTH_SCOPES = [
+    'openid',
+    'https://www.googleapis.com/auth/userinfo.email',
+    'https://www.googleapis.com/auth/calendar.events',
+    'https://www.googleapis.com/auth/calendar.readonly',
+];
+export const MENTOR_REQUIRED_SCOPE = 'https://www.googleapis.com/auth/calendar.events';
+
 export const buildGoogleAuthUrl = async (state: string) => {
     const oauth2Client = getOAuthClient();
 
-    const scopes = [
-        'https://www.googleapis.com/auth/calendar.events',
-        'https://www.googleapis.com/auth/calendar.readonly',
-    ];
+    const scopes = MENTOR_OAUTH_SCOPES;
 
     return oauth2Client.generateAuthUrl({
         access_type: 'offline',
@@ -53,9 +64,53 @@ export const exchangeCodeForTokens = async (code: string) => {
     return tokens;
 };
 
+/** Email of the Google account behind a freshly issued access token (null when not granted). */
+export const getGoogleAccountEmail = async (accessToken: string | null | undefined): Promise<string | null> => {
+    if (!accessToken) return null;
+    try {
+        const oauth2Client = getOAuthClient();
+        oauth2Client.setCredentials({ access_token: accessToken });
+        const info = await google.oauth2({ version: 'v2', auth: oauth2Client }).userinfo.get();
+        return info.data.email || null;
+    } catch (e) {
+        console.warn('[GoogleCalendar] Could not read the connected Google account email:', (e as Error).message);
+        return null;
+    }
+};
+
+/** Best effort: tell Google to drop a mentor's grant (used on disconnect). */
+export const revokeMentorToken = async (refreshTokenEnc: string | null | undefined) => {
+    if (!refreshTokenEnc) return;
+    try {
+        await getOAuthClient().revokeToken(decryptString(refreshTokenEnc));
+    } catch {
+        // Already revoked or expired — nothing to do.
+    }
+};
+
+/** Google rejected the mentor's token: flag the connection so the mentor is asked to reconnect. */
+const markMentorConnectionBroken = async (tutorId: string, e: unknown) => {
+    const err = (e || {}) as { message?: string; response?: { data?: { error?: string; error_description?: string } } };
+    const message = err.response?.data?.error_description || err.response?.data?.error || err.message || String(e);
+    try {
+        await prisma.googleCalendarConnection.update({
+            where: { tutor_id: tutorId },
+            data: { needs_reconnect: true, last_error: message.slice(0, 300) },
+        });
+    } catch { /* connection row may be gone */ }
+    console.warn(`[GoogleCalendar] Mentor ${tutorId} Google connection needs reconnecting: ${message}`);
+};
+
+const isAuthFailure = (e: unknown) => {
+    const err = (e || {}) as { message?: string; response?: { status?: number; data?: { error?: string } } };
+    return err.response?.data?.error === 'invalid_grant'
+        || /invalid_grant|Token has been expired or revoked/i.test(err.message || '')
+        || err.response?.status === 401;
+};
+
 const getAuthorizedCalendarClient = async (tutorId: string) => {
     const conn = await prisma.googleCalendarConnection.findUnique({ where: { tutor_id: tutorId } });
-    if (!conn?.refresh_token_enc) return null;
+    if (!conn?.refresh_token_enc || conn.needs_reconnect) return null;
 
     const oauth2Client = getOAuthClient();
 
@@ -104,17 +159,148 @@ export const getFreeBusy = async (tutorId: string, timeMin: string, timeMax: str
 
     const { calendar, conn } = client;
 
-    const resp = await calendar.freebusy.query({
-        requestBody: {
-            timeMin,
-            timeMax,
-            items: [{ id: conn.calendar_id || 'primary' }],
+    let resp;
+    try {
+        resp = await calendar.freebusy.query({
+            requestBody: {
+                timeMin,
+                timeMax,
+                items: [{ id: conn.calendar_id || 'primary' }],
+            }
+        });
+    } catch (e) {
+        if (isAuthFailure(e)) {
+            await markMentorConnectionBroken(tutorId, e);
+            return null;
         }
-    });
+        throw e;
+    }
 
     const calendars = resp.data.calendars || {};
     const busy = calendars[conn.calendar_id || 'primary']?.busy || [];
     return busy;
+};
+
+// ---------------------------------------------------------------------------
+// Mentor-hosted meetings (mentor's own Google account)
+// ---------------------------------------------------------------------------
+
+export type MentorMeetResult = { eventId: string | null; htmlLink: string | null; meetLink: string };
+
+/** True when this mentor has a working Google connection that can host meetings. */
+export const mentorCanHostMeetings = async (tutorId: string) => {
+    const conn = await prisma.googleCalendarConnection.findUnique({
+        where: { tutor_id: tutorId },
+        select: { refresh_token_enc: true, needs_reconnect: true, scope: true },
+    });
+    if (!conn?.refresh_token_enc || conn.needs_reconnect) return false;
+    // Older connections were granted calendar.events too; only reject a scope list that clearly lacks it.
+    return !conn.scope || conn.scope.includes(MENTOR_REQUIRED_SCOPE);
+};
+
+const sleepMs = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Log text for a failure on a MENTOR's Google account (describeGoogleError speaks about the platform token). */
+const describeMentorError = (e: unknown) => isAuthFailure(e)
+    ? "the mentor's Google access was revoked or expired; they must reconnect from their dashboard"
+    : (e as Error)?.message || String(e);
+
+/**
+ * Create the session as an event on the mentor's own calendar with a Google Meet conference.
+ * The student is invited as a guest (Google sends them the invitation), the mentor is the
+ * organizer and therefore the meeting host. Throws when the mentor's Google cannot be used.
+ */
+export const createMentorMeetEvent = async (args: {
+    tutorId: string;
+    lessonId: string;
+    title: string;
+    description?: string;
+    start: Date;
+    end: Date;
+    studentEmail?: string | null;
+}): Promise<MentorMeetResult> => {
+    const client = await getAuthorizedCalendarClient(args.tutorId);
+    if (!client) throw new Error('Mentor has no working Google connection');
+    const { calendar, conn } = client;
+    const calendarId = conn.calendar_id || 'primary';
+
+    try {
+        const resp = await calendar.events.insert({
+            calendarId,
+            conferenceDataVersion: 1,
+            sendUpdates: 'all',
+            requestBody: {
+                summary: args.title,
+                description: args.description,
+                start: { dateTime: args.start.toISOString() },
+                end: { dateTime: args.end.toISOString() },
+                attendees: args.studentEmail ? [{ email: args.studentEmail }] : [],
+                guestsCanInviteOthers: false,
+                guestsCanSeeOtherGuests: false,
+                conferenceData: {
+                    createRequest: {
+                        requestId: `lesson-${args.lessonId}-${Date.now()}`,
+                        conferenceSolutionKey: { type: 'hangoutsMeet' },
+                    },
+                },
+            },
+        });
+
+        let meetLink = resp.data.hangoutLink || null;
+        const eventId = resp.data.id || null;
+        // Conference creation can be asynchronous: poll briefly for the link.
+        for (let i = 0; !meetLink && eventId && i < 4; i++) {
+            await sleepMs(1500);
+            const again = await calendar.events.get({ calendarId, eventId });
+            meetLink = again.data.hangoutLink || null;
+        }
+        if (!meetLink) throw new Error('Google created the event but did not return a Meet link');
+
+        return { eventId, htmlLink: resp.data.htmlLink || null, meetLink };
+    } catch (e) {
+        if (isAuthFailure(e)) await markMentorConnectionBroken(args.tutorId, e);
+        throw e;
+    }
+};
+
+/** Move a mentor-hosted session event (reschedule). Google tells the student. Null if the event is gone. */
+export const updateMentorMeetEvent = async (args: { tutorId: string; eventId: string; start: Date; end: Date }) => {
+    const client = await getAuthorizedCalendarClient(args.tutorId);
+    if (!client) return null;
+    const { calendar, conn } = client;
+    try {
+        const resp = await calendar.events.patch({
+            calendarId: conn.calendar_id || 'primary',
+            eventId: args.eventId,
+            sendUpdates: 'all',
+            requestBody: {
+                start: { dateTime: args.start.toISOString() },
+                end: { dateTime: args.end.toISOString() },
+            },
+        });
+        return { eventId: resp.data.id || null, htmlLink: resp.data.htmlLink || null, meetLink: resp.data.hangoutLink || null };
+    } catch (e) {
+        const status = googleStatusOf(e);
+        if (status === 404 || status === 410) return null;
+        if (isAuthFailure(e)) await markMentorConnectionBroken(args.tutorId, e);
+        throw e;
+    }
+};
+
+/** Remove a mentor-hosted session event (cancellation). Google tells the student. */
+export const deleteMentorMeetEvent = async (args: { tutorId: string; eventId: string }): Promise<boolean> => {
+    const client = await getAuthorizedCalendarClient(args.tutorId);
+    if (!client) return false;
+    const { calendar, conn } = client;
+    try {
+        await calendar.events.delete({ calendarId: conn.calendar_id || 'primary', eventId: args.eventId, sendUpdates: 'all' });
+        return true;
+    } catch (e) {
+        const status = googleStatusOf(e);
+        if (status === 404 || status === 410) return true;
+        if (isAuthFailure(e)) await markMentorConnectionBroken(args.tutorId, e);
+        throw e;
+    }
 };
 
 // ---------------------------------------------------------------------------
@@ -554,6 +740,11 @@ export const ensureLessonMeeting = async (lessonId: string, options: EnsureMeeti
     };
 
     // --- Existing link: make sure it is ready ---------------------------------------
+    // Mentor-hosted meetings live on the mentor's Google account; the mentor is the host and
+    // the platform cannot (and need not) manage their access.
+    if (lesson.meeting_link && lesson.meeting_host === 'MENTOR') {
+        return { link: lesson.meeting_link, state: 'open' };
+    }
     if (lesson.meeting_link) {
         const recordedOpen = isReadyAccess(lesson.meeting_access_type);
         if (recordedOpen && (!options.verifyLive || inactive)) return { link: lesson.meeting_link, state: 'open' };
@@ -645,6 +836,35 @@ export const ensureLessonMeeting = async (lessonId: string, options: EnsureMeeti
     // --- No link yet: create one -----------------------------------------------------
     if (lesson.status === 'CANCELLED' || lesson.status === 'MISSED') return { link: null, state: 'none' };
 
+    // Preferred: the mentor's own Google account hosts the meeting.
+    if (await mentorCanHostMeetings(lesson.tutor_id)) {
+        try {
+            const mentorEvent = await createMentorMeetEvent({
+                tutorId: lesson.tutor_id,
+                lessonId: lesson.id,
+                title: eventArgs.title,
+                description: eventArgs.description,
+                start: lesson.start_time,
+                end: lesson.end_time,
+                studentEmail,
+            });
+            await prisma.lesson.update({
+                where: { id: lesson.id },
+                data: {
+                    meeting_link: mentorEvent.meetLink,
+                    meeting_access_type: 'TRUSTED',
+                    meeting_host: 'MENTOR',
+                    google_calendar_event_id: mentorEvent.eventId,
+                    google_calendar_html_link: mentorEvent.htmlLink,
+                },
+            });
+            console.log(`[GoogleMeet] Lesson ${lesson.id}: meeting hosted on the mentor's Google account`);
+            return { link: mentorEvent.meetLink, state: 'open' };
+        } catch (e) {
+            console.error(`[GoogleMeet] Lesson ${lesson.id}: mentor-hosted meeting failed (${describeMentorError(e)}); using a platform link instead.`);
+        }
+    }
+
     let event: LessonMeetResult;
     try {
         event = await createPlatformMeetEventForLesson(eventArgs);
@@ -661,6 +881,7 @@ export const ensureLessonMeeting = async (lessonId: string, options: EnsureMeeti
         data: {
             meeting_link: event.meetLink || undefined,
             meeting_access_type: event.meetLink ? event.accessType : undefined,
+            meeting_host: event.meetLink ? 'PLATFORM' : undefined,
             google_calendar_event_id: event.eventId || undefined,
             google_calendar_html_link: event.htmlLink || undefined,
         },
@@ -679,6 +900,116 @@ export const ensureMeetLinkForLesson = async (lessonId: string, options: EnsureM
         console.error(`[GoogleMeet] ensureMeetLinkForLesson failed for ${lessonId}:`, e);
         return null;
     }
+};
+
+/**
+ * After a mentor connects Google: move their upcoming platform-hosted sessions onto their own
+ * account (new link, student invited by Google) and email both sides the new link. Sessions
+ * starting within the next hour are left alone so nobody gets a new link at the last minute.
+ */
+export const moveUpcomingLessonsToMentor = async (tutorId: string) => {
+    const result = { moved: 0, failed: 0, skipped: 0 };
+    if (!(await mentorCanHostMeetings(tutorId))) return result;
+
+    const lessons = await prisma.lesson.findMany({
+        where: {
+            tutor_id: tutorId,
+            status: 'BOOKED',
+            start_time: { gte: new Date(Date.now() + 60 * 60 * 1000) },
+            OR: [{ meeting_host: null }, { meeting_host: 'PLATFORM' }],
+        },
+        orderBy: { start_time: 'asc' },
+        take: 100,
+        include: {
+            tutor: { select: { username: true, user: { select: { email: true } } } },
+            student: { select: { user: { select: { email: true } } } },
+        },
+    });
+
+    for (const lesson of lessons) {
+        const mentorName = lesson.tutor?.username || 'your mentor';
+        const isIntro = lesson.billing_type === 'FREE_INTRO';
+        try {
+            const ev = await createMentorMeetEvent({
+                tutorId,
+                lessonId: lesson.id,
+                title: isIntro ? `Free intro session with ${mentorName}` : `Mentoring Session with ${mentorName}`,
+                description: isIntro
+                    ? `Free ${lesson.duration}-minute introductory session via Empowered Learnings`
+                    : 'Scheduled via Empowered Learnings',
+                start: lesson.start_time,
+                end: lesson.end_time,
+                studentEmail: lesson.student?.user?.email || null,
+            });
+            const oldEventId = lesson.meeting_host === 'MENTOR' ? null : lesson.google_calendar_event_id;
+            const hadLink = !!lesson.meeting_link;
+            await prisma.lesson.update({
+                where: { id: lesson.id },
+                data: {
+                    meeting_link: ev.meetLink,
+                    meeting_access_type: 'TRUSTED',
+                    meeting_host: 'MENTOR',
+                    google_calendar_event_id: ev.eventId,
+                    google_calendar_html_link: ev.htmlLink,
+                },
+            });
+            if (oldEventId) {
+                try {
+                    await google.calendar({ version: 'v3', auth: getPlatformOAuthClient() }).events
+                        .delete({ calendarId: getPlatformCalendarId(), eventId: oldEventId });
+                } catch { /* old platform event already gone or platform token unavailable */ }
+            }
+            if (hadLink) {
+                const code = meetingCodeFromLink(ev.meetLink) || String(Date.now());
+                const recipients: Array<{ email: string | null | undefined; role: 'student' | 'tutor' }> = [
+                    { email: lesson.student?.user?.email, role: 'student' },
+                    { email: lesson.tutor?.user?.email, role: 'tutor' },
+                ];
+                await prisma.emailOutbox.createMany({
+                    data: recipients.filter(r => r.email).map(r => ({
+                        type: 'SESSION_MEETING_LINK_UPDATED',
+                        to_email: r.email as string,
+                        payload: { lessonId: lesson.id, role: r.role },
+                        idempotency_key: `meeting-link-updated:${lesson.id}:${r.role}:${code}`,
+                    })),
+                    skipDuplicates: true,
+                });
+            }
+            result.moved += 1;
+        } catch (e) {
+            result.failed += 1;
+            console.error(`[GoogleMeet] Could not move lesson ${lesson.id} to the mentor's Google: ${describeMentorError(e)}`);
+            if (!(await mentorCanHostMeetings(tutorId))) break; // connection broke: stop trying
+        }
+    }
+    if (result.moved || result.failed) {
+        console.log(`[GoogleMeet] Mentor ${tutorId}: moved ${result.moved} upcoming session(s) to their Google account, ${result.failed} failed`);
+    }
+    return result;
+};
+
+/**
+ * Scheduler: cancelled sessions that were hosted on a mentor's calendar get their event
+ * removed (Google tells the student), so stale invitations do not linger.
+ */
+export const releaseCancelledMentorMeetings = async () => {
+    const lessons = await prisma.lesson.findMany({
+        where: { status: 'CANCELLED', meeting_host: 'MENTOR', google_calendar_event_id: { not: null } },
+        select: { id: true, tutor_id: true, google_calendar_event_id: true },
+        take: 50,
+    });
+    let released = 0;
+    for (const l of lessons) {
+        try {
+            const done = await deleteMentorMeetEvent({ tutorId: l.tutor_id, eventId: l.google_calendar_event_id as string });
+            if (!done) continue; // mentor disconnected: retry once they reconnect
+            await prisma.lesson.update({ where: { id: l.id }, data: { google_calendar_event_id: null } });
+            released += 1;
+        } catch (e) {
+            console.error(`[GoogleMeet] Could not remove the calendar event of cancelled lesson ${l.id}: ${describeMentorError(e)}`);
+        }
+    }
+    return { released };
 };
 
 /**
@@ -769,6 +1100,8 @@ export const getPlatformMeetDiagnostics = async () => {
         sessions: { upcomingWithLink: 0, upcomingOpen: 0, upcomingNeedingUpgrade: 0, upcomingWithoutLink: 0 },
         /** True when the session numbers above come from asking Google, not from our records. */
         sessionsVerifiedLive: false,
+        /** Mentors with a working Google connection / needing to reconnect. */
+        mentorConnections: { connected: 0, needsReconnect: 0 },
         /** Per-session truth as reported by Google right now (next 25 upcoming sessions). */
         sessionChecks: [] as Array<{
             kind: 'session' | 'demo';
@@ -812,6 +1145,16 @@ export const getPlatformMeetDiagnostics = async () => {
         console.error('[GoogleMeet] diagnostics: session counts failed:', e);
     }
 
+    try {
+        const [connected, needsReconnect] = await Promise.all([
+            prisma.googleCalendarConnection.count({ where: { needs_reconnect: false, refresh_token_enc: { not: null } } }),
+            prisma.googleCalendarConnection.count({ where: { needs_reconnect: true } }),
+        ]);
+        report.mentorConnections = { connected, needsReconnect };
+    } catch (e) {
+        console.error('[GoogleMeet] diagnostics: connection counts failed:', e);
+    }
+
     if (!report.tokenConfigured) {
         report.error = 'GOOGLE_DEMO_REFRESH_TOKEN is not set on the server.';
         return report;
@@ -851,6 +1194,7 @@ export const getPlatformMeetDiagnostics = async () => {
                 start_time: true,
                 meeting_link: true,
                 meeting_access_type: true,
+                meeting_host: true,
                 tutor: { select: { username: true, user: { select: { email: true } } } },
                 student: { select: { username: true } },
             },
@@ -865,11 +1209,11 @@ export const getPlatformMeetDiagnostics = async () => {
             ...upcomingLessons.map(l => ({
                 kind: 'session' as const, id: l.id, start: l.start_time, link: l.meeting_link as string,
                 recorded: l.meeting_access_type, mentor: l.tutor?.username || null, student: l.student?.username || null,
-                mentorEmail: l.tutor?.user?.email?.toLowerCase() || null,
+                mentorEmail: l.tutor?.user?.email?.toLowerCase() || null, host: l.meeting_host,
             })),
             ...upcomingDemos.map(d => ({
                 kind: 'demo' as const, id: d.id, start: d.slot_start_time, link: d.meeting_link as string,
-                recorded: d.meeting_access_type, mentor: d.full_name, student: null, mentorEmail: null as string | null,
+                recorded: d.meeting_access_type, mentor: d.full_name, student: null, mentorEmail: null as string | null, host: 'PLATFORM' as string | null,
             })),
         ].sort((a, b) => a.start.getTime() - b.start.getTime());
 
@@ -879,6 +1223,14 @@ export const getPlatformMeetDiagnostics = async () => {
             let error: string | null = null;
             let members: string[] | null = null;
             let cohost: boolean | null = null;
+            if (l.host === 'MENTOR') {
+                // Lives on the mentor's own Google account: the mentor hosts it, nothing to verify here.
+                report.sessionChecks.push({
+                    kind: l.kind, lessonId: l.id, startTime: l.start.toISOString(), mentor: l.mentor, student: l.student,
+                    link, recordedAccess: l.recorded, liveAccess: 'MENTOR_HOSTED', members: null, cohost: true, ready: true, error: null,
+                });
+                continue;
+            }
             try {
                 const live = await readLiveMeetSpace(auth, link);
                 liveAccess = live.accessType;

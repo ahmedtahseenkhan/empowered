@@ -2,7 +2,7 @@ import { Response } from 'express';
 import prisma from '../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
 import { isTutorSlotAvailable } from '../services/availability';
-import { updateMeetEventForLesson, ensureMeetLinkForLesson } from '../services/googleCalendar';
+import { updateMeetEventForLesson, ensureMeetLinkForLesson, updateMentorMeetEvent } from '../services/googleCalendar';
 import { completeLessonNow, WalletError } from '../services/walletService';
 
 // Student-initiated reschedule policy
@@ -66,6 +66,7 @@ export const getMyLessons = async (req: AuthRequest, res: Response) => {
                 student_confirmed_at: true,
                 tutor_confirmed_at: true,
                 meeting_link: true,
+                meeting_host: true,
                 google_calendar_html_link: true,
                 origin: true,
                 custom_kind: true,
@@ -173,6 +174,7 @@ export const getLessonDetail = async (req: AuthRequest, res: Response) => {
                 student_confirmed_at: true,
                 tutor_confirmed_at: true,
                 meeting_link: true,
+                meeting_host: true,
                 google_calendar_html_link: true,
                 origin: true,
                 custom_kind: true,
@@ -487,6 +489,7 @@ export const rescheduleLesson = async (req: AuthRequest, res: Response) => {
                 status: true,
                 reschedule_count: true,
                 google_calendar_event_id: true,
+                meeting_host: true,
             },
         });
 
@@ -558,10 +561,18 @@ export const rescheduleLesson = async (req: AuthRequest, res: Response) => {
             }
         });
 
-        // Move the platform calendar event (non-fatal; the Meet link is preserved)
+        // Move the calendar event (non-fatal; the Meet link is preserved). Mentor-hosted
+        // sessions live on the mentor's calendar, and Google tells the student about the change.
         if (lesson.google_calendar_event_id) {
             try {
-                await updateMeetEventForLesson({
+                if (lesson.meeting_host === 'MENTOR') {
+                    await updateMentorMeetEvent({
+                        tutorId: lesson.tutor_id,
+                        eventId: lesson.google_calendar_event_id,
+                        start: newStartDate,
+                        end: newEndDate,
+                    });
+                } else await updateMeetEventForLesson({
                     eventId: lesson.google_calendar_event_id,
                     start: newStartDate,
                     end: newEndDate,

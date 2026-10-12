@@ -23,6 +23,7 @@ type LessonDetail = {
     billing_type: 'FREE_TRIAL' | 'FREE_INTRO' | 'PAID' | 'CUSTOM_FREE';
     payment_status: 'paid' | 'pending' | 'failed' | 'not_required' | 'unknown';
     origin?: 'BOOKING' | 'MENTOR_OFFER';
+    meeting_host?: 'MENTOR' | 'PLATFORM' | null;
     custom_kind?: string | null;
     offer_message?: string | null;
     offer_expires_at?: string | null;
@@ -455,9 +456,13 @@ const SessionDetailPage: React.FC = () => {
                                                 <p className="text-sm text-gray-600">The meeting link has not been created yet.</p>
                                             )}
                                             <p className="text-xs text-gray-500 mt-1">
-                                                {isStudent
-                                                    ? 'Open the link at session time. Sign in to Google with the email you registered with to go straight in; otherwise your mentor will let you in.'
-                                                    : 'You and the student use this same link. Join signed in to Google with your registered email: you are the co-host and can admit the student if they are asked to wait.'}
+                                                {lesson.meeting_host === 'MENTOR'
+                                                    ? (isStudent
+                                                        ? 'Your mentor hosts this meeting and invited you from their Google Calendar. Sign in to Google with the email you registered with to go straight in; otherwise your mentor will let you in.'
+                                                        : 'This meeting is on your Google Calendar and you are the host. Join signed in with the Google account you connected; let your student in if they are asked to wait.')
+                                                    : (isStudent
+                                                        ? 'Open the link at session time. Sign in to Google with the email you registered with to go straight in; otherwise your mentor will let you in.'
+                                                        : 'You and the student use this same link. Connect your Google account on your dashboard to host sessions yourself.')}
                                             </p>
                                             <div className="flex flex-wrap gap-2 mt-3">
                                                 <Button variant="outline" size="sm" className="flex items-center gap-2" disabled={linkBusy} onClick={handleCopyLink}>
