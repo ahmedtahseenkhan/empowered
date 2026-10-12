@@ -110,6 +110,12 @@ The card lists every upcoming session with what **Google itself** reports for it
 
 Links are also fixed automatically: the access type is confirmed with Google every time someone presses **Join Session**, and the scheduler re-checks sessions starting within the next 3 hours. If an old link belongs to a different Google account it cannot be switched, so it is replaced with a new link and both the mentor and the student are emailed the new one.
 
+### How session access works now
+
+Sessions use the **Trusted** access type: the mentor is registered as **co-host** and the student as **member** of the meeting, so both go straight in when signed in to Google with their registered email. Anyone else must ask to join and the mentor admits them. Meet no longer shows "This call is open to anyone". If the mentor cannot be registered (their email is not a Google account), that one session falls back to **Open** so nobody is locked out. Demo calls stay **Open**. Change the policy with `SESSION_MEET_ACCESS` in the server .env.
+
+The admin card tests co-host registration on a test meeting using `ADMIN_EMAIL` (or `MEET_COHOST_PROBE_EMAIL`), and the table shows each session's registered members.
+
 This covers **demo calls as well as mentoring sessions**. A link that was created while a different Google account was connected (for example before the switch to emplearnings@gmail.com) only lets that old account in directly and cannot be changed from here. **Check & fix upcoming sessions** replaces such links and emails the new link to both sides.
 
 Always join through the **Join Session** button or the newest email. A link copied from an old email may be the pre-fix link.

@@ -59,24 +59,24 @@ async function backfillMissingMeetingLinks() {
     }
     if (fixed) console.log(`[Scheduler] Backfilled meeting links for ${fixed} lesson(s)`);
 
-    // Sessions booked before OPEN access existed still ask for host approval until switched.
+    // Meetings booked before this flow existed still ask for host approval until switched.
     try {
         const up = await upgradeUpcomingLessonsToOpenAccess(20);
         if (up.opened || up.replaced) {
-            console.log(`[Scheduler] Meeting links switched to OPEN access: opened=${up.opened} replaced=${up.replaced} remaining=${up.stillRestricted}`);
+            console.log(`[Scheduler] Meeting links made ready: fixed=${up.opened} replaced=${up.replaced} remaining=${up.stillRestricted}`);
         }
-        if (up.setupError) console.warn(`[Scheduler] Meeting links cannot be switched to OPEN access: ${up.setupError}`);
+        if (up.setupError) console.warn(`[Scheduler] Meeting links cannot be verified: ${up.setupError}`);
 
         // Sessions about to start are re-checked with Google, so a link whose access drifted
         // is corrected before anyone tries to join.
         if (!up.setupError) {
             const soon = await upgradeUpcomingLessonsToOpenAccess(20, { verifyLive: true, startsWithinMs: 3 * 3600 * 1000 });
             if (soon.opened || soon.replaced) {
-                console.log(`[Scheduler] Sessions starting soon corrected to OPEN access: opened=${soon.opened} replaced=${soon.replaced}`);
+                console.log(`[Scheduler] Meetings starting soon corrected: fixed=${soon.opened} replaced=${soon.replaced}`);
             }
         }
     } catch (e) {
-        console.error('[Scheduler] OPEN-access upgrade failed:', e);
+        console.error('[Scheduler] Meeting access check failed:', e);
     }
     return { fixed };
 }
