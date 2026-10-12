@@ -7,6 +7,7 @@ import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import SessionListCard from '../components/sessions/SessionListCard';
 import CustomSessionModal from '../components/sessions/CustomSessionModal';
+import GoogleMeetConnectCard from '../components/tutor/GoogleMeetConnectCard';
 import type { CustomSessionPrefill, CreatedCustomSession } from '../components/sessions/CustomSessionModal';
 import api from '../api/axios';
 
@@ -347,6 +348,10 @@ const TutorSessionsPage: React.FC = () => {
                         </Button>
                         <Link to="/students"><Button variant="outline" className="flex items-center gap-2"><Users className="w-4 h-4" />Students</Button></Link>
                     </div>
+                </div>
+
+                <div className="mb-4">
+                    <GoogleMeetConnectCard compact />
                 </div>
 
                 <div className="flex gap-2 mb-4">

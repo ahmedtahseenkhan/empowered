@@ -23,6 +23,7 @@ type MeetStatus = {
         upcomingWithoutLink: number;
     };
     sessionsVerifiedLive?: boolean;
+    mentorConnections?: { connected: number; needsReconnect: number };
     sessionChecks?: Array<{
         kind?: 'session' | 'demo';
         lessonId: string;
@@ -181,6 +182,15 @@ const GoogleMeetStatusCard: React.FC = () => {
                                 ? `Google applied access type ${status.probeAccessType || 'unknown'} to a test meeting.`
                                 : undefined}
                         />
+                        {status.mentorConnections && (
+                            <Row
+                                state={status.mentorConnections.needsReconnect > 0 ? 'warn' : 'ok'}
+                                label={`${status.mentorConnections.connected} mentor(s) host sessions on their own Google account`}
+                                detail={status.mentorConnections.needsReconnect > 0
+                                    ? `${status.mentorConnections.needsReconnect} mentor(s) must reconnect Google; their new sessions use the platform link until they do.`
+                                    : 'Mentors connect from their dashboard. Everyone else gets a platform link.'}
+                            />
+                        )}
                         {status.sessionPolicy !== 'OPEN' && (
                             <Row
                                 state={status.cohostRegistrationWorking === true ? 'ok' : status.cohostRegistrationWorking === false ? 'bad' : 'warn'}
@@ -225,7 +235,9 @@ const GoogleMeetStatusCard: React.FC = () => {
                                                 <a href={c.link} target="_blank" rel="noreferrer" className="text-purple-700 hover:underline break-all">{c.link.replace(/^https?:\/\//, '')}</a>
                                             </td>
                                             <td className="px-3 py-2">
-                                                {c.liveAccess === 'OPEN' ? (
+                                                {c.liveAccess === 'MENTOR_HOSTED' ? (
+                                                    <span className="text-green-700 font-medium">Hosted on the mentor's Google, mentor admits guests</span>
+                                                ) : c.liveAccess === 'OPEN' ? (
                                                     <span className="text-green-700 font-medium">Open, anyone with the link</span>
                                                 ) : c.liveAccess === 'TRUSTED' && c.cohost !== false ? (
                                                     <span className="text-green-700 font-medium">

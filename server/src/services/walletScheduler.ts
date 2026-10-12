@@ -1,6 +1,6 @@
 import prisma from '../config/db';
 import { WALLET_CONFIG, processCompletedLessons, settlePendingEarnings, runMonthlySettlement } from './walletService';
-import { ensureMeetLinkForLesson, upgradeUpcomingLessonsToOpenAccess } from './googleCalendar';
+import { ensureMeetLinkForLesson, upgradeUpcomingLessonsToOpenAccess, releaseCancelledMentorMeetings } from './googleCalendar';
 import { expireStaleOffers } from './customSessionService';
 
 /** Ask the student to confirm a just-ended credit-funded session (their confirmation
@@ -92,6 +92,8 @@ export async function runWalletJobs() {
     running = true;
     try {
         await backfillMissingMeetingLinks();
+        const released = await releaseCancelledMentorMeetings();
+        if (released.released) console.log(`[GoogleMeet] Removed ${released.released} cancelled session(s) from mentors' Google calendars`);
         const offers = await expireStaleOffers();
         if (offers.expired) console.log(`[CustomSession] Expired ${offers.expired} unanswered session offer(s)`);
         await requestCompletionConfirmations();

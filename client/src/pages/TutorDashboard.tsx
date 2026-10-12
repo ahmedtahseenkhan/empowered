@@ -12,6 +12,7 @@ import api from '../api/axios';
 import { Modal } from '../components/ui/Modal';
 import { Input } from '../components/ui/Input';
 import { SESSION_MINUTES, SLOT_STEP_MINUTES } from '../constants/session';
+import GoogleMeetConnectCard from '../components/tutor/GoogleMeetConnectCard';
 
 // ─── Stat Card ────────────────────────────────────────────────────────────────
 const StatCard = ({
@@ -440,6 +441,9 @@ const TutorDashboard: React.FC = () => {
                         </div>
                     </div>
                 )}
+
+                {/* ── Google Meet hosting ─────────────────────────────────────── */}
+                <GoogleMeetConnectCard />
 
                 {/* ── Stats row ────────────────────────────────────────────────── */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

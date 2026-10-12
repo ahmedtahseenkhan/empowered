@@ -121,3 +121,40 @@ This covers **demo calls as well as mentoring sessions**. A link that was create
 Always join through the **Join Session** button or the newest email. A link copied from an old email may be the pre-fix link.
 
 Participants must be signed in to a Google account in their browser. Meetings hosted by a free Gmail account do not admit people who are not signed in.
+
+---
+
+## Mentors host sessions on their own Google account
+
+To remove Meet's "This call is open to anyone" message, mentors can connect their own Google account from their dashboard (**Connect Google** card). Once connected:
+
+- Every new session is created on the **mentor's** Google Calendar with a Google Meet link. The mentor is the organizer and host.
+- The student is added as a guest, and **Google** emails them the invitation (EmpowerEd emails still go out as before).
+- Invited people signed in with the invited email join directly. Anyone else asks to join and the mentor admits them.
+- The mentor's upcoming sessions (starting more than 1 hour later) are moved onto their account automatically; both sides get the new link by email.
+- Reschedules move the event on the mentor's calendar; cancelled sessions are removed from it (Google notifies the student).
+- Mentors who have not connected keep getting platform links. If Google stops accepting a mentor's connection, their dashboard shows **Reconnect Google** and new sessions fall back to platform links.
+- Demo calls are not affected; they always use the platform account.
+
+The admin **Google Meet connection** card shows how many mentors are connected, how many must reconnect, and marks mentor-hosted sessions in the table.
+
+### Google Cloud Console setup (one time)
+
+1. **Redirect URI** — already listed in step 1: `https://emplearnings.com/api/google-calendar/callback` (`GOOGLE_REDIRECT_URI` in `.env`).
+2. **Google Auth Platform → Data access → Add scopes:**
+   - `openid`
+   - `.../auth/userinfo.email`
+   - `.../auth/calendar.events` (sensitive)
+   - `.../auth/calendar.readonly` (sensitive)
+3. **Audience:**
+   - While the app is in *Testing*, add every mentor who will test as a **test user** (max 100). Their tokens expire after 7 days in Testing mode, so they must reconnect weekly.
+   - For all mentors, publish the app and complete **verification** (Verification Center). Google asks for: a public homepage, a privacy policy page on the same domain, why each sensitive scope is needed, and a short screen recording showing a mentor connecting Google and a session appearing on their calendar. Review usually takes 2 to 6 weeks.
+4. Until verification completes, mentors see Google's "unverified app" warning and must click **Advanced → Go to EmpowerEd (unsafe)** to continue.
+
+### Test checklist
+
+1. Add your test mentor's Google address as a test user (step 3).
+2. Log in as that mentor → Dashboard → **Connect Google** → allow every permission. You return to the dashboard with a green "hosted on your Google account" card.
+3. Book a session with that mentor as a student. The event appears on the mentor's Google Calendar and the student gets a Google invitation.
+4. Open the session link: as the mentor (signed in to the connected Google account) you join directly with host controls; Meet does **not** say "open to anyone".
+5. Open it as the invited student: direct join. From any other Google account: **Ask to join**, and the mentor gets the admit prompt.

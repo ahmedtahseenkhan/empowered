@@ -290,6 +290,12 @@ model GoogleCalendarConnection {
   token_type        String?
   expires_at        DateTime?
 
+  // Google account the mentor connected (meetings are hosted by this account).
+  google_email    String?
+  // Set when Google rejects the stored token (revoked / expired); the mentor must reconnect.
+  needs_reconnect Boolean @default(false)
+  last_error      String?
+
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 }
@@ -511,6 +517,9 @@ model Lesson {
   // Google Meet access type applied to meeting_link: "OPEN" = anyone with the link joins without
   // knocking. NULL = legacy / Calendar-generated link that may still require host approval.
   meeting_access_type       String?
+  // Whose Google account hosts meeting_link: "MENTOR" (mentor's connected Google, event on
+  // their calendar) or "PLATFORM" / NULL (emplearnings account).
+  meeting_host              String?
   category                  String?
 
   // Custom sessions (origin = MENTOR_OFFER). While status is PENDING the lesson is an offer
