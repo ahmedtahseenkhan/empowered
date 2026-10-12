@@ -67,6 +67,13 @@ export const getMyLessons = async (req: AuthRequest, res: Response) => {
                 tutor_confirmed_at: true,
                 meeting_link: true,
                 google_calendar_html_link: true,
+                origin: true,
+                custom_kind: true,
+                makeup_for_lesson_id: true,
+                offer_message: true,
+                offer_expires_at: true,
+                offer_responded_at: true,
+                cancel_reason: true,
                 created_at: true,
                 booking: {
                     select: {
@@ -102,7 +109,7 @@ export const getMyLessons = async (req: AuthRequest, res: Response) => {
         const DUE_WINDOW_MS = 2 * 60 * 60 * 1000;
 
         const enriched = lessons.map((lesson) => {
-            if (lesson.billing_type === 'FREE_INTRO' || lesson.billing_type === 'FREE_TRIAL') {
+            if (lesson.billing_type === 'FREE_INTRO' || lesson.billing_type === 'FREE_TRIAL' || lesson.billing_type === 'CUSTOM_FREE') {
                 return { ...lesson, payment_status: 'not_required' as const };
             }
 
@@ -167,6 +174,13 @@ export const getLessonDetail = async (req: AuthRequest, res: Response) => {
                 tutor_confirmed_at: true,
                 meeting_link: true,
                 google_calendar_html_link: true,
+                origin: true,
+                custom_kind: true,
+                makeup_for_lesson_id: true,
+                offer_message: true,
+                offer_expires_at: true,
+                offer_responded_at: true,
+                cancel_reason: true,
                 category: true,
                 created_at: true,
                 booking: {
@@ -201,7 +215,7 @@ export const getLessonDetail = async (req: AuthRequest, res: Response) => {
         // Enrich with payment status
         let payment_status: 'paid' | 'pending' | 'failed' | 'not_required' | 'unknown' = 'unknown';
 
-        if (lesson.billing_type === 'FREE_INTRO' || lesson.billing_type === 'FREE_TRIAL') {
+        if (lesson.billing_type === 'FREE_INTRO' || lesson.billing_type === 'FREE_TRIAL' || lesson.billing_type === 'CUSTOM_FREE') {
             payment_status = 'not_required';
         } else if (lesson.booking?.funding === 'CREDITS') {
             payment_status = 'paid';
@@ -253,14 +267,21 @@ export const joinLesson = async (req: AuthRequest, res: Response) => {
                 meeting_link: true,
                 meeting_access_type: true,
                 google_calendar_html_link: true,
+                billing_type: true,
+                origin: true,
+                status: true,
                 booking: { select: { funding: true } },
             },
         });
 
         if (!lesson) return res.status(404).json({ error: 'Lesson not found' });
 
-        if (!lesson.booking_id) {
+        const isCustom = lesson.origin === 'MENTOR_OFFER';
+        if (!lesson.booking_id && !isCustom) {
             return res.status(400).json({ error: 'Lesson is not associated with a booking' });
+        }
+        if (isCustom && lesson.status === 'PENDING') {
+            return res.status(400).json({ error: 'This session offer has not been accepted yet.' });
         }
 
         // Authorize and resolve profile id
@@ -283,7 +304,8 @@ export const joinLesson = async (req: AuthRequest, res: Response) => {
 
         // For students: enforce payment check only while session is still joinable.
         // Credit-funded sessions were paid (reserved) at booking time — no per-session payment exists.
-        if (role === 'STUDENT' && lesson.booking?.funding !== 'CREDITS') {
+        const freeOfCharge = lesson.billing_type === 'CUSTOM_FREE' || lesson.billing_type === 'FREE_INTRO' || lesson.billing_type === 'FREE_TRIAL';
+        if (role === 'STUDENT' && lesson.booking?.funding !== 'CREDITS' && !freeOfCharge) {
             const now = new Date();
             const sessionEnd = new Date(lesson.end_time.getTime() + 15 * 60 * 1000); // real end + grace
 
@@ -300,7 +322,7 @@ export const joinLesson = async (req: AuthRequest, res: Response) => {
             const dueEnd = new Date(dueDate.getTime() + 60 * 1000);
             const schedule = await prisma.paymentSchedule.findFirst({
                 where: {
-                    booking_id: lesson.booking_id,
+                    booking_id: lesson.booking_id as string,
                     due_date: {
                         gte: dueStart,
                         lte: dueEnd,

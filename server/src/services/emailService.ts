@@ -395,6 +395,82 @@ class EmailService {
         });
     }
 
+    // ---- Custom sessions (mentor-offered, free) ----
+
+    async sendSessionOffer(data: {
+        studentName: string;
+        studentEmail: string;
+        mentorName: string;
+        sessionDate: string;
+        sessionTime: string;
+        durationMinutes: number;
+        kindLabel: string;
+        message?: string | null;
+        expiresAt: string;
+        sessionUrl: string;
+    }): Promise<void> {
+        const html = this.renderTemplate('student/session-offer', {
+            ...data,
+            otherPartyLabel: 'Mentor',
+            otherPartyName: data.mentorName,
+            year: new Date().getFullYear(),
+        });
+        await this.sendEmail({
+            to: data.studentEmail,
+            subject: `${data.mentorName} offered you a free session on ${data.sessionDate}`,
+            html,
+        });
+    }
+
+    async sendCustomSessionConfirmed(data: {
+        recipientName: string;
+        recipientEmail: string;
+        otherPartyLabel: 'Mentor' | 'Student';
+        otherPartyName: string;
+        sessionDate: string;
+        sessionTime: string;
+        durationMinutes: number;
+        kindLabel: string;
+        meetingLink: string;
+        sessionUrl: string;
+    }): Promise<void> {
+        const html = this.renderTemplate('shared/custom-session-confirmed', {
+            ...data,
+            kindLabelLower: data.kindLabel.toLowerCase(),
+            year: new Date().getFullYear(),
+        });
+        await this.sendEmail({
+            to: data.recipientEmail,
+            subject: `Confirmed: ${data.kindLabel} session with ${data.otherPartyName} on ${data.sessionDate}`,
+            html,
+        });
+    }
+
+    async sendCustomSessionClosed(data: {
+        recipientName: string;
+        recipientEmail: string;
+        otherPartyLabel: 'Mentor' | 'Student';
+        otherPartyName: string;
+        sessionDate: string;
+        sessionTime: string;
+        durationMinutes: number;
+        kindLabel: string;
+        title: string;
+        headline: string;
+        note?: string | null;
+        sessionUrl: string;
+    }): Promise<void> {
+        const html = this.renderTemplate('shared/custom-session-closed', {
+            ...data,
+            year: new Date().getFullYear(),
+        });
+        await this.sendEmail({
+            to: data.recipientEmail,
+            subject: `${data.title}: session with ${data.otherPartyName} on ${data.sessionDate}`,
+            html,
+        });
+    }
+
     async sendSessionRescheduledMentor(data: {
         mentorName: string;
         mentorEmail: string;

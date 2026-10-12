@@ -24,8 +24,13 @@ type Lesson = {
     reschedule_count?: number;
     created_at?: string;
     status: string;
-    billing_type?: 'FREE_TRIAL' | 'FREE_INTRO' | 'PAID';
+    billing_type?: 'FREE_TRIAL' | 'FREE_INTRO' | 'PAID' | 'CUSTOM_FREE';
     payment_status?: 'paid' | 'pending' | 'failed' | 'not_required' | 'refunded' | 'unknown';
+    origin?: 'BOOKING' | 'MENTOR_OFFER';
+    custom_kind?: string | null;
+    offer_message?: string | null;
+    offer_expires_at?: string | null;
+    cancel_reason?: string | null;
     booking_id?: string | null;
     booking?: {
         id?: string;
@@ -241,8 +246,51 @@ const StudentSessionsPage: React.FC = () => {
         }
     };
 
+    // Custom (mentor-offered, free) sessions
+    const isOffer = (l: Lesson) => l.origin === 'MENTOR_OFFER' && (l.status || '').toUpperCase() === 'PENDING';
+    const isCustom = (l: Lesson) => l.origin === 'MENTOR_OFFER';
+    const [offerBusyId, setOfferBusyId] = useState<string | null>(null);
+    const [offerConfirm, setOfferConfirm] = useState<{ kind: 'decline' | 'cancel'; lesson: Lesson } | null>(null);
+    const [offerNotice, setOfferNotice] = useState('');
+
+    const respondToOffer = async (l: Lesson, action: 'accept' | 'decline') => {
+        try {
+            setOfferBusyId(l.id);
+            const res = await api.post(`/custom-sessions/${l.id}/respond`, { action });
+            const upd = res.data?.lesson;
+            setLessons((prev) => prev.map((x) => (x.id === l.id
+                ? { ...x, status: upd?.status || (action === 'accept' ? 'BOOKED' : 'CANCELLED'), meeting_link: upd?.meeting_link ?? x.meeting_link, cancel_reason: action === 'decline' ? 'Declined by student' : x.cancel_reason }
+                : x)));
+            setOfferConfirm(null);
+            setOfferNotice(action === 'accept'
+                ? `Session with ${l.tutor?.username || 'your mentor'} confirmed. You will get an email with the meeting link.`
+                : 'Offer declined. Your mentor has been told.');
+        } catch (e) {
+            setJoinError(apiError(e, action === 'accept' ? 'Unable to accept the offer.' : 'Unable to decline the offer.'));
+            setErrorModalOpen(true);
+        } finally {
+            setOfferBusyId(null);
+        }
+    };
+
+    const cancelCustom = async (l: Lesson) => {
+        try {
+            setOfferBusyId(l.id);
+            await api.post(`/custom-sessions/${l.id}/cancel`);
+            setLessons((prev) => prev.map((x) => (x.id === l.id ? { ...x, status: 'CANCELLED', cancel_reason: 'Cancelled by student' } : x)));
+            setOfferConfirm(null);
+            setOfferNotice('Session cancelled. Your mentor has been told.');
+        } catch (e) {
+            setJoinError(apiError(e, 'Unable to cancel the session.'));
+            setErrorModalOpen(true);
+        } finally {
+            setOfferBusyId(null);
+        }
+    };
+
     const canReschedule = (l: Lesson) => {
         if (tab !== 'upcoming') return false;
+        if (isCustom(l)) return false;
         if ((l.status || '').toUpperCase() !== 'BOOKED') return false;
         if ((l.reschedule_count ?? 0) >= 1) return false;
         return new Date(l.start_time).getTime() - Date.now() > 24 * 60 * 60 * 1000;
@@ -334,6 +382,15 @@ const StudentSessionsPage: React.FC = () => {
         const pill = 'inline-flex items-center px-3 py-1 rounded-full text-xs sm:text-sm font-medium border';
         const startMs = new Date(lesson.start_time).getTime();
         const endMs = new Date(lesson.end_time).getTime();
+        if (isOffer(lesson)) {
+            return <span className={`${pill} bg-amber-50 text-amber-700 border-amber-200`}>Session offer — please respond</span>;
+        }
+        if (isCustom(lesson) && lessonStatus === 'CANCELLED') {
+            return <span className={`${pill} bg-gray-50 text-gray-600 border-gray-200`}>{lesson.cancel_reason || 'Cancelled'}</span>;
+        }
+        if (isCustom(lesson) && lessonStatus === 'BOOKED' && nowMs < startMs) {
+            return <span className={`${pill} bg-purple-50 text-purple-700 border-purple-200`}>{lesson.custom_kind === 'MAKEUP' ? 'Make-up session' : 'Extra session'} · Free</span>;
+        }
         if (lessonStatus === 'BOOKED' && nowMs >= startMs && nowMs <= endMs + 15 * 60 * 1000) {
             return <span className={`${pill} bg-green-600 text-white border-green-600 animate-pulse`}>In progress — join now</span>;
         }
@@ -450,7 +507,7 @@ const StudentSessionsPage: React.FC = () => {
                                             {(() => {
                                                 const startMs = new Date(l.start_time).getTime();
                                                 const nowMs2 = Date.now();
-                                                const isJoinable = nowMs2 >= startMs - 15 * 60 * 1000 && nowMs2 <= new Date(l.end_time).getTime() + 15 * 60 * 1000 && !['COMPLETED', 'CANCELLED', 'MISSED'].includes(l.status.toUpperCase());
+                                                const isJoinable = nowMs2 >= startMs - 15 * 60 * 1000 && nowMs2 <= new Date(l.end_time).getTime() + 15 * 60 * 1000 && !['COMPLETED', 'CANCELLED', 'MISSED', 'PENDING'].includes(l.status.toUpperCase());
                                                 if (!isJoinable) return null;
                                                 return (
                                                     <>
@@ -489,6 +546,26 @@ const StudentSessionsPage: React.FC = () => {
                                                     </>
                                                 );
                                             })()}
+                                            {isOffer(l) ? (
+                                                <>
+                                                    <Button className="bg-green-600 hover:bg-green-700 text-white" disabled={offerBusyId === l.id} onClick={() => void respondToOffer(l, 'accept')}>
+                                                        {offerBusyId === l.id ? 'Working…' : 'Accept offer'}
+                                                    </Button>
+                                                    <Button variant="outline" className="text-red-700 border-red-200 hover:bg-red-50" disabled={offerBusyId === l.id} onClick={() => setOfferConfirm({ kind: 'decline', lesson: l })}>
+                                                        Decline
+                                                    </Button>
+                                                    {l.offer_message ? (
+                                                        <span className="inline-flex items-center px-3 py-2 rounded-lg text-xs bg-purple-50 text-purple-900 border border-purple-100 max-w-md">
+                                                            “{l.offer_message}”
+                                                        </span>
+                                                    ) : null}
+                                                </>
+                                            ) : null}
+                                            {isCustom(l) && (l.status || '').toUpperCase() === 'BOOKED' && Date.now() < new Date(l.start_time).getTime() ? (
+                                                <Button variant="outline" className="text-red-700 border-red-200 hover:bg-red-50" disabled={offerBusyId === l.id} onClick={() => setOfferConfirm({ kind: 'cancel', lesson: l })}>
+                                                    Cancel session
+                                                </Button>
+                                            ) : null}
                                             {canReschedule(l) ? (
                                                 <Button
                                                     variant="outline"
@@ -566,6 +643,31 @@ const StudentSessionsPage: React.FC = () => {
                 title="Error"
             >
                 <p>{joinError}</p>
+            </Modal>
+            <Modal isOpen={!!offerNotice} onClose={() => setOfferNotice('')} title="Done">
+                <p className="text-sm text-gray-700">{offerNotice}</p>
+            </Modal>
+            <Modal
+                isOpen={!!offerConfirm}
+                onClose={() => { if (!offerBusyId) setOfferConfirm(null); }}
+                title={offerConfirm?.kind === 'decline' ? 'Decline this offer?' : 'Cancel this session?'}
+            >
+                {offerConfirm && (
+                    <div className="space-y-4">
+                        <p className="text-sm text-gray-700">
+                            {offerConfirm.kind === 'decline'
+                                ? `${offerConfirm.lesson.tutor?.username || 'Your mentor'} will be told you declined the session on ${formatDateLong(offerConfirm.lesson.start_time)}.`
+                                : `${offerConfirm.lesson.tutor?.username || 'Your mentor'} will be told the session on ${formatDateLong(offerConfirm.lesson.start_time)} is cancelled.`}
+                        </p>
+                        <div className="flex gap-3">
+                            <Button variant="outline" className="flex-1" onClick={() => setOfferConfirm(null)} disabled={!!offerBusyId}>Go back</Button>
+                            <Button className="flex-1 bg-red-600 hover:bg-red-700" disabled={!!offerBusyId}
+                                onClick={() => offerConfirm.kind === 'decline' ? void respondToOffer(offerConfirm.lesson, 'decline') : void cancelCustom(offerConfirm.lesson)}>
+                                {offerBusyId ? 'Working…' : offerConfirm.kind === 'decline' ? 'Decline offer' : 'Cancel session'}
+                            </Button>
+                        </div>
+                    </div>
+                )}
             </Modal>
 
             <Modal

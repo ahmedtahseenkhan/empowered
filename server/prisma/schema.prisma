@@ -60,6 +60,13 @@ enum LessonBillingType {
   FREE_TRIAL
   FREE_INTRO // Standalone free introductory session (25 min)
   PAID
+  CUSTOM_FREE // Mentor-scheduled custom / make-up session: no charge, no mentor earnings
+}
+
+// How a lesson came to exist.
+enum LessonOrigin {
+  BOOKING // Student booked through the normal flow
+  MENTOR_OFFER // Mentor offered a custom session; the student accepts or declines
 }
 
 enum BookingFunding {
@@ -506,6 +513,17 @@ model Lesson {
   meeting_access_type       String?
   category                  String?
 
+  // Custom sessions (origin = MENTOR_OFFER). While status is PENDING the lesson is an offer
+  // waiting for the student; it becomes BOOKED on accept, CANCELLED on decline/withdraw/expiry.
+  origin               LessonOrigin @default(BOOKING)
+  custom_kind          String? // MAKEUP | EXTRA
+  makeup_for_lesson_id String?
+  makeup_for           Lesson?      @relation("LessonMakeup", fields: [makeup_for_lesson_id], references: [id])
+  makeups              Lesson[]     @relation("LessonMakeup")
+  offer_message        String?      @db.Text
+  offer_expires_at     DateTime? // PENDING offers past this moment are cancelled by the scheduler
+  offer_responded_at   DateTime?
+
   completed_at         DateTime? // Set when the session is marked COMPLETED (auto or admin)
   cancel_reason        String?
   student_confirmed_at DateTime? // Student pressed "Confirm session completed"
@@ -528,6 +546,7 @@ model Lesson {
   @@index([start_time])
   // Scheduler scans lessons by status within a start_time window (reminders, auto-cancel)
   @@index([status, start_time])
+  @@index([origin, status])
 }
 
 model PaymentSchedule {

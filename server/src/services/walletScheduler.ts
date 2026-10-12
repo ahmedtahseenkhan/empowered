@@ -1,6 +1,7 @@
 import prisma from '../config/db';
 import { WALLET_CONFIG, processCompletedLessons, settlePendingEarnings, runMonthlySettlement } from './walletService';
 import { ensureMeetLinkForLesson, upgradeUpcomingLessonsToOpenAccess } from './googleCalendar';
+import { expireStaleOffers } from './customSessionService';
 
 /** Ask the student to confirm a just-ended credit-funded session (their confirmation
  *  releases the mentor's payment; the grace-window backstop covers non-responders). */
@@ -91,6 +92,8 @@ export async function runWalletJobs() {
     running = true;
     try {
         await backfillMissingMeetingLinks();
+        const offers = await expireStaleOffers();
+        if (offers.expired) console.log(`[CustomSession] Expired ${offers.expired} unanswered session offer(s)`);
         await requestCompletionConfirmations();
         const c = await processCompletedLessons();
         const s = await settlePendingEarnings();
