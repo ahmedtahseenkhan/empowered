@@ -1,9 +1,10 @@
 import { Request, Response } from 'express';
-import crypto from 'crypto';
+import { z } from 'zod';
 import prisma from '../config/db';
-import { hashPassword, comparePassword, generateToken, generateVerificationToken, verifyToken } from '../utils/auth';
-import { RegisterSchema, LoginSchema, PASSWORD_MIN_LENGTH } from '../utils/validation';
+import { hashPassword, comparePassword, compareDummyPassword, generateToken, generateNumericCode, verifyAccessToken } from '../utils/auth';
+import { RegisterSchema, LoginSchema, PasswordSchema, normalizeEmail, firstIssue } from '../utils/validation';
 import { AuthRequest } from '../middleware/authMiddleware';
+import { getAppClient, getTokenFromRequest, setAuthCookie, clearAuthCookie } from '../utils/authCookie';
 import emailService from '../services/emailService';
 import { ensureBetaPremiumAccess, isApprovedBetaEmail } from '../services/betaService';
 
@@ -12,119 +13,172 @@ const getClientBaseUrl = (): string => {
     return raw.replace(/\/+$/, '');
 };
 
-export const register = async (req: Request, res: Response) => {
-    try {
-        const { email, password, role, username } = RegisterSchema.parse(req.body);
+/** Wrong guesses allowed per emailed code before it is burned and a new one must be requested. */
+const MAX_CODE_ATTEMPTS = 5;
+const VERIFICATION_CODE_TTL_MS = 30 * 60 * 1000;
+const RESET_CODE_TTL_MS = 15 * 60 * 1000;
 
-        // Check if user exists
-        const existingUser = await prisma.user.findUnique({ where: { email } });
+const RESET_REQUESTED_MESSAGE = 'If an account exists for that email, a reset code has been sent.';
+const INVALID_CODE_MESSAGE = 'Invalid or expired code. Request a new one if needed.';
+
+/** Accounts are matched case-insensitively (older accounts may have mixed-case emails stored). */
+const findUserByEmail = (email: string) =>
+    prisma.user.findFirst({ where: { email: { equals: email, mode: 'insensitive' } } });
+
+/** Run work after the response has been sent, so response time doesn't reveal whether an account exists. */
+const runInBackground = (label: string, work: () => Promise<void>) => {
+    setImmediate(() => {
+        work().catch((err) => console.error(`${label} error:`, err));
+    });
+};
+
+/**
+ * Burn every outstanding code for the user and issue a fresh one. A pending password (from someone
+ * signing up again with an unverified email) only takes effect if this code is verified, i.e. by
+ * whoever controls the inbox — so a stranger who registered the address first can't keep access.
+ */
+const issueVerificationCode = async (userId: string, pendingPasswordHash?: string): Promise<string> => {
+    const code = generateNumericCode();
+    const codeHash = await hashPassword(code);
+    await prisma.$transaction([
+        prisma.emailVerificationCode.updateMany({ where: { user_id: userId, used_at: null }, data: { used_at: new Date() } }),
+        prisma.emailVerificationCode.create({
+            data: {
+                user_id: userId,
+                code_hash: codeHash,
+                expires_at: new Date(Date.now() + VERIFICATION_CODE_TTL_MS),
+                pending_password_hash: pendingPasswordHash ?? null,
+            },
+        }),
+    ]);
+    return code;
+};
+
+const getUsername = async (userId: string, role: string): Promise<string | undefined> => {
+    if (role === 'STUDENT') return (await prisma.studentProfile.findUnique({ where: { user_id: userId }, select: { username: true } }))?.username;
+    if (role === 'TUTOR') return (await prisma.tutorProfile.findUnique({ where: { user_id: userId }, select: { username: true } }))?.username;
+    if (role === 'ADMIN') return (await prisma.adminProfile.findUnique({ where: { user_id: userId }, select: { username: true } }))?.username;
+    return undefined;
+};
+
+const sendAccountExistsNotice = async (email: string) => {
+    const baseUrl = getClientBaseUrl();
+    await emailService.sendEmail({
+        to: email,
+        subject: 'Someone tried to sign up with your EmpowerEd email',
+        html: `
+            <div style="font-family:Arial,sans-serif;line-height:1.5">
+              <h2>You already have an account</h2>
+              <p>Someone (hopefully you) tried to create a new EmpowerEd Learnings account with this email address.</p>
+              <p>You can <a href="${baseUrl}/login">sign in here</a>, or use "Forgot password" if you can't remember your password.</p>
+              <p>If this wasn't you, you can ignore this email — your account is unchanged.</p>
+            </div>
+        `,
+    });
+};
+
+const sendPasswordChangedNotice = async (email: string) => {
+    await emailService.sendEmail({
+        to: email,
+        subject: 'Your EmpowerEd password was changed',
+        html: `
+            <div style="font-family:Arial,sans-serif;line-height:1.5">
+              <h2>Password changed</h2>
+              <p>The password for your EmpowerEd Learnings account was just changed, and all other sessions were signed out.</p>
+              <p>If you didn't do this, reset your password right away using "Forgot password" and contact support.</p>
+            </div>
+        `,
+    });
+};
+
+/**
+ * Same response whether or not the email is already registered, so signup can't be used to
+ * discover accounts. An existing owner gets an email instead (or a fresh code if unverified).
+ */
+export const register = async (req: Request, res: Response) => {
+    const parsed = RegisterSchema.safeParse(req.body);
+    if (!parsed.success) {
+        return res.status(400).json({
+            error: firstIssue(parsed.error),
+            details: parsed.error.issues.map((e) => ({ path: e.path, message: e.message })),
+        });
+    }
+    const { email, password, role, username } = parsed.data;
+
+    try {
+        const isBeta = role === 'TUTOR' ? await isApprovedBetaEmail(email).catch(() => false) : false;
+        const accepted = {
+            message: 'User registered successfully. Please check your email for a verification code.',
+            requiresVerification: true,
+            email,
+            role,
+            is_beta: isBeta,
+        };
+
+        const existingUser = await findUserByEmail(email);
         if (existingUser) {
-            return res.status(400).json({ error: 'User already exists' });
+            runInBackground('register(existing)', async () => {
+                if (existingUser.is_verified) {
+                    await sendAccountExistsNotice(existingUser.email);
+                } else {
+                    const code = await issueVerificationCode(existingUser.id, await hashPassword(password));
+                    await emailService.sendVerificationCodeEmail({
+                        username: (await getUsername(existingUser.id, existingUser.role)) || 'User',
+                        email: existingUser.email,
+                        code,
+                    });
+                }
+            });
+            return res.status(201).json(accepted);
         }
 
-        // Hash password
         const passwordHash = await hashPassword(password);
 
-        // Create User & Profile Transaction
-        const result = await prisma.$transaction(async (tx) => {
-            const newUser = await tx.user.create({
-                data: {
-                    email,
-                    password_hash: passwordHash,
-                    role,
-                },
+        const newUser = await prisma.$transaction(async (tx) => {
+            const created = await tx.user.create({
+                data: { email, password_hash: passwordHash, role },
             });
 
-            // Create specific profile based on role
             if (role === 'STUDENT') {
-                await tx.studentProfile.create({
-                    data: {
-                        user_id: newUser.id,
-                        username,
-                    },
-                });
+                await tx.studentProfile.create({ data: { user_id: created.id, username } });
             } else if (role === 'TUTOR') {
                 // NOTE: never trust a client-supplied tier here. Tier must reflect a real
                 // paid subscription (set by the Stripe webhook) or an approved beta trial.
                 // New mentors start on the default tier with no active subscription.
-                await tx.tutorProfile.create({
-                    data: {
-                        user_id: newUser.id,
-                        username,
-                    },
-                });
+                await tx.tutorProfile.create({ data: { user_id: created.id, username } });
             }
-
-            return newUser;
+            return created;
         });
 
-        // Send Verification Code Email (6-digit code for inline wizard flow)
         try {
-            const code = crypto.randomInt(0, 1000000).toString().padStart(6, '0');
-            const codeHash = await hashPassword(code);
-            const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
-
-            await prisma.emailVerificationCode.create({
-                data: {
-                    user_id: result.id,
-                    code_hash: codeHash,
-                    expires_at: expiresAt,
-                },
-            });
-
-            await emailService.sendVerificationCodeEmail({
-                username,
-                email,
-                code,
-            });
+            const code = await issueVerificationCode(newUser.id);
+            await emailService.sendVerificationCodeEmail({ username, email, code });
         } catch (emailError) {
             console.error('Failed to send verification code email:', emailError);
         }
 
-        // NOTE: no token is issued here. Access is granted only after the email is
-        // verified via /auth/verify-email-code (which returns the login token). This
-        // applies to every role — no account can be used before verification.
-        //
-        // Tell the signup wizard up front whether this mentor is an approved beta applicant so it
-        // can hide the plan/payment steps — Premium is assigned automatically on email verification.
-        const isBeta = role === 'TUTOR' ? await isApprovedBetaEmail(email).catch(() => false) : false;
-
-        res.status(201).json({
-            message: 'User registered successfully. Please check your email for a verification code.',
-            requiresVerification: true,
-            email: result.email,
-            role: result.role,
-            is_beta: isBeta,
-        });
-
-    } catch (error: any) {
+        // NOTE: no session is issued here. Access is granted only after the email is
+        // verified via /auth/verify-email-code. This applies to every role.
+        return res.status(201).json(accepted);
+    } catch (error) {
         console.error('Registration Error:', error);
-
-        // Handle Zod validation errors
-        if (error.errors) {
-            return res.status(400).json({
-                error: 'Validation failed',
-                details: error.errors.map((e: any) => ({ path: e.path, message: e.message }))
-            });
-        }
-
-        // Handle database or other errors
-        res.status(500).json({
-            error: 'Internal server error during registration',
-            message: error.message || 'Registration failed'
-        });
+        return res.status(500).json({ error: 'Registration failed. Please try again.' });
     }
 };
+
+const ChangePasswordSchema = z.object({
+    currentPassword: z.string().min(1).max(256),
+    newPassword: PasswordSchema,
+});
 
 export const changePassword = async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user?.id;
         if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-        const { currentPassword, newPassword } = req.body as { currentPassword?: string; newPassword?: string };
-        if (!currentPassword || !newPassword) return res.status(400).json({ error: 'currentPassword and newPassword are required' });
-        if (typeof currentPassword !== 'string' || typeof newPassword !== 'string') return res.status(400).json({ error: 'Invalid payload' });
-        if (newPassword.length < PASSWORD_MIN_LENGTH) return res.status(400).json({ error: `New password must be at least ${PASSWORD_MIN_LENGTH} characters` });
+        const parsed = ChangePasswordSchema.safeParse(req.body);
+        if (!parsed.success) return res.status(400).json({ error: firstIssue(parsed.error) });
+        const { currentPassword, newPassword } = parsed.data;
 
         const user = await prisma.user.findUnique({ where: { id: userId } });
         if (!user) return res.status(401).json({ error: 'Unauthorized' });
@@ -133,8 +187,15 @@ export const changePassword = async (req: AuthRequest, res: Response) => {
         if (!ok) return res.status(400).json({ error: 'Current password is incorrect' });
 
         const nextHash = await hashPassword(newPassword);
-        await prisma.user.update({ where: { id: userId }, data: { password_hash: nextHash } });
+        // Bumping token_version signs out every other session; this one gets a fresh cookie.
+        const updated = await prisma.user.update({
+            where: { id: userId },
+            data: { password_hash: nextHash, token_version: { increment: 1 } },
+            select: { id: true, role: true, email: true, token_version: true },
+        });
+        setAuthCookie(res, getAppClient(req), generateToken(updated.id, updated.role, updated.token_version));
 
+        runInBackground('changePassword notice', () => sendPasswordChangedNotice(updated.email));
         return res.json({ message: 'Password updated successfully' });
     } catch (error) {
         console.error('changePassword error:', error);
@@ -152,6 +213,7 @@ export const updateDisplayName = async (req: AuthRequest, res: Response) => {
             return res.status(400).json({ error: 'username is required' });
         }
         const trimmed = username.trim();
+        if (trimmed.length > 80) return res.status(400).json({ error: 'username must be at most 80 characters' });
 
         const user = await prisma.user.findUnique({
             where: { id: userId },
@@ -177,80 +239,88 @@ export const updateDisplayName = async (req: AuthRequest, res: Response) => {
 };
 
 export const forgotPassword = async (req: Request, res: Response) => {
-    try {
-        const { email } = req.body as { email?: string };
-        if (!email || typeof email !== 'string') return res.status(400).json({ error: 'email is required' });
+    const email = normalizeEmail((req.body as { email?: unknown })?.email);
+    if (!email) return res.status(400).json({ error: 'A valid email is required' });
 
-        const user = await prisma.user.findUnique({ where: { email } });
-        if (!user) {
-            return res.json({ message: 'If an account exists for that email, a reset code has been sent.' });
-        }
+    // Respond first: the lookup, hashing and sending happen afterwards so timing is identical
+    // for registered and unregistered addresses.
+    res.json({ message: RESET_REQUESTED_MESSAGE });
 
-        const code = crypto.randomInt(0, 1000000).toString().padStart(6, '0');
+    runInBackground('forgotPassword', async () => {
+        const user = await findUserByEmail(email);
+        if (!user || user.is_suspended) return;
+
+        const code = generateNumericCode();
         const codeHash = await hashPassword(code);
-        const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
-
-        await prisma.passwordResetCode.create({
-            data: {
-                user_id: user.id,
-                code_hash: codeHash,
-                expires_at: expiresAt,
-            },
-        });
-
-        const html = `
-            <div style="font-family:Arial,sans-serif;line-height:1.5">
-              <h2>Password Reset Code</h2>
-              <p>Your password reset code is:</p>
-              <div style="font-size:24px;font-weight:bold;letter-spacing:4px">${code}</div>
-              <p>This code expires in 15 minutes.</p>
-              <p>If you did not request this, you can ignore this email.</p>
-            </div>
-        `;
+        await prisma.$transaction([
+            prisma.passwordResetCode.updateMany({ where: { user_id: user.id, used_at: null }, data: { used_at: new Date() } }),
+            prisma.passwordResetCode.create({
+                data: { user_id: user.id, code_hash: codeHash, expires_at: new Date(Date.now() + RESET_CODE_TTL_MS) },
+            }),
+        ]);
 
         await emailService.sendEmail({
-            to: email,
+            to: user.email,
             subject: 'Your EmpowerEd password reset code',
-            html,
+            html: `
+                <div style="font-family:Arial,sans-serif;line-height:1.5">
+                  <h2>Password Reset Code</h2>
+                  <p>Your password reset code is:</p>
+                  <div style="font-size:24px;font-weight:bold;letter-spacing:4px">${code}</div>
+                  <p>This code expires in 15 minutes.</p>
+                  <p>If you did not request this, you can ignore this email.</p>
+                </div>
+            `,
         });
-
-        return res.json({ message: 'If an account exists for that email, a reset code has been sent.' });
-    } catch (error) {
-        console.error('forgotPassword error:', error);
-        return res.status(500).json({ error: 'Server error' });
-    }
+    });
 };
+
+const ResetPasswordSchema = z.object({
+    email: z.string(),
+    code: z.string().trim().regex(/^\d{6}$/),
+    newPassword: PasswordSchema,
+});
 
 export const resetPassword = async (req: Request, res: Response) => {
     try {
-        const { email, code, newPassword } = req.body as { email?: string; code?: string; newPassword?: string };
-        if (!email || !code || !newPassword) return res.status(400).json({ error: 'email, code, and newPassword are required' });
-        if (typeof email !== 'string' || typeof code !== 'string' || typeof newPassword !== 'string') return res.status(400).json({ error: 'Invalid payload' });
-        if (newPassword.length < PASSWORD_MIN_LENGTH) return res.status(400).json({ error: `New password must be at least ${PASSWORD_MIN_LENGTH} characters` });
+        const parsed = ResetPasswordSchema.safeParse(req.body);
+        if (!parsed.success) {
+            const passwordIssue = parsed.error.issues.find((i) => i.path[0] === 'newPassword');
+            return res.status(400).json({ error: passwordIssue ? passwordIssue.message : INVALID_CODE_MESSAGE });
+        }
+        const email = normalizeEmail(parsed.data.email);
+        if (!email) return res.status(400).json({ error: INVALID_CODE_MESSAGE });
 
-        const user = await prisma.user.findUnique({ where: { email } });
-        if (!user) return res.status(400).json({ error: 'Invalid code or email' });
+        const user = await findUserByEmail(email);
+        if (!user) {
+            await compareDummyPassword(parsed.data.code);
+            return res.status(400).json({ error: INVALID_CODE_MESSAGE });
+        }
 
         const latest = await prisma.passwordResetCode.findFirst({
-            where: {
-                user_id: user.id,
-                used_at: null,
-                expires_at: { gt: new Date() },
-            },
+            where: { user_id: user.id, used_at: null, expires_at: { gt: new Date() } },
             orderBy: { created_at: 'desc' },
         });
+        if (!latest) return res.status(400).json({ error: INVALID_CODE_MESSAGE });
 
-        if (!latest) return res.status(400).json({ error: 'Invalid or expired code' });
+        const ok = await comparePassword(parsed.data.code, latest.code_hash);
+        if (!ok) {
+            const attempts = latest.attempts + 1;
+            await prisma.passwordResetCode.update({
+                where: { id: latest.id },
+                data: { attempts, ...(attempts >= MAX_CODE_ATTEMPTS ? { used_at: new Date() } : {}) },
+            });
+            return res.status(400).json({ error: INVALID_CODE_MESSAGE });
+        }
 
-        const ok = await comparePassword(code, latest.code_hash);
-        if (!ok) return res.status(400).json({ error: 'Invalid or expired code' });
-
-        const nextHash = await hashPassword(newPassword);
+        const nextHash = await hashPassword(parsed.data.newPassword);
         await prisma.$transaction([
-            prisma.user.update({ where: { id: user.id }, data: { password_hash: nextHash } }),
-            prisma.passwordResetCode.update({ where: { id: latest.id }, data: { used_at: new Date() } }),
+            // Signs out every existing session (including a stolen one).
+            prisma.user.update({ where: { id: user.id }, data: { password_hash: nextHash, token_version: { increment: 1 } } }),
+            prisma.passwordResetCode.updateMany({ where: { user_id: user.id, used_at: null }, data: { used_at: new Date() } }),
         ]);
 
+        runInBackground('resetPassword notice', () => sendPasswordChangedNotice(user.email));
         return res.json({ message: 'Password reset successfully' });
     } catch (error) {
         console.error('resetPassword error:', error);
@@ -308,19 +378,23 @@ export const me = async (req: AuthRequest, res: Response) => {
 
 export const login = async (req: Request, res: Response) => {
     try {
-        const { email, password } = LoginSchema.parse(req.body);
+        const parsed = LoginSchema.safeParse(req.body);
+        if (!parsed.success) return res.status(400).json({ error: 'Please enter a valid email and password' });
+        const { email, password } = parsed.data;
 
-        const user = await prisma.user.findUnique({
-            where: { email },
-            include: {
-                student_profile: true,
-                tutor_profile: true
-            }
-        });
-
-        if (!user || !(await comparePassword(password, user.password_hash))) {
+        const found = await findUserByEmail(email);
+        if (!found) {
+            await compareDummyPassword(password);
             return res.status(401).json({ error: 'Invalid credentials' });
         }
+        if (!(await comparePassword(password, found.password_hash))) {
+            return res.status(401).json({ error: 'Invalid credentials' });
+        }
+
+        const user = await prisma.user.findUniqueOrThrow({
+            where: { id: found.id },
+            include: { student_profile: true, tutor_profile: true },
+        });
 
         // Block sign-in until the email address has been verified.
         if (!user.is_verified) {
@@ -339,7 +413,13 @@ export const login = async (req: Request, res: Response) => {
             });
         }
 
-        const token = generateToken(user.id, user.role);
+        const client = getAppClient(req);
+        if (client === 'admin' && user.role !== 'ADMIN') {
+            return res.status(403).json({ error: 'Access denied: Admin privileges required.' });
+        }
+
+        setAuthCookie(res, client, generateToken(user.id, user.role, user.token_version));
+
         const username = user.role === 'STUDENT' ? user.student_profile?.username : user.tutor_profile?.username;
         let tier = user.role === 'TUTOR' ? user.tutor_profile?.tier : undefined;
         let isBeta = user.role === 'TUTOR' ? (user.tutor_profile?.is_beta ?? false) : undefined;
@@ -355,125 +435,102 @@ export const login = async (req: Request, res: Response) => {
             }
         }
 
-        res.json({
+        return res.json({
             message: 'Login successful',
-            token,
             user: { id: user.id, email: user.email, role: user.role, username, tier, is_beta: isBeta, timezone }
         });
-
-    } catch (error: any) {
-        res.status(400).json({ error: error.errors || 'Login failed' });
+    } catch (error) {
+        console.error('Login error:', error);
+        return res.status(500).json({ error: 'Login failed' });
     }
 };
 
-export const verifyEmail = async (req: Request, res: Response) => {
-    try {
-        const { token } = req.body;
-        if (!token) return res.status(400).json({ error: 'Token is required' });
-
-        const decoded = verifyToken(token);
-        if (!decoded || decoded.type !== 'email_verification') {
-            return res.status(400).json({ error: 'Invalid or expired verification token' });
+/** Ends this session only: its id is revoked server-side, so a copied cookie stops working too. */
+export const logout = async (req: Request, res: Response) => {
+    const token = getTokenFromRequest(req);
+    const decoded = token ? verifyAccessToken(token) : null;
+    if (decoded) {
+        try {
+            const expiresAt = new Date(decoded.exp * 1000);
+            await prisma.revokedSession.upsert({
+                where: { sid: decoded.sid },
+                create: { sid: decoded.sid, expires_at: expiresAt },
+                update: {},
+            });
+            await prisma.revokedSession.deleteMany({ where: { expires_at: { lt: new Date() } } });
+        } catch (error) {
+            console.error('logout error:', error);
         }
-
-        const user = await prisma.user.findUnique({ where: { id: decoded.id } });
-        if (!user) return res.status(404).json({ error: 'User not found' });
-
-        if (user.is_verified) {
-            return res.json({ message: 'Email already verified' });
-        }
-
-        await prisma.user.update({
-            where: { id: user.id },
-            data: { is_verified: true }
-        });
-
-        // Approved beta mentors get the Premium beta plan assigned automatically.
-        if (user.role === 'TUTOR') await ensureBetaPremiumAccess(user.id).catch(() => null);
-
-        return res.json({ message: 'Email verified successfully' });
-    } catch (error) {
-        console.error('verifyEmail error:', error);
-        return res.status(500).json({ error: 'Server error' });
     }
+    clearAuthCookie(res, getAppClient(req));
+    return res.json({ message: 'Logged out' });
 };
 
 export const resendVerification = async (req: Request, res: Response) => {
-    try {
-        const { email } = req.body;
-        if (!email) return res.status(400).json({ error: 'Email is required' });
+    const email = normalizeEmail((req.body as { email?: unknown })?.email);
+    if (!email) return res.status(400).json({ error: 'A valid email is required' });
 
-        const user = await prisma.user.findUnique({
-            where: { email },
-            include: { student_profile: true, tutor_profile: true }
-        });
+    res.json({ message: 'If this account still needs verification, a new code has been sent.' });
 
-        if (!user) return res.status(404).json({ error: 'User not found' });
-        if (user.is_verified) return res.status(400).json({ error: 'Email already verified' });
-
-        const code = crypto.randomInt(0, 1000000).toString().padStart(6, '0');
-        const codeHash = await hashPassword(code);
-        const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
-
-        await prisma.emailVerificationCode.create({
-            data: {
-                user_id: user.id,
-                code_hash: codeHash,
-                expires_at: expiresAt,
-            },
-        });
-
-        const username = user.role === 'STUDENT' ? user.student_profile?.username : user.tutor_profile?.username;
-
+    runInBackground('resendVerification', async () => {
+        const user = await findUserByEmail(email);
+        if (!user || user.is_verified) return;
+        const code = await issueVerificationCode(user.id);
         await emailService.sendVerificationCodeEmail({
-            username: username || 'User',
+            username: (await getUsername(user.id, user.role)) || 'User',
             email: user.email,
             code,
         });
-
-        return res.json({ message: 'Verification code sent' });
-    } catch (error) {
-        console.error('resendVerification error:', error);
-        return res.status(500).json({ error: 'Server error' });
-    }
+    });
 };
 
 export const verifyEmailCode = async (req: Request, res: Response) => {
     try {
-        const { email, code } = req.body as { email?: string; code?: string };
-        if (!email || !code) return res.status(400).json({ error: 'email and code are required' });
+        const email = normalizeEmail((req.body as { email?: unknown })?.email);
+        const code = (req.body as { code?: unknown })?.code;
+        if (!email || typeof code !== 'string' || !/^\d{6}$/.test(code.trim())) {
+            return res.status(400).json({ error: INVALID_CODE_MESSAGE });
+        }
 
-        const user = await prisma.user.findUnique({ where: { email } });
-        if (!user) return res.status(400).json({ error: 'Invalid email or code' });
-
-        if (user.is_verified) {
-            return res.json({ message: 'Email already verified' });
+        const user = await findUserByEmail(email);
+        if (!user || user.is_verified) {
+            // Already-verified accounts must sign in with their password; a code never grants a session here.
+            if (!user) await compareDummyPassword(code);
+            return res.status(400).json({ error: INVALID_CODE_MESSAGE });
         }
 
         const latest = await prisma.emailVerificationCode.findFirst({
-            where: {
-                user_id: user.id,
-                used_at: null,
-                expires_at: { gt: new Date() },
-            },
+            where: { user_id: user.id, used_at: null, expires_at: { gt: new Date() } },
             orderBy: { created_at: 'desc' },
         });
+        if (!latest) return res.status(400).json({ error: INVALID_CODE_MESSAGE });
 
-        if (!latest) return res.status(400).json({ error: 'Invalid or expired code. Request a new one.' });
+        const ok = await comparePassword(code.trim(), latest.code_hash);
+        if (!ok) {
+            const attempts = latest.attempts + 1;
+            await prisma.emailVerificationCode.update({
+                where: { id: latest.id },
+                data: { attempts, ...(attempts >= MAX_CODE_ATTEMPTS ? { used_at: new Date() } : {}) },
+            });
+            return res.status(400).json({ error: INVALID_CODE_MESSAGE });
+        }
 
-        const ok = await comparePassword(code, latest.code_hash);
-        if (!ok) return res.status(400).json({ error: 'Invalid or expired code.' });
+        const verified = await prisma.$transaction(async (tx) => {
+            await tx.emailVerificationCode.updateMany({ where: { user_id: user.id, used_at: null }, data: { used_at: new Date() } });
+            return tx.user.update({
+                where: { id: user.id },
+                data: {
+                    is_verified: true,
+                    ...(latest.pending_password_hash
+                        ? { password_hash: latest.pending_password_hash, token_version: { increment: 1 } }
+                        : {}),
+                },
+                select: { token_version: true },
+            });
+        });
 
-        await prisma.$transaction([
-            prisma.user.update({ where: { id: user.id }, data: { is_verified: true } }),
-            prisma.emailVerificationCode.update({ where: { id: latest.id }, data: { used_at: new Date() } }),
-        ]);
-
-        // Send welcome email now that email is confirmed
-        const username = user.role === 'STUDENT'
-            ? (await prisma.studentProfile.findUnique({ where: { user_id: user.id } }))?.username
-            : (await prisma.tutorProfile.findUnique({ where: { user_id: user.id } }))?.username;
-        try {
+        const username = await getUsername(user.id, user.role);
+        runInBackground('welcome email', async () => {
             const baseUrl = getClientBaseUrl();
             await emailService.sendWelcomeEmail({
                 username: username || 'User',
@@ -482,18 +539,18 @@ export const verifyEmailCode = async (req: Request, res: Response) => {
                 loginLink: `${baseUrl}/login`,
                 dashboardUrl: `${baseUrl}/dashboard`,
             });
-        } catch (_e) { /* non-fatal */ }
+        });
 
         // Approved beta mentors get the Premium beta plan assigned automatically — they never
         // see the plan/payment step and go straight to the dashboard.
         const beta = user.role === 'TUTOR' ? await ensureBetaPremiumAccess(user.id).catch(() => null) : null;
 
-        // Issue the login token ONLY now that the email is verified. The registration
-        // endpoint deliberately does not grant mentors access before this step.
-        const token = generateToken(user.id, user.role);
+        if (user.is_suspended) return res.json({ message: 'Email verified successfully' });
+
+        // The session starts only now that the email is verified.
+        setAuthCookie(res, getAppClient(req), generateToken(user.id, user.role, verified.token_version));
         return res.json({
             message: 'Email verified successfully',
-            token,
             user: {
                 id: user.id,
                 email: user.email,

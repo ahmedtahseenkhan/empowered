@@ -73,15 +73,13 @@ const SubAdminsPage: React.FC = () => {
 
     const handleSave = async () => {
         setError('');
-        if (!editing) {
-            if (!form.email.trim() || !form.username.trim() || !form.password) {
-                setError('Email, username, and password are required.');
-                return;
-            }
-            if (form.password.length < 8) {
-                setError('Password must be at least 8 characters.');
-                return;
-            }
+        if (!editing && (!form.email.trim() || !form.username.trim() || !form.password)) {
+            setError('Email, username, and password are required.');
+            return;
+        }
+        if (form.password && form.password.length < 8) {
+            setError('Password must be at least 8 characters.');
+            return;
         }
         setSaving(true);
         try {
@@ -89,6 +87,8 @@ const SubAdminsPage: React.FC = () => {
                 await api.put(`/admin/sub-admins/${editing.id}`, {
                     username: form.username.trim(),
                     permissions: form.permissions,
+                    // Optional reset; the server signs the sub-admin out everywhere when it changes.
+                    ...(form.password ? { password: form.password } : {}),
                 });
             } else {
                 const res = await api.post('/admin/sub-admins', {
@@ -97,11 +97,12 @@ const SubAdminsPage: React.FC = () => {
                     username: form.username.trim(),
                     permissions: form.permissions,
                 });
-                if (res.data?.emailSent === false) {
-                    window.alert(
-                        `Sub-admin created, but the credentials email could not be sent to ${form.email.trim()}. Please share the login details manually.`,
-                    );
-                }
+                // The password is never emailed; the super admin shares it out of band.
+                window.alert(
+                    res.data?.emailSent === false
+                        ? `Sub-admin created, but the welcome email could not be sent to ${form.email.trim()}. Share the sign-in link and password with them securely.`
+                        : `Sub-admin created. The welcome email does not include the password, so share it with ${form.email.trim()} securely (or they can use "Forgot password").`,
+                );
             }
             setModalOpen(false);
             await fetchSubAdmins();
@@ -245,28 +246,29 @@ const SubAdminsPage: React.FC = () => {
                             </div>
 
                             {!editing && (
-                                <>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                                        <input
-                                            type="email"
-                                            value={form.email}
-                                            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                                        <input
-                                            type="password"
-                                            value={form.password}
-                                            onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-                                            placeholder="At least 8 characters"
-                                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                        />
-                                    </div>
-                                </>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                                    <input
+                                        type="email"
+                                        value={form.email}
+                                        onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                    />
+                                </div>
                             )}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    {editing ? 'Reset password (optional)' : 'Password'}
+                                </label>
+                                <input
+                                    type="password"
+                                    autoComplete="new-password"
+                                    value={form.password}
+                                    onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                                    placeholder={editing ? 'Leave blank to keep the current password' : 'At least 8 characters'}
+                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                />
+                            </div>
 
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">Module Access</label>

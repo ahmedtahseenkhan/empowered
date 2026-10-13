@@ -3,6 +3,8 @@ import { DashboardLayout } from '../layouts/DashboardLayout';
 import { Button } from '../components/ui/Button';
 import { Send } from 'lucide-react';
 import api from '../api/axios';
+import BotProtectionFields from '../components/common/BotProtectionFields';
+import { useBotProtection } from '../hooks/useBotProtection';
 
 const HelpSupportPage: React.FC = () => {
     const [formData, setFormData] = useState({
@@ -12,6 +14,8 @@ const HelpSupportPage: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [sent, setSent] = useState(false);
+    // Signed-in page: the API skips Turnstile for authenticated users, so only the honeypot is needed.
+    const bot = useBotProtection();
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
@@ -26,6 +30,7 @@ const HelpSupportPage: React.FC = () => {
             await api.post('/support', {
                 subject: formData.subject.trim(),
                 message: formData.message.trim(),
+                ...bot.fields,
             });
             setSent(true);
             setFormData({ subject: '', message: '' });
@@ -58,6 +63,7 @@ const HelpSupportPage: React.FC = () => {
                         <div className="mb-6 p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>
                     )}
                     <form onSubmit={handleSubmit} className="space-y-8">
+                        <BotProtectionFields bot={bot} captcha={false} />
                         {/* Subject */}
                         <div>
                             <label className="block text-sm font-semibold text-gray-900 mb-3">

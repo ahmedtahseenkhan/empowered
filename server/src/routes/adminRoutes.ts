@@ -1,5 +1,6 @@
-import express from 'express';
-import { authenticateToken } from '../middleware/authMiddleware';
+import express, { Response, NextFunction } from 'express';
+import { authenticateToken, AuthRequest } from '../middleware/authMiddleware';
+import { logAdminAction } from '../utils/auditLog';
 import { requireAdmin } from '../middleware/requireAdmin';
 import { requirePermission, requireSuperAdmin } from '../middleware/requirePermission';
 import {
@@ -38,6 +39,7 @@ import {
     adminDeleteSubAdmin,
     adminGetGoogleMeetStatus,
     adminUpgradeSessionsToOpenAccess,
+    adminListAuditLogs,
 } from '../controllers/adminController';
 import {
     adminGetStudentWallet,
@@ -53,6 +55,26 @@ import {
 
 const router = express.Router();
 
+/**
+ * Audit a mutation handled by a controller outside adminController (e.g. wallet): records the
+ * action once the response has been sent, only when it succeeded (status < 400).
+ */
+const BODY_FIELDS_TO_AUDIT = ['amount', 'type', 'reason', 'action', 'note', 'frozen', 'method', 'force', 'proofUrl'];
+const auditOnSuccess = (action: string, targetType: string) => (req: AuthRequest, res: Response, next: NextFunction) => {
+    res.on('finish', () => {
+        if (res.statusCode >= 400) return;
+        const body = (req.body && typeof req.body === 'object' ? req.body : {}) as Record<string, unknown>;
+        const details: Record<string, unknown> = {};
+        for (const key of BODY_FIELDS_TO_AUDIT) {
+            const value = body[key];
+            if (value === undefined) continue;
+            details[key] = typeof value === 'string' ? value.slice(0, 500) : value;
+        }
+        void logAdminAction(req, action, { type: targetType, id: req.params.id ?? null }, details);
+    });
+    next();
+};
+
 router.use(authenticateToken);
 router.use(requireAdmin);
 
@@ -65,8 +87,8 @@ router.put('/mentors/:id/approved', requirePermission('mentors'), adminSetMentor
 router.get('/students', requirePermission('students'), adminListStudents);
 router.get('/students/:id', requirePermission('students'), adminGetStudent);
 router.get('/students/:id/wallet', requirePermission('students', 'payments'), adminGetStudentWallet);
-router.post('/students/:id/credits', requirePermission('students', 'payments'), adminAdjustStudentCredits);
-router.put('/students/:id/wallet/freeze', requirePermission('students', 'payments'), adminSetWalletFrozen);
+router.post('/students/:id/credits', requirePermission('students', 'payments'), auditOnSuccess('wallet.credits_adjust', 'student_profile'), adminAdjustStudentCredits);
+router.put('/students/:id/wallet/freeze', requirePermission('students', 'payments'), auditOnSuccess('wallet.freeze_toggle', 'student_profile'), adminSetWalletFrozen);
 
 // Suspend/unsuspend is used from both mentor and student detail pages.
 router.put('/users/:userId/suspended', requirePermission('mentors', 'students'), adminSetUserSuspended);
@@ -82,10 +104,10 @@ router.put('/approvals/external-reviews/:id/reject', requirePermission('approval
 router.get('/subscriptions', requirePermission('subscriptions'), adminListSubscriptions);
 router.get('/payments', requirePermission('payments'), adminListPayments);
 router.get('/wallet/disputes', requirePermission('payments'), adminListDisputes);
-router.put('/wallet/disputes/:id/resolve', requirePermission('payments'), adminResolveDispute);
+router.put('/wallet/disputes/:id/resolve', requirePermission('payments'), auditOnSuccess('wallet.dispute_resolve', 'dispute'), adminResolveDispute);
 router.get('/wallet/mentor-earnings', requirePermission('payments'), adminListMentorEarnings);
-router.put('/wallet/mentors/:id/mark-paid', requirePermission('payments'), adminMarkMentorPaid);
-router.post('/wallet/settlement/run', requirePermission('payments'), adminRunSettlement);
+router.put('/wallet/mentors/:id/mark-paid', requirePermission('payments'), auditOnSuccess('wallet.mark_paid', 'tutor_profile'), adminMarkMentorPaid);
+router.post('/wallet/settlement/run', requirePermission('payments'), auditOnSuccess('wallet.settlement_run', 'settlement'), adminRunSettlement);
 router.get('/wallet/payouts', requirePermission('payments'), adminListPayouts);
 
 router.get('/support', requirePermission('support'), adminListTickets);
@@ -115,5 +137,7 @@ router.get('/sub-admins', requireSuperAdmin, adminListSubAdmins);
 router.post('/sub-admins', requireSuperAdmin, adminCreateSubAdmin);
 router.put('/sub-admins/:id', requireSuperAdmin, adminUpdateSubAdmin);
 router.delete('/sub-admins/:id', requireSuperAdmin, adminDeleteSubAdmin);
+
+router.get('/audit-logs', requireSuperAdmin, adminListAuditLogs);
 
 export default router;

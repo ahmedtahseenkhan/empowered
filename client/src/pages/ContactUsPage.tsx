@@ -4,6 +4,9 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
 import api from '../api/axios';
+import { useAuth } from '../context/AuthContext';
+import BotProtectionFields from '../components/common/BotProtectionFields';
+import { useBotProtection } from '../hooks/useBotProtection';
 
 export const ContactUsPage: React.FC = () => {
     const [formData, setFormData] = useState({
@@ -15,6 +18,10 @@ export const ContactUsPage: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [sent, setSent] = useState(false);
+    const { user } = useAuth();
+    const bot = useBotProtection();
+    // The API only asks guests for the Turnstile check.
+    const isGuest = !user;
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -26,12 +33,14 @@ export const ContactUsPage: React.FC = () => {
                 email: formData.email.trim(),
                 subject: formData.subject.trim(),
                 message: formData.message.trim(),
+                ...bot.fields,
             });
             setSent(true);
             setFormData({ name: '', email: '', subject: '', message: '' });
         } catch (err: any) {
             setError(err?.response?.data?.error || 'Failed to send message. Please try again.');
         } finally {
+            bot.reset();
             setLoading(false);
         }
     };
@@ -112,7 +121,9 @@ export const ContactUsPage: React.FC = () => {
                                 />
                             </div>
 
-                            <Button type="submit" variant="primary" size="lg" className="w-full" disabled={loading}>
+                            <BotProtectionFields bot={bot} action="contact" captcha={isGuest} />
+
+                            <Button type="submit" variant="primary" size="lg" className="w-full" disabled={loading || (isGuest && !bot.ready)}>
                                 {loading ? 'Sending...' : 'Send Message'}
                             </Button>
                         </form>

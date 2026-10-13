@@ -5,6 +5,8 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
 import api from '../api/axios';
+import BotProtectionFields from '../components/common/BotProtectionFields';
+import { useBotProtection } from '../hooks/useBotProtection';
 
 export const StudentRegisterPage: React.FC = () => {
     const navigate = useNavigate();
@@ -17,6 +19,7 @@ export const StudentRegisterPage: React.FC = () => {
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [submitError, setSubmitError] = useState('');
     const [submitting, setSubmitting] = useState(false);
+    const bot = useBotProtection();
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setFormData({
@@ -73,6 +76,7 @@ export const StudentRegisterPage: React.FC = () => {
                 email,
                 password: formData.password,
                 role: 'STUDENT',
+                ...bot.fields,
             });
 
             // Account created but not yet usable — must verify email first.
@@ -80,6 +84,7 @@ export const StudentRegisterPage: React.FC = () => {
         } catch (err: any) {
             setSubmitError(err.response?.data?.error || 'Registration failed. Please try again.');
         } finally {
+            bot.reset();
             setSubmitting(false);
         }
     };
@@ -146,7 +151,9 @@ export const StudentRegisterPage: React.FC = () => {
                                 placeholder="Re-enter your password"
                             />
 
-                            <Button type="submit" variant="primary" size="lg" className="w-full mt-6">
+                            <BotProtectionFields bot={bot} action="register" className="pt-2" />
+
+                            <Button type="submit" variant="primary" size="lg" className="w-full mt-6" disabled={submitting || !bot.ready}>
                                 {submitting ? 'Creating...' : 'Create Account'}
                             </Button>
                         </form>

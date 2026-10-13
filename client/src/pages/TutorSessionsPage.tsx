@@ -10,6 +10,7 @@ import CustomSessionModal from '../components/sessions/CustomSessionModal';
 import GoogleMeetConnectCard from '../components/tutor/GoogleMeetConnectCard';
 import type { CustomSessionPrefill, CreatedCustomSession } from '../components/sessions/CustomSessionModal';
 import api from '../api/axios';
+import { safeExternalUrl } from '../utils/safeUrl';
 
 // Earliest date the Past tab looks back to (before the platform launched)
 const PAST_SESSIONS_FROM = '2020-01-01T00:00:00.000Z';
@@ -410,8 +411,8 @@ const TutorSessionsPage: React.FC = () => {
                                                                 try {
                                                                     setJoinBusyId(l.id);
                                                                     const res = await api.get(`/lessons/${l.id}/join`);
-                                                                    const url = res.data?.meeting_link as string | undefined;
-                                                                    if (url) window.open(url, '_blank');
+                                                                    const url = safeExternalUrl(res.data?.meeting_link);
+                                                                    if (url) window.open(url, '_blank', 'noopener,noreferrer');
                                                                     else setNotice({ title: 'Meeting link not ready', message: 'The Google Meet link is not available yet. Please try again in a minute.' });
                                                                 } catch (err) {
                                                                     setNotice({ title: 'Error', message: apiError(err, 'Unable to join session. Please try again.') });
@@ -423,7 +424,7 @@ const TutorSessionsPage: React.FC = () => {
                                                             <ExternalLink className="w-4 h-4" />
                                                             {joinBusyId === l.id ? 'Joining…' : 'Join Session'}
                                                         </Button>
-                                                        <a href={`/tutor/whiteboard?lesson=${l.id}`} target="_blank" rel="noreferrer">
+                                                        <a href={`/tutor/whiteboard?lesson=${l.id}`} target="_blank" rel="noopener noreferrer">
                                                             <Button variant="outline" className="flex items-center gap-2">
                                                                 <ExternalLink className="w-4 h-4" />
                                                                 Open Whiteboard
@@ -503,7 +504,7 @@ const TutorSessionsPage: React.FC = () => {
                                                 </Button>
                                             ) : null}
                                             {l.google_calendar_html_link ? (
-                                                <a href={l.google_calendar_html_link} target="_blank" rel="noreferrer">
+                                                <a href={safeExternalUrl(l.google_calendar_html_link)} target="_blank" rel="noopener noreferrer">
                                                     <Button variant="outline">Open in Calendar</Button>
                                                 </a>
                                             ) : null}

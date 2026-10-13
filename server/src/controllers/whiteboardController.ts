@@ -2,6 +2,31 @@ import { Request, Response } from 'express';
 import { AuthRequest } from '../middleware/authMiddleware';
 import prisma from '../config/db';
 
+const MAX_SCENE_ELEMENTS = 5000;
+const MAX_TITLE_CHARS = 200;
+
+/** scene_data must be a plain object whose optional `elements`/`shapes` arrays hold at most MAX_SCENE_ELEMENTS objects. */
+const validateScene = (scene: unknown): string | null => {
+    if (scene === null || typeof scene !== 'object' || Array.isArray(scene)) return 'scene_data must be an object';
+    for (const key of ['elements', 'shapes']) {
+        const list = (scene as Record<string, unknown>)[key];
+        if (list === undefined) continue;
+        if (!Array.isArray(list)) return `scene_data.${key} must be an array`;
+        if (list.length > MAX_SCENE_ELEMENTS) return `A board can hold at most ${MAX_SCENE_ELEMENTS} elements`;
+        if (!list.every((el) => el !== null && typeof el === 'object' && !Array.isArray(el))) return `scene_data.${key} is invalid`;
+    }
+    return null;
+};
+
+// An empty title is allowed (saved as "Untitled Board") so clearing the title never blocks saving a drawing.
+const validateTitle = (title: unknown): string | null =>
+    title === undefined || title === null || (typeof title === 'string' && title.length <= MAX_TITLE_CHARS)
+        ? null
+        : `title must be at most ${MAX_TITLE_CHARS} characters`;
+
+const normalizeTitle = (title: unknown): string =>
+    typeof title === 'string' && title.trim() ? title.trim() : 'Untitled Board';
+
 export const listWhiteboards = async (req: AuthRequest, res: Response): Promise<void> => {
     const tutorProfile = await prisma.tutorProfile.findUnique({
         where: { user_id: req.user!.id },
@@ -48,7 +73,12 @@ export const getWhiteboard = async (req: AuthRequest, res: Response): Promise<vo
 };
 
 export const createWhiteboard = async (req: AuthRequest, res: Response): Promise<void> => {
-    const { title = 'Untitled Board', scene_data } = req.body;
+    const { title = 'Untitled Board', scene_data } = req.body ?? {};
+    const invalid = validateTitle(title) || (scene_data !== undefined && scene_data !== null ? validateScene(scene_data) : null);
+    if (invalid) {
+        res.status(400).json({ error: invalid });
+        return;
+    }
 
     const tutorProfile = await prisma.tutorProfile.findUnique({
         where: { user_id: req.user!.id },
@@ -63,7 +93,7 @@ export const createWhiteboard = async (req: AuthRequest, res: Response): Promise
     const board = await prisma.whiteboard.create({
         data: {
             tutor_id: tutorProfile.id,
-            title,
+            title: normalizeTitle(title),
             scene_data: scene_data ?? {},
         },
     });
@@ -73,7 +103,12 @@ export const createWhiteboard = async (req: AuthRequest, res: Response): Promise
 
 export const updateWhiteboard = async (req: AuthRequest, res: Response): Promise<void> => {
     const { id } = req.params;
-    const { title, scene_data } = req.body;
+    const { title, scene_data } = req.body ?? {};
+    const invalid = (title !== undefined ? validateTitle(title) : null) || (scene_data !== undefined ? validateScene(scene_data) : null);
+    if (invalid) {
+        res.status(400).json({ error: invalid });
+        return;
+    }
 
     const tutorProfile = await prisma.tutorProfile.findUnique({
         where: { user_id: req.user!.id },
@@ -97,7 +132,7 @@ export const updateWhiteboard = async (req: AuthRequest, res: Response): Promise
     const updated = await prisma.whiteboard.update({
         where: { id },
         data: {
-            ...(title !== undefined && { title }),
+            ...(title !== undefined && title !== null && { title: normalizeTitle(title) }),
             ...(scene_data !== undefined && { scene_data }),
         },
     });

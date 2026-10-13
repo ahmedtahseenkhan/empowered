@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import prisma from '../config/db';
 import { AuthRequest } from '../middleware/authMiddleware'; // Assuming this exists or defining inline
 import { LessonSummary, emptyLessonSummary, addLessonToSummary, serializeLessonSummary } from '../utils/lessonSummary';
+import { isSafeHttpUrl } from '../utils/validation';
 
 interface AuthenticatedRequest extends Request {
     user?: {
@@ -9,6 +10,86 @@ interface AuthenticatedRequest extends Request {
         role: string;
     };
 }
+
+// ─── Input validation helpers ──────────────────────────────────────────────
+class ValidationError extends Error {}
+
+const MAX_DATA_URL_BYTES = 7 * 1024 * 1024;
+const IMAGE_DATA_MIMES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+const CERT_DATA_MIMES = [...IMAGE_DATA_MIMES, 'application/pdf'];
+const MIN_HOURLY_RATE = 1;
+const MAX_HOURLY_RATE = 1000;
+
+const isUploadPath = (v: string) => /^\/api\/(?:uploads|files)\/[A-Za-z0-9._-]+$/.test(v);
+
+const isAllowedDataUrl = (v: string, mimes: string[]) => {
+    const m = /^data:([a-z0-9.+\/-]+);base64,([A-Za-z0-9+/]+={0,2})$/i.exec(v);
+    if (!m || !mimes.includes(m[1].toLowerCase())) return false;
+    return Math.floor((m[2].length * 3) / 4) <= MAX_DATA_URL_BYTES;
+};
+
+/** Image/document reference: null, http(s) URL, our own upload path, or an allow-listed base64 data URL. */
+const mediaUrl = (v: unknown, dataMimes: string[], label: string): string | null => {
+    if (v === null || v === undefined) return null;
+    if (typeof v !== 'string') throw new ValidationError(`${label} is invalid`);
+    const t = v.trim();
+    if (!t) return null;
+    if (t.startsWith('data:')) {
+        if (isAllowedDataUrl(t, dataMimes)) return t;
+        throw new ValidationError(`${label} must be a ${dataMimes.includes('application/pdf') ? 'PNG, JPEG, WEBP, GIF or PDF' : 'PNG, JPEG, WEBP or GIF'} file under 7MB`);
+    }
+    if (isUploadPath(t) || isSafeHttpUrl(t)) return t;
+    throw new ValidationError(`${label} must be an uploaded file or an http(s) link`);
+};
+
+/** User-entered link: '' / null → null, bare domains get https://, anything but http(s) is rejected. */
+const httpLink = (v: unknown, label: string): string | null => {
+    if (v === null || v === undefined) return null;
+    if (typeof v !== 'string') throw new ValidationError(`${label} is invalid`);
+    let t = v.trim();
+    if (!t) return null;
+    if (!/^[a-z][a-z0-9+.-]*:/i.test(t)) t = `https://${t.replace(/^\/+/, '')}`;
+    if (!isSafeHttpUrl(t)) throw new ValidationError(`${label} must be a valid http(s) link`);
+    return t;
+};
+
+/** Optional text field: undefined stays undefined (field untouched), '' / null → null. */
+const optionalText = (v: unknown, max: number, label: string): string | null | undefined => {
+    if (v === undefined) return undefined;
+    if (v === null) return null;
+    if (typeof v !== 'string') throw new ValidationError(`${label} must be text`);
+    const t = v.trim();
+    if (t.length > max) throw new ValidationError(`${label} must be at most ${max} characters`);
+    return t || null;
+};
+
+const requiredText = (v: unknown, max: number, label: string): string => {
+    const t = optionalText(v, max, label);
+    if (!t) throw new ValidationError(`${label} is required`);
+    return t;
+};
+
+const intInRange = (v: unknown, min: number, max: number, label: string): number => {
+    const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() ? Number(v) : NaN;
+    if (!Number.isFinite(n) || !Number.isInteger(n) || n < min || n > max) {
+        throw new ValidationError(`${label} must be a whole number between ${min} and ${max}`);
+    }
+    return n;
+};
+
+const asArray = (v: unknown, max: number, label: string): any[] => {
+    if (!Array.isArray(v)) throw new ValidationError(`${label} must be a list`);
+    if (v.length > max) throw new ValidationError(`${label} can have at most ${max} entries`);
+    return v;
+};
+
+const sendValidationError = (res: Response, error: unknown): boolean => {
+    if (error instanceof ValidationError) {
+        res.status(400).json({ error: error.message });
+        return true;
+    }
+    return false;
+};
 
 // Grants the Founding Mentor badge to a beta mentor whose profile is now complete.
 async function checkAndGrantFoundingMentor(tutorId: string) {
@@ -422,7 +503,23 @@ export const getProfile = async (req: AuthenticatedRequest, res: Response) => {
                 certifications: true,
                 languages: true,
                 availabilities: true,
-                google_calendar_connection: true,
+                // Never send the encrypted OAuth tokens to the browser
+                google_calendar_connection: {
+                    select: {
+                        id: true,
+                        tutor_id: true,
+                        calendar_id: true,
+                        timezone: true,
+                        sync_enabled: true,
+                        scope: true,
+                        expires_at: true,
+                        google_email: true,
+                        needs_reconnect: true,
+                        last_error: true,
+                        created_at: true,
+                        updated_at: true,
+                    },
+                },
                 external_reviews: true,
                 marketing_video_submission: true
             }
@@ -480,18 +577,17 @@ export const upsertMarketingVideoSubmission = async (req: AuthenticatedRequest, 
             action?: 'save_link' | 'request_email';
         };
 
-        if (video_url !== undefined && typeof video_url !== 'string') {
-            return res.status(400).json({ error: 'video_url must be a string' });
+        if (action !== undefined && action !== 'save_link' && action !== 'request_email') {
+            return res.status(400).json({ error: 'action is invalid' });
         }
-        if (instructions !== undefined && typeof instructions !== 'string') {
-            return res.status(400).json({ error: 'instructions must be a string' });
-        }
+        const cleanVideoUrl = httpLink(video_url, 'Video link');
+        const cleanInstructions = optionalText(instructions, 5000, 'Instructions') ?? null;
 
         const now = new Date();
 
         const data: any = {
-            video_url: video_url ?? null,
-            instructions: instructions ?? null,
+            video_url: cleanVideoUrl,
+            instructions: cleanInstructions,
         };
 
         if (action === 'request_email') {
@@ -514,6 +610,7 @@ export const upsertMarketingVideoSubmission = async (req: AuthenticatedRequest, 
 
         return res.json({ submission });
     } catch (error) {
+        if (sendValidationError(res, error)) return;
         console.error('Upsert Marketing Video Submission Error:', error);
         return res.status(500).json({ error: 'Server error' });
     }
@@ -619,46 +716,45 @@ export const updateBio = async (req: AuthenticatedRequest, res: Response) => {
             facebook_url, instagram_url, linkedin_url, twitter_url, youtube_url, tiktok_url, website_url,
         } = req.body;
 
-        // Normalize social links: trim, and store null (not empty string) when cleared.
-        const cleanUrl = (v: unknown) =>
-            v === undefined ? undefined : (typeof v === 'string' && v.trim() ? v.trim() : null);
+        // Links: undefined leaves the stored value alone; '' clears it; only http(s) is stored.
+        const link = (v: unknown, label: string) => (v === undefined ? undefined : httpLink(v, label));
+
+        const data = {
+            tagline: optionalText(tagline, 200, 'Tagline'),
+            about: optionalText(about, 10000, 'About'),
+            country: optionalText(country, 100, 'Country'),
+            key_strengths: optionalText(key_strengths, 5000, 'Key strengths'),
+            video_url: link(video_url, 'Video link'),
+            profile_photo: profile_photo === undefined ? undefined : mediaUrl(profile_photo, IMAGE_DATA_MIMES, 'Profile photo'),
+            experience_years: typeof experience_years === 'number' ? intInRange(experience_years, 0, 80, 'Years of experience') : undefined,
+            facebook_url: link(facebook_url, 'Facebook link'),
+            instagram_url: link(instagram_url, 'Instagram link'),
+            linkedin_url: link(linkedin_url, 'LinkedIn link'),
+            twitter_url: link(twitter_url, 'Twitter link'),
+            youtube_url: link(youtube_url, 'YouTube link'),
+            tiktok_url: link(tiktok_url, 'TikTok link'),
+            website_url: link(website_url, 'Website link'),
+        };
+
+        const languageRows = languages && Array.isArray(languages)
+            ? asArray(languages, 30, 'Languages').map((lang: any) => ({
+                language: requiredText(lang?.language, 100, 'Language'),
+                proficiency: optionalText(lang?.proficiency, 50, 'Proficiency') || 'Native',
+            }))
+            : null;
 
         const updatedProfile = await prisma.tutorProfile.update({
             where: { user_id: userId },
-            data: {
-                tagline,
-                about,
-                country,
-                video_url,
-                profile_photo,
-                experience_years: typeof experience_years === 'number' ? experience_years : undefined,
-                key_strengths, // Assuming string
-                facebook_url: cleanUrl(facebook_url),
-                instagram_url: cleanUrl(instagram_url),
-                linkedin_url: cleanUrl(linkedin_url),
-                twitter_url: cleanUrl(twitter_url),
-                youtube_url: cleanUrl(youtube_url),
-                tiktok_url: cleanUrl(tiktok_url),
-                website_url: cleanUrl(website_url),
-                // Note: profile_photo is usually handled by upload middleware, but assuming string URL here
-                // languages: Handle relation update if passed
-            }
+            data,
         });
 
         // Handle Languages (if they are passed as array of strings)
-        if (languages && Array.isArray(languages)) {
-            // 1. Get tutor ID
+        if (languageRows) {
             const tutorId = updatedProfile.id;
-            // 2. Delete existing
             await prisma.tutorLanguage.deleteMany({ where: { tutor_id: tutorId } });
-            // 3. Create new
-            if (languages.length > 0) {
+            if (languageRows.length > 0) {
                 await prisma.tutorLanguage.createMany({
-                    data: languages.map((lang: any) => ({
-                        tutor_id: tutorId,
-                        language: lang.language,
-                        proficiency: lang.proficiency || 'Native'
-                    }))
+                    data: languageRows.map((lang) => ({ tutor_id: tutorId, ...lang })),
                 });
             }
         }
@@ -666,6 +762,7 @@ export const updateBio = async (req: AuthenticatedRequest, res: Response) => {
         await checkAndGrantFoundingMentor(updatedProfile.id).catch(() => null);
         res.json(updatedProfile);
     } catch (error) {
+        if (sendValidationError(res, error)) return;
         console.error('Update Bio Error:', error);
         res.status(500).json({ error: 'Server error' });
     }
@@ -682,25 +779,70 @@ export const updateEducation = async (req: AuthenticatedRequest, res: Response) 
         const profile = await prisma.tutorProfile.findUnique({ where: { user_id: userId } });
         if (!profile) return res.status(404).json({ error: 'Profile not found' });
         const tutorId = profile.id;
+        const thisYear = new Date().getFullYear();
+
+        const educationRows = education
+            ? asArray(education, 20, 'Education').map((edu: any) => ({
+                institution: requiredText(edu?.institution, 200, 'Institution'),
+                degree: requiredText(edu?.degree, 200, 'Degree'),
+                field_of_study: optionalText(edu?.field_of_study, 200, 'Field of study') ?? '',
+                year: intInRange(edu?.year, 1900, thisYear + 10, 'Graduation year'),
+            }))
+            : null;
+
+        const experienceRows = experience
+            ? asArray(experience, 30, 'Experience').map((exp: any) => ({
+                role: requiredText(exp?.role, 200, 'Role'),
+                company: requiredText(exp?.company, 200, 'Company'),
+                start_year: intInRange(exp?.start_year, 1900, thisYear + 1, 'Start year'),
+                end_year: exp?.end_year === null || exp?.end_year === undefined || exp?.end_year === ''
+                    ? null
+                    : intInRange(exp.end_year, 1900, thisYear + 10, 'End year'),
+                description: optionalText(exp?.description, 5000, 'Description') ?? null,
+            }))
+            : null;
+
+        const existingCertImages = certifications
+            ? new Map((await prisma.tutorCertification.findMany({ where: { tutor_id: tutorId }, select: { id: true, image_url: true } }))
+                .map((c) => [c.id, c.image_url]))
+            : new Map<string, string | null>();
+
+        const certificationRows = certifications
+            ? asArray(certifications, 50, 'Certifications').map((cert: any) => {
+                const id = typeof cert?.id === 'string' ? cert.id : undefined;
+                // An unchanged image that is already stored (possibly from before validation existed) is kept as-is.
+                const storedImage = id !== undefined && existingCertImages.has(id) ? existingCertImages.get(id) ?? null : undefined;
+                const imageUrl = storedImage !== undefined && (cert?.image_url ?? null) === storedImage
+                    ? storedImage
+                    : mediaUrl(cert?.image_url, CERT_DATA_MIMES, 'Certification image');
+                return {
+                    id,
+                    name: requiredText(cert?.name, 200, 'Certification name'),
+                    issuer: requiredText(cert?.issuer, 200, 'Issuer'),
+                    year: intInRange(cert?.year, 1900, thisYear + 1, 'Certification year'),
+                    image_url: imageUrl,
+                };
+            })
+            : null;
 
         // Transaction to update all lists
         await prisma.$transaction(async (tx) => {
             // Update Education
-            if (education) {
+            if (educationRows) {
                 await tx.tutorEducation.deleteMany({ where: { tutor_id: tutorId } });
-                if (education.length > 0) {
+                if (educationRows.length > 0) {
                     await tx.tutorEducation.createMany({
-                        data: education.map((edu: any) => ({ ...edu, tutor_id: tutorId }))
+                        data: educationRows.map((edu) => ({ ...edu, tutor_id: tutorId }))
                     });
                 }
             }
 
             // Update Experience
-            if (experience) {
+            if (experienceRows) {
                 await tx.tutorExperience.deleteMany({ where: { tutor_id: tutorId } });
-                if (experience.length > 0) {
+                if (experienceRows.length > 0) {
                     await tx.tutorExperience.createMany({
-                        data: experience.map((exp: any) => ({ ...exp, tutor_id: tutorId }))
+                        data: experienceRows.map((exp) => ({ ...exp, tutor_id: tutorId }))
                     });
                 }
             }
@@ -709,27 +851,27 @@ export const updateEducation = async (req: AuthenticatedRequest, res: Response) 
             // Reconcile by id so editing/removing one certification does NOT wipe the
             // admin-approved verification status of the others. Only brand-new or
             // content-changed certifications are (re)set to PENDING for re-review.
-            if (certifications) {
+            if (certificationRows) {
                 const existing = await tx.tutorCertification.findMany({ where: { tutor_id: tutorId } });
                 const existingById = new Map(existing.map((c) => [c.id, c]));
                 const keepIds = new Set<string>();
 
-                for (const cert of certifications as any[]) {
+                for (const cert of certificationRows) {
                     const data = {
-                        name: cert?.name,
-                        issuer: cert?.issuer,
-                        year: cert?.year,
-                        image_url: cert?.image_url ?? null,
+                        name: cert.name,
+                        issuer: cert.issuer,
+                        year: cert.year,
+                        image_url: cert.image_url,
                     };
 
                     // Only trust an id that actually belongs to this tutor.
-                    const prev = cert?.id ? existingById.get(cert.id) : undefined;
+                    const prev = cert.id ? existingById.get(cert.id) : undefined;
 
                     if (prev) {
                         keepIds.add(prev.id);
                         const unchanged =
-                            prev.name === data.name &&
-                            prev.issuer === data.issuer &&
+                            prev.name.trim() === data.name &&
+                            prev.issuer.trim() === data.issuer &&
                             prev.year === data.year &&
                             (prev.image_url ?? null) === data.image_url;
 
@@ -780,6 +922,7 @@ export const updateEducation = async (req: AuthenticatedRequest, res: Response) 
         res.json({ message: 'Professional details updated', profile: updated });
 
     } catch (error) {
+        if (sendValidationError(res, error)) return;
         console.error('Update Education Error:', error);
         res.status(500).json({ error: 'Server error' });
     }
@@ -942,11 +1085,17 @@ export const updatePricing = async (req: AuthenticatedRequest, res: Response) =>
         const userId = req.user?.id;
         if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-        const { hourly_rate } = req.body;
+        const raw = req.body?.hourly_rate;
+        const parsed = typeof raw === 'number' ? raw : typeof raw === 'string' && raw.trim() ? Number(raw) : NaN;
+        // Rates are whole dollars; the form allows decimals, so round to the nearest dollar.
+        const hourlyRate = Math.round(parsed);
+        if (!Number.isFinite(parsed) || hourlyRate < MIN_HOURLY_RATE || hourlyRate > MAX_HOURLY_RATE) {
+            return res.status(400).json({ error: `Hourly rate must be between $${MIN_HOURLY_RATE} and $${MAX_HOURLY_RATE}` });
+        }
 
         const updatedProfile = await prisma.tutorProfile.update({
             where: { user_id: userId },
-            data: { hourly_rate: parseInt(hourly_rate) }
+            data: { hourly_rate: hourlyRate }
         });
 
         await checkAndGrantFoundingMentor(updatedProfile.id).catch(() => null);
@@ -991,36 +1140,62 @@ export const updateExternalReviews = async (req: AuthenticatedRequest, res: Resp
         if (!profile) return res.status(404).json({ error: 'Profile not found' });
         const tutorId = profile.id;
 
+        const existingReviewUrls = external_reviews
+            ? new Map((await prisma.tutorExternalReview.findMany({ where: { tutor_id: tutorId }, select: { id: true, external_url: true } }))
+                .map((r) => [r.id, r.external_url]))
+            : new Map<string, string | null>();
+
+        const reviewRows = external_reviews
+            ? asArray(external_reviews, 50, 'External reviews').map((rev: any) => {
+                const id = typeof rev?.id === 'string' ? rev.id : undefined;
+                const storedUrl = id !== undefined && existingReviewUrls.has(id) ? existingReviewUrls.get(id) ?? null : undefined;
+                const externalUrl = storedUrl !== undefined && (rev?.external_url ?? null) === storedUrl
+                    ? storedUrl
+                    : httpLink(rev?.external_url, 'Review link');
+                const date = rev?.date ? new Date(rev.date) : null;
+                if (date && Number.isNaN(date.getTime())) throw new ValidationError('Review date is invalid');
+                return {
+                    id,
+                    platform: requiredText(rev?.platform, 100, 'Platform'),
+                    reviewer: requiredText(rev?.reviewer, 200, 'Reviewer'),
+                    rating: intInRange(rev?.rating, 1, 5, 'Rating'),
+                    comment: optionalText(rev?.comment, 5000, 'Comment') ?? null,
+                    external_url: externalUrl,
+                    date,
+                };
+            })
+            : null;
+
         // Reconcile by id so editing/removing one review does NOT wipe the
         // admin-approved verification status of the others. Only brand-new or
         // content-changed reviews are (re)set to PENDING for re-review.
-        if (external_reviews) {
+        if (reviewRows) {
             await prisma.$transaction(async (tx) => {
                 const existing = await tx.tutorExternalReview.findMany({ where: { tutor_id: tutorId } });
                 const existingById = new Map(existing.map((r) => [r.id, r]));
                 const keepIds = new Set<string>();
 
-                for (const rev of external_reviews as any[]) {
-                    const incomingDate = rev?.date ? new Date(rev.date) : null;
+                for (const rev of reviewRows) {
+                    const incomingDate = rev.date;
                     const data = {
-                        platform: rev?.platform,
-                        reviewer: rev?.reviewer,
-                        rating: rev?.rating,
-                        comment: rev?.comment ?? null,
-                        external_url: rev?.external_url ?? null,
+                        platform: rev.platform,
+                        reviewer: rev.reviewer,
+                        rating: rev.rating,
+                        comment: rev.comment,
+                        external_url: rev.external_url,
                         date: incomingDate,
                     };
 
                     // Only trust an id that actually belongs to this tutor.
-                    const prev = rev?.id ? existingById.get(rev.id) : undefined;
+                    const prev = rev.id ? existingById.get(rev.id) : undefined;
 
                     if (prev) {
                         keepIds.add(prev.id);
                         const unchanged =
-                            prev.platform === data.platform &&
-                            prev.reviewer === data.reviewer &&
+                            prev.platform.trim() === data.platform &&
+                            prev.reviewer.trim() === data.reviewer &&
                             prev.rating === data.rating &&
-                            (prev.comment ?? null) === data.comment &&
+                            (prev.comment?.trim() || null) === data.comment &&
                             (prev.external_url ?? null) === data.external_url &&
                             (prev.date?.getTime() ?? null) === (incomingDate?.getTime() ?? null);
 
@@ -1066,6 +1241,7 @@ export const updateExternalReviews = async (req: AuthenticatedRequest, res: Resp
 
         res.json({ message: 'External reviews updated', profile: updated });
     } catch (error) {
+        if (sendValidationError(res, error)) return;
         console.error('Update External Reviews Error:', error);
         res.status(500).json({ error: 'Server error' });
     }

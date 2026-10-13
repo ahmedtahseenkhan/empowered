@@ -25,6 +25,14 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder'
     apiVersion: '2024-12-18.acacia' as any,
 });
 
+
+/** RFC 4180 cell; cells that a spreadsheet would run as a formula are prefixed with a quote. */
+const csvCell = (value: unknown) => {
+    let text = String(value ?? '');
+    if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+    return `"${text.replace(/"/g, '""')}"`;
+};
+
 export class PaymentAnalyticsService {
     /**
      * Get earnings overview for a tutor
@@ -353,7 +361,7 @@ export class PaymentAnalyticsService {
             ]);
 
             // Combine headers and rows
-            const csvContent = [headers, ...rows].map((row) => row.join(',')).join('\n');
+            const csvContent = [headers, ...rows].map((row) => row.map(csvCell).join(',')).join('\r\n');
 
             return csvContent;
         } catch (error) {

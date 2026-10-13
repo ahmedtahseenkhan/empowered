@@ -77,14 +77,13 @@ const TutorAIAssistPage: React.FC = () => {
 
         try {
             const history = buildApiHistory(updatedMessages);
-            const token = localStorage.getItem('token');
-
             const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
             const response = await fetch(`${baseURL}/ai/chat`, {
                 method: 'POST',
+                // The session cookie authenticates the request.
+                credentials: 'include',
                 headers: {
                     'Content-Type': 'application/json',
-                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
                 },
                 body: JSON.stringify({ messages: history }),
             });

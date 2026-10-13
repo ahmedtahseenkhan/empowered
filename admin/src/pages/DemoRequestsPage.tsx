@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import api from '../api/axios';
+import { safeHttpUrl } from '../lib/urls';
 import { CalendarClock, ChevronLeft, ChevronRight, Mail, Phone, Video } from 'lucide-react';
 
 type DemoBooking = {
@@ -478,11 +479,11 @@ const DemoRequestsPage: React.FC = () => {
                                                 <div className="text-gray-600">
                                                     {formatTimeInDallas(selectedBooking.slot_start_time)} · 20 min (Dallas, TX)
                                                 </div>
-                                                {!!selectedBooking.meeting_link && (
+                                                {!!safeHttpUrl(selectedBooking.meeting_link) && (
                                                     <a
-                                                        href={selectedBooking.meeting_link}
+                                                        href={safeHttpUrl(selectedBooking.meeting_link)!}
                                                         target="_blank"
-                                                        rel="noreferrer"
+                                                        rel="noopener noreferrer"
                                                         className="mt-4 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-medium hover:bg-purple-700 transition-colors"
                                                     >
                                                         <Video className="w-4 h-4" />

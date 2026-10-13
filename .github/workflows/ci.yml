@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan the full git history for secrets
+        run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.18.4 detect --source /repo --redact --verbose
+
+  server:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit -p .
+      - name: Fail on high/critical vulnerabilities in production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+  client:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      # High findings remaining here are pinned inside @excalidraw/excalidraw (nanoid, lodash-es,
+      # sass) with no compatible fix; accepted until Excalidraw ships an update.
+      - name: Fail on critical vulnerabilities in production dependencies
+        run: npm audit --omit=dev --audit-level=critical
+      - name: No source maps in the build
+        run: test -z "$(find dist -name '*.map')"
+
+  admin:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: admin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: admin/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - name: Fail on high/critical vulnerabilities in production dependencies
+        run: npm audit --omit=dev --audit-level=high
+      - name: No source maps in the build
+        run: test -z "$(find dist -name '*.map')"

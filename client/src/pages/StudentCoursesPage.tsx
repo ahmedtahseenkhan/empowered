@@ -4,6 +4,7 @@ import { BookOpen, ExternalLink, Star, CheckCircle } from 'lucide-react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { Button } from '../components/ui/Button';
 import api from '../api/axios';
+import { safeExternalUrl } from '../utils/safeUrl';
 
 type CoursePurchase = {
     id: string;
@@ -121,7 +122,7 @@ const StudentCoursesPage: React.FC = () => {
 
                                     <div className="flex items-center justify-between mt-auto pt-3 border-t border-gray-100">
                                         <a
-                                            href={p.course.course_url}
+                                            href={safeExternalUrl(p.course.course_url)}
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             className="inline-flex items-center gap-1.5 bg-[#4A1D96] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-purple-800 transition-colors"

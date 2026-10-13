@@ -178,6 +178,8 @@ export const disconnectGoogleCalendar = async (req: AuthRequest, res: Response) 
     }
 };
 
+const FREEBUSY_MAX_RANGE_MS = 62 * 24 * 60 * 60 * 1000;
+
 export const getTutorFreeBusy = async (req: Request, res: Response) => {
     try {
         const tutorId = (req.params.tutorId as string | undefined)?.trim();
@@ -188,7 +190,17 @@ export const getTutorFreeBusy = async (req: Request, res: Response) => {
         if (!timeMin) return res.status(400).json({ error: 'timeMin is required' });
         if (!timeMax) return res.status(400).json({ error: 'timeMax is required' });
 
-        const busy = await getFreeBusy(tutorId, timeMin, timeMax);
+        const min = new Date(timeMin);
+        const max = new Date(timeMax);
+        if (Number.isNaN(min.getTime()) || Number.isNaN(max.getTime())) {
+            return res.status(400).json({ error: 'timeMin and timeMax must be valid ISO dates' });
+        }
+        if (min >= max) return res.status(400).json({ error: 'timeMin must be before timeMax' });
+        if (max.getTime() - min.getTime() > FREEBUSY_MAX_RANGE_MS) {
+            return res.status(400).json({ error: 'Date range cannot exceed 62 days' });
+        }
+
+        const busy = await getFreeBusy(tutorId, min.toISOString(), max.toISOString());
         if (!busy) return res.json({ connected: false, busy: [] });
 
         return res.json({ connected: true, busy });

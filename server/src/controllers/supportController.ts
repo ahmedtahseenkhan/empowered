@@ -3,6 +3,7 @@ import { z } from 'zod';
 import prisma from '../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
 import emailService from '../services/emailService';
+import { EmailSchema } from '../utils/validation';
 
 // Collapse CR/LF (header-injection guard) and cap length for short fields.
 const shortField = (max: number) =>
@@ -10,7 +11,7 @@ const shortField = (max: number) =>
 
 const guestSchema = z.object({
     name: shortField(120),
-    email: z.string().trim().min(3).max(254).email(),
+    email: EmailSchema,
     subject: shortField(200),
     message: z.string().trim().min(1).max(5000),
 });

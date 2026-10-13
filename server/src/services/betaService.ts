@@ -1,5 +1,6 @@
 import { TutorTier } from '@prisma/client';
 import prisma from '../config/db';
+import { maskEmail } from './emailService';
 
 const BETA_TRIAL_DAYS = 30;
 
@@ -70,7 +71,7 @@ export async function ensureBetaPremiumAccess(userId: string): Promise<BetaAcces
 
     try {
         const updated = await grantBetaPremium(tutor.id);
-        console.log(`[Beta] Auto-assigned Premium beta plan to tutor ${tutor.id} (${tutor.user.email})`);
+        console.log(`[Beta] Auto-assigned Premium beta plan to tutor ${tutor.id} (${maskEmail(tutor.user.email)})`);
         return { is_beta: true, tier: updated.tier };
     } catch (e) {
         console.error('[Beta] Failed to auto-assign Premium beta plan:', e);

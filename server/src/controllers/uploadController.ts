@@ -1,9 +1,16 @@
 import { Response } from 'express';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
+import prisma from '../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
+import { stripImageMetadata } from '../utils/stripImageMetadata';
 
 const UPLOADS_DIR = path.resolve(process.cwd(), 'uploads');
+// Documents and private images (payout proofs, session-note files) are never served statically;
+// only the authenticated GET /api/files/:name route reads them.
+// Outside the statically served uploads/ folder, so no URL trick can reach it without the /api/files checks
+const PRIVATE_UPLOADS_DIR = path.resolve(process.cwd(), 'uploads_private');
 
 // Hard limit per file. Note: base64 inflates size ~33%, but we validate the
 // DECODED buffer size, so this is the true on-disk limit.
@@ -48,7 +55,62 @@ const parseDataUrl = (dataUrl: string) => {
     return { mimeType: match[1], base64: match[2] };
 };
 
-const safeFileName = (name: string) => name.replace(/[^a-zA-Z0-9._-]/g, '_');
+const safeFileName = (name: string) => name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-200);
+
+/** Write a buffer under a random name and return the stored file name. Private files record their uploader. */
+const storeFile = (buffer: Buffer, ext: string, isPrivate: boolean, ownerUserId?: string): string => {
+    const dir = isPrivate ? PRIVATE_UPLOADS_DIR : UPLOADS_DIR;
+    fs.mkdirSync(dir, { recursive: true });
+    const storedName = `${crypto.randomUUID()}${ext}`;
+    fs.writeFileSync(path.join(dir, storedName), buffer, { flag: 'wx' });
+    if (isPrivate && ownerUserId) fs.writeFileSync(path.join(dir, `${storedName}.owner`), ownerUserId, { flag: 'wx' });
+    return storedName;
+};
+
+/**
+ * Who may download a private file: admins, the uploader, the tutor/student on the note, task or
+ * submission it is attached to, and the mentor a payout proof belongs to.
+ */
+const canAccessPrivateFile = async (name: string, user: { id: string; role: string }): Promise<boolean> => {
+    if (user.role === 'ADMIN') return true;
+
+    const owner = await fs.promises.readFile(path.join(PRIVATE_UPLOADS_DIR, `${name}.owner`), 'utf8').catch(() => null);
+    if (owner && owner.trim() === user.id) return true;
+
+    const url = `/api/files/${name}`;
+    const attachments = await prisma.attachment.findMany({
+        where: { file_url: url },
+        select: {
+            note: { select: { visibility: true, tutor: { select: { user_id: true } }, student: { select: { user_id: true } } } },
+            task: { select: { tutor: { select: { user_id: true } }, student: { select: { user_id: true } } } },
+            submission: {
+                select: {
+                    student: { select: { user_id: true } },
+                    task: { select: { tutor: { select: { user_id: true } } } },
+                },
+            },
+        },
+    });
+    for (const a of attachments) {
+        if (a.note) {
+            if (a.note.tutor.user_id === user.id) return true;
+            if (a.note.student.user_id === user.id && a.note.visibility === 'SHARED_WITH_STUDENT') return true;
+        }
+        if (a.task && (a.task.tutor.user_id === user.id || a.task.student.user_id === user.id)) return true;
+        if (a.submission && (a.submission.student.user_id === user.id || a.submission.task.tutor.user_id === user.id)) return true;
+    }
+
+    const payout = await prisma.mentorPayout.findFirst({
+        where: { proof_url: url, tutor: { user_id: user.id } },
+        select: { id: true },
+    });
+    return !!payout;
+};
+
+// Root-relative under /api so it goes through the same proxy as the API and
+// inherits the page's scheme/host (avoids mixed-content and cert issues).
+const urlFor = (storedName: string, isPrivate: boolean) =>
+    isPrivate ? `/api/files/${storedName}` : `/api/uploads/${storedName}`;
 
 // ─── Image upload (profile photos, etc.) ───────────────────────────────────
 // Stored as real files on disk and referenced by URL, so we never persist huge
@@ -79,7 +141,7 @@ export const uploadBase64Image = async (req: AuthRequest, res: Response) => {
         const userId = req.user?.id;
         if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-        const dataUrl = (req.body?.dataUrl as string | undefined) || '';
+        const dataUrl = typeof req.body?.dataUrl === 'string' ? req.body.dataUrl : '';
         if (!dataUrl) return res.status(400).json({ error: 'dataUrl is required' });
 
         const parsed = parseDataUrl(dataUrl);
@@ -87,33 +149,31 @@ export const uploadBase64Image = async (req: AuthRequest, res: Response) => {
 
         // Derive extension from an explicit fileName if provided, otherwise from the
         // data URL MIME. The actual bytes are still verified against the type below.
-        const fileNameRaw = (req.body?.fileName as string | undefined)?.trim();
+        const fileNameRaw = typeof req.body?.fileName === 'string' ? req.body.fileName.trim() : undefined;
         const ext = (fileNameRaw ? path.extname(fileNameRaw).toLowerCase() : '') || extForImageMime(parsed.mimeType) || '';
         const rule = IMAGE_TYPES[ext];
         if (!rule) {
             return res.status(400).json({ error: 'Unsupported image type. Only JPG, PNG, WEBP and GIF are allowed.' });
         }
 
-        const buffer = Buffer.from(parsed.base64, 'base64');
-        const size = buffer.byteLength;
-        if (size <= 0) return res.status(400).json({ error: 'Empty file' });
-        if (size > MAX_IMAGE_BYTES) {
+        const raw = Buffer.from(parsed.base64, 'base64');
+        if (raw.byteLength <= 0) return res.status(400).json({ error: 'Empty file' });
+        if (raw.byteLength > MAX_IMAGE_BYTES) {
             return res.status(400).json({ error: 'Image too large (max 5MB)' });
         }
-        if (!rule.check(buffer)) {
+        if (!rule.check(raw)) {
             return res.status(400).json({ error: 'File content does not match its image type.' });
         }
 
-        fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+        // Drop EXIF/XMP (GPS location, camera serials) before the file is stored.
+        const buffer = stripImageMetadata(raw, rule.mime);
+        const size = buffer.byteLength;
 
-        const storedName = `img-${Date.now()}-${Math.random().toString(16).slice(2)}${ext}`;
-        const storedPath = path.join(UPLOADS_DIR, storedName);
-        fs.writeFileSync(storedPath, buffer);
+        // Admin uploads are payout proofs; other callers opt in with `private: true`.
+        const isPrivate = req.body?.private === true || req.user?.role === 'ADMIN';
+        const storedName = storeFile(buffer, extForImageMime(rule.mime) || ext, isPrivate, req.user?.id);
 
-        // Root-relative under /api so it goes through the same proxy as the API and
-        // inherits the page's scheme/host (avoids mixed-content and cert issues).
-        const url = `/api/uploads/${encodeURIComponent(storedName)}`;
-        return res.status(201).json({ url, mime_type: rule.mime, size });
+        return res.status(201).json({ url: urlFor(storedName, isPrivate), mime_type: rule.mime, size });
     } catch (e) {
         console.error('uploadBase64Image error:', e);
         return res.status(500).json({ error: 'Failed to upload image' });
@@ -125,8 +185,8 @@ export const uploadBase64File = async (req: AuthRequest, res: Response) => {
         const userId = req.user?.id;
         if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-        const fileNameRaw = (req.body?.fileName as string | undefined)?.trim();
-        const dataUrl = (req.body?.dataUrl as string | undefined) || '';
+        const fileNameRaw = typeof req.body?.fileName === 'string' ? req.body.fileName.trim() : '';
+        const dataUrl = typeof req.body?.dataUrl === 'string' ? req.body.dataUrl : '';
 
         if (!fileNameRaw) return res.status(400).json({ error: 'fileName is required' });
         if (!dataUrl) return res.status(400).json({ error: 'dataUrl is required' });
@@ -154,18 +214,9 @@ export const uploadBase64File = async (req: AuthRequest, res: Response) => {
             return res.status(400).json({ error: 'File content does not match its extension.' });
         }
 
-        fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-
         const safeName = safeFileName(fileNameRaw);
-        const base = path.basename(safeName, ext) || 'file';
-        const storedName = `${base}-${Date.now()}-${Math.random().toString(16).slice(2)}${ext}`;
-        const storedPath = path.join(UPLOADS_DIR, storedName);
-
-        fs.writeFileSync(storedPath, buffer);
-
-        // Root-relative under /api so it goes through the same proxy as the API and
-        // inherits the page's scheme/host (avoids mixed-content and cert issues).
-        const url = `/api/uploads/${encodeURIComponent(storedName)}`;
+        const storedName = storeFile(buffer, ext, true, req.user?.id);
+        const url = urlFor(storedName, true);
 
         return res.status(201).json({
             attachment: {
@@ -180,5 +231,55 @@ export const uploadBase64File = async (req: AuthRequest, res: Response) => {
     } catch (e) {
         console.error('uploadBase64File error:', e);
         return res.status(500).json({ error: 'Failed to upload file' });
+    }
+};
+
+// ─── Private file download (GET /api/files/:name) ──────────────────────────
+const PRIVATE_NAME_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\.(?:pdf|docx?|xlsx?|jpg|png|webp|gif))$/;
+
+const PRIVATE_FILE_TYPES: Record<string, { mime: string; inline: boolean }> = {
+    '.pdf': { mime: 'application/pdf', inline: true },
+    '.doc': { mime: ALLOWED_TYPES['.doc'].mime, inline: false },
+    '.docx': { mime: ALLOWED_TYPES['.docx'].mime, inline: false },
+    '.xls': { mime: ALLOWED_TYPES['.xls'].mime, inline: false },
+    '.xlsx': { mime: ALLOWED_TYPES['.xlsx'].mime, inline: false },
+    '.jpg': { mime: 'image/jpeg', inline: true },
+    '.png': { mime: 'image/png', inline: true },
+    '.webp': { mime: 'image/webp', inline: true },
+    '.gif': { mime: 'image/gif', inline: true },
+};
+
+export const servePrivateFile = async (req: AuthRequest, res: Response) => {
+    try {
+        const name = String(req.params.name || '').toLowerCase();
+        const match = PRIVATE_NAME_RE.exec(name);
+        const type = match ? PRIVATE_FILE_TYPES[match[1]] : undefined;
+        if (!match || !type) return res.status(404).json({ error: 'Not found' });
+
+        const filePath = path.resolve(PRIVATE_UPLOADS_DIR, name);
+        if (path.dirname(filePath) !== PRIVATE_UPLOADS_DIR) return res.status(404).json({ error: 'Not found' });
+
+        const stat = await fs.promises.stat(filePath).catch(() => null);
+        if (!stat || !stat.isFile()) return res.status(404).json({ error: 'Not found' });
+        // 404 rather than 403 so the response doesn't confirm the file exists
+        if (!req.user || !(await canAccessPrivateFile(name, req.user))) return res.status(404).json({ error: 'Not found' });
+
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('Content-Security-Policy', "default-src 'none'");
+        res.setHeader('Cache-Control', 'private, no-store');
+        res.setHeader('Content-Type', type.mime);
+        res.setHeader('Content-Length', String(stat.size));
+        res.setHeader('Content-Disposition', type.inline ? 'inline' : `attachment; filename="${name}"`);
+
+        const stream = fs.createReadStream(filePath);
+        stream.on('error', (err) => {
+            console.error('servePrivateFile stream error:', err);
+            if (!res.headersSent) res.status(500).json({ error: 'Failed to read file' });
+            else res.destroy();
+        });
+        stream.pipe(res);
+    } catch (e) {
+        console.error('servePrivateFile error:', e);
+        if (!res.headersSent) res.status(500).json({ error: 'Failed to read file' });
     }
 };

@@ -1,4 +1,5 @@
 import React from 'react';
+import { isHttpUrl } from '../../utils/safeUrl';
 import { Facebook, Instagram, Linkedin, Twitter, Youtube, Globe, Music2 } from 'lucide-react';
 
 export interface MentorSocials {
@@ -21,8 +22,12 @@ const LINKS: { key: keyof MentorSocials; label: string; Icon: React.ComponentTyp
     { key: 'tiktok_url', label: 'TikTok', Icon: Music2 },
 ];
 
-// Ensure the href has a protocol so it isn't treated as a relative path.
-const normalizeHref = (url: string) => (/^https?:\/\//i.test(url) ? url : `https://${url}`);
+// Ensure the href has a protocol so it isn't treated as a relative path; anything that still
+// isn't a valid http(s) URL is dropped.
+const normalizeHref = (url: string): string | undefined => {
+    const withProtocol = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+    return isHttpUrl(withProtocol) ? withProtocol : undefined;
+};
 
 interface Props {
     mentor: MentorSocials;
@@ -32,7 +37,7 @@ interface Props {
 export const MentorSocialLinks: React.FC<Props> = ({ mentor, className }) => {
     const present = LINKS.filter((l) => {
         const v = mentor[l.key];
-        return typeof v === 'string' && v.trim().length > 0;
+        return typeof v === 'string' && !!normalizeHref(v.trim());
     });
 
     if (present.length === 0) return null;

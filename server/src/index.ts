@@ -4,6 +4,8 @@ import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
 import path from 'path';
+import { allowedOrigins, isOriginAllowed } from './config/origins';
+import { requireTrustedOrigin } from './middleware/originCheck';
 
 // Load env vars
 dotenv.config();
@@ -24,13 +26,21 @@ function assertDemoMeetEnv(): void {
 }
 assertDemoMeetEnv();
 
-// Tokens signed with the built-in fallback secret can be forged by anyone who reads the code
-if (!process.env.JWT_SECRET) {
-    if (process.env.NODE_ENV === 'production') {
+// Production refuses to start without a JWT secret, and warns loudly about weak secrets
+if (process.env.NODE_ENV === 'production') {
+    if (!process.env.JWT_SECRET) {
         console.error('[Startup] JWT_SECRET is required in production. Add it to .env and restart.');
         process.exit(1);
     }
-    console.warn('[Startup] JWT_SECRET is not set — using an insecure development secret.');
+    if (process.env.JWT_SECRET.length < 32 || process.env.JWT_SECRET.startsWith('dev-only')) {
+        console.error('[Startup] WARNING: JWT_SECRET is weak — set 32+ random characters (openssl rand -hex 48).');
+    }
+    if (!process.env.TOKEN_ENCRYPTION_KEY || process.env.TOKEN_ENCRYPTION_KEY.startsWith('dev-only')) {
+        console.error('[Startup] WARNING: TOKEN_ENCRYPTION_KEY is missing or a dev value — Google tokens and payout details cannot be stored safely.');
+    }
+}
+if (!process.env.JWT_SECRET) {
+    console.warn('[Startup] JWT_SECRET is not set — using a random per-process secret (sessions reset on restart).');
 }
 
 const app = express();
@@ -50,6 +60,7 @@ import reviewRoutes from './routes/reviewRoutes';
 import progressRoutes from './routes/progressRoutes';
 
 import uploadRoutes from './routes/uploadRoutes';
+import fileRoutes from './routes/fileRoutes';
 import adminRoutes from './routes/adminRoutes';
 import demoRoutes from './routes/demoRoutes';
 import paymentRoutes from './routes/paymentRoutes';
@@ -71,31 +82,44 @@ app.disable('x-powered-by');
 app.use(helmet({
     // API only serves JSON and uploads; images are embedded by the client on another origin
     crossOriginResourcePolicy: { policy: 'cross-origin' },
+    strictTransportSecurity: { maxAge: 31536000, includeSubDomains: true },
+    frameguard: { action: 'deny' },
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
 }));
 
-const allowedOrigins = (process.env.CORS_ORIGINS || [process.env.CLIENT_URL, process.env.CLIENT_BASE_URL].filter(Boolean).join(','))
-    .split(',')
-    .map((o) => o.trim().replace(/\/+$/, ''))
-    .filter(Boolean);
 if (allowedOrigins.length === 0) {
-    console.warn('[Startup] CORS_ORIGINS / CLIENT_URL not set — allowing all origins. Set it in production.');
+    console.warn('[Startup] CORS_ORIGINS not set — allowing any origin (development only).');
 }
 app.use(cors({
-    origin: allowedOrigins.length === 0
-        ? true
-        : (origin, cb) => cb(null, !origin || allowedOrigins.includes(origin.replace(/\/+$/, ''))),
+    origin: (origin, cb) => cb(null, isOriginAllowed(origin)),
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'X-App-Client'],
 }));
 
 // Webhooks must be mounted BEFORE express.json() to consume raw body
 app.use('/api/stripe', webhookRoutes);
 
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ limit: '10mb', extended: true }));
+// Cookie-authenticated API: reject state-changing requests from untrusted origins (CSRF)
+app.use('/api', requireTrustedOrigin);
+
+// API responses can hold personal data: never let browsers or shared caches store them
+app.use('/api', (req, res, next) => {
+    if (!req.path.startsWith('/uploads/') && !req.path.startsWith('/files/')) res.setHeader('Cache-Control', 'no-store');
+    next();
+});
+
+// Routes that accept base64 files (uploads, profile photo, certification proofs, whiteboard
+// scenes) get a larger body limit; everything else is capped at 1mb.
+const LARGE_BODY_PATHS = ['/api/uploads', '/api/tutor/me/bio', '/api/tutor/me/education', '/api/whiteboards'];
+app.use(LARGE_BODY_PATHS, express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ limit: '1mb', extended: true }));
 
 // Serve user uploads defensively: force download instead of inline rendering,
 // block MIME sniffing, and neutralize any script if a file is ever opened.
 // This protects against malicious content (HTML/SVG/JS) slipping into /uploads.
+// Private files live outside this folder (uploads_private/) and are only served by /api/files.
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads'), {
     setHeaders: (res) => {
         res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -129,6 +153,7 @@ app.use('/api/uploads', express.static(path.join(process.cwd(), 'uploads'), {
         res.setHeader('Content-Security-Policy', "default-src 'none'");
     },
 }));
+app.use('/api/files', fileRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/demo', demoRoutes);
 app.use('/api/payments', paymentRoutes);
@@ -143,6 +168,18 @@ app.use('/api', (req, res) => {
     res.status(404).json({ error: 'Not found' });
 });
 
+// Last-resort error handler: log the details, never send stack traces or internals to clients
+app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    const status = typeof err?.status === 'number' && err.status >= 400 && err.status < 500 ? err.status : 500;
+    if (status >= 500) console.error(`[Unhandled] ${req.method} ${req.originalUrl}:`, err);
+    if (res.headersSent) return;
+    const message = status === 413 ? 'Request body too large'
+        : status === 400 ? 'Malformed request'
+        : status < 500 ? 'Request could not be processed'
+        : 'Server error';
+    res.status(status).json({ error: message });
+});
+
 // Health Check
 app.get('/', (req, res) => {
     res.send('Empowered Learnings API v2 is running');
@@ -150,6 +187,10 @@ app.get('/', (req, res) => {
 
 // Start Server
 const httpServer = http.createServer(app);
+// Bound slow or stalled requests (slowloris-style abuse)
+httpServer.requestTimeout = 60_000;
+httpServer.headersTimeout = 20_000;
+httpServer.keepAliveTimeout = 5_000;
 initWhiteboardSocket(httpServer);
 
 httpServer.listen(PORT, () => {

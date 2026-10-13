@@ -17,7 +17,9 @@
     "clear:photos": "ts-node scripts/clear-photos.ts",
     "approve:existing-mentors": "ts-node scripts/approve-existing-mentors.ts",
     "wallet:smoke": "ts-node scripts/wallet-smoke-test.ts",
-    "payouts:monthly-schedule": "ts-node scripts/set-monthly-payout-schedule.ts"
+    "payouts:monthly-schedule": "ts-node scripts/set-monthly-payout-schedule.ts",
+    "encrypt:payout-details": "ts-node scripts/encrypt-payout-details.ts",
+    "move:private-uploads": "ts-node scripts/move-private-uploads.ts"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
@@ -30,7 +32,6 @@
     "@google/generative-ai": "^0.24.1",
     "@prisma/client": "^5.22.0",
     "bcrypt": "^6.0.0",
-    "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
@@ -38,7 +39,7 @@
     "handlebars": "^4.7.8",
     "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.3",
-    "nodemailer": "^7.0.12",
+    "nodemailer": "^10.1.0",
     "pg": "^8.16.3",
     "prisma": "^5.22.0",
     "socket.io": "^4.8.3",

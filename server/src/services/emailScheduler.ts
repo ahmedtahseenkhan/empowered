@@ -1,4 +1,5 @@
 import prisma from '../config/db';
+import { maskEmail } from './emailService';
 
 const SCHEDULER_ENABLED = (process.env.EMAIL_SCHEDULER_ENABLED || 'true').toLowerCase() !== 'false';
 const SCHEDULER_INTERVAL_MS = Number(process.env.EMAIL_SCHEDULER_INTERVAL_MS || 3600000); // 1 hour
@@ -50,7 +51,7 @@ async function checkSessionReminders() {
                             idempotency_key: `session-reminder-student:${lesson.id}`,
                         },
                     });
-                    console.log(`[EmailScheduler] Queued session reminder for student: ${lesson.student.user.email}`);
+                    console.log(`[EmailScheduler] Queued session reminder for student: ${maskEmail(lesson.student.user.email)}`);
                 } catch (e: any) {
                     if (e.code !== 'P2002') {
                         console.error(`[EmailScheduler] Failed to queue student reminder:`, e);
@@ -69,7 +70,7 @@ async function checkSessionReminders() {
                             idempotency_key: `session-reminder-tutor:${lesson.id}`,
                         },
                     });
-                    console.log(`[EmailScheduler] Queued session reminder for tutor: ${lesson.tutor.user.email}`);
+                    console.log(`[EmailScheduler] Queued session reminder for tutor: ${maskEmail(lesson.tutor.user.email)}`);
                 } catch (e: any) {
                     if (e.code !== 'P2002') {
                         console.error(`[EmailScheduler] Failed to queue tutor reminder:`, e);
@@ -133,7 +134,7 @@ async function queuePaymentRemindersForWindow(hoursAhead: number, idempotencyPre
                         idempotency_key: `${idempotencyPrefix}:${payment.id}`,
                     },
                 });
-                console.log(`[EmailScheduler] Queued payment reminder (${idempotencyPrefix}) for: ${payment.booking.student.user.email}`);
+                console.log(`[EmailScheduler] Queued payment reminder (${idempotencyPrefix}) for: ${maskEmail(payment.booking.student.user.email)}`);
             } catch (e: any) {
                 if (e.code !== 'P2002') {
                     console.error(`[EmailScheduler] Failed to queue payment reminder (${idempotencyPrefix}):`, e);
@@ -233,7 +234,7 @@ async function check4HourSessionReminders() {
                             idempotency_key: `session-reminder-4h-student:${lesson.id}`,
                         },
                     });
-                    console.log(`[EmailScheduler] Queued 4h session reminder for student: ${lesson.student.user.email}`);
+                    console.log(`[EmailScheduler] Queued 4h session reminder for student: ${maskEmail(lesson.student.user.email)}`);
                 } catch (e: any) {
                     if (e.code !== 'P2002') console.error(`[EmailScheduler] Failed to queue 4h student reminder:`, e);
                 }
@@ -250,7 +251,7 @@ async function check4HourSessionReminders() {
                             idempotency_key: `session-reminder-4h-tutor:${lesson.id}`,
                         },
                     });
-                    console.log(`[EmailScheduler] Queued 4h session reminder for tutor: ${lesson.tutor.user.email}`);
+                    console.log(`[EmailScheduler] Queued 4h session reminder for tutor: ${maskEmail(lesson.tutor.user.email)}`);
                 } catch (e: any) {
                     if (e.code !== 'P2002') console.error(`[EmailScheduler] Failed to queue 4h tutor reminder:`, e);
                 }
@@ -290,7 +291,7 @@ async function queueDemoCallReminders(hoursAhead: number, reminderType: '24h' | 
                     idempotency_key: `${idempotencyPrefix}:${demo.id}:${demo.slot_start_time.getTime()}`,
                 },
             });
-            console.log(`[EmailScheduler] Queued ${reminderType} demo call reminder for: ${demo.email}`);
+            console.log(`[EmailScheduler] Queued ${reminderType} demo call reminder for: ${maskEmail(demo.email)}`);
         } catch (e: any) {
             if (e.code !== 'P2002') {
                 console.error(`[EmailScheduler] Failed to queue ${reminderType} demo call reminder:`, e);

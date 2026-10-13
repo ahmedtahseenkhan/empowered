@@ -1,6 +1,8 @@
 import React, { useState, useRef } from 'react';
 import { PageLayout } from '../layouts/PageLayout';
 import api from '../api/axios';
+import BotProtectionFields from '../components/common/BotProtectionFields';
+import { useBotProtection } from '../hooks/useBotProtection';
 
 const CATEGORIES = [
     'Academic Tutoring',
@@ -100,6 +102,8 @@ const BetaPage: React.FC = () => {
         }));
     };
 
+    const bot = useBotProtection();
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
@@ -133,12 +137,14 @@ const BetaPage: React.FC = () => {
                 biggest_challenge: form.biggest_challenge.trim(),
                 referral_source: form.referral_source.trim(),
                 profile_link: form.profile_link.trim() || undefined,
+                ...bot.fields,
             });
             setSubmitted(true);
             setForm(initialForm);
         } catch (err: any) {
             setError(err?.response?.data?.error || 'Failed to submit. Please try again.');
         } finally {
+            bot.reset();
             setLoading(false);
         }
     };
@@ -505,9 +511,11 @@ const BetaPage: React.FC = () => {
                                     />
                                 </div>
 
+                                <BotProtectionFields bot={bot} action="beta" className="flex justify-center" />
+
                                 <button
                                     type="submit"
-                                    disabled={loading}
+                                    disabled={loading || !bot.ready}
                                     className="w-full bg-[#4A148C] hover:bg-[#380e6e] disabled:opacity-60 text-white font-semibold py-4 rounded-full text-lg shadow-md transition-colors duration-200"
                                 >
                                     {loading ? 'Submitting...' : 'Submit Application'}

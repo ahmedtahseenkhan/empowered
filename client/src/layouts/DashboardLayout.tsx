@@ -94,8 +94,8 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
             }] : [])
         ];
 
-    const handleLogout = () => {
-        logout();
+    const handleLogout = async () => {
+        await logout();
         navigate('/login');
     };
 

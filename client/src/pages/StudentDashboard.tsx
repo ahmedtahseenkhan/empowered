@@ -9,6 +9,7 @@ import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/axios';
+import { openExternal, safeExternalUrl } from '../utils/safeUrl';
 
 type Lesson = {
     id: string;
@@ -179,8 +180,8 @@ const StudentDashboard: React.FC = () => {
         try {
             setJoinBusyId(l.id); setPayError('');
             const res = await api.get(`/lessons/${l.id}/join`);
-            const url = res.data?.meeting_link as string | undefined;
-            if (url) window.open(url, '_blank');
+            const url = safeExternalUrl(res.data?.meeting_link);
+            if (url) window.open(url, '_blank', 'noopener,noreferrer');
             else { setPayError('Meeting link is not available yet.'); setErrorModalOpen(true); }
         } catch (e: any) {
             setPayError(e?.response?.data?.error || 'Unable to join session.');
@@ -331,7 +332,7 @@ const StudentDashboard: React.FC = () => {
                                                         </button>
                                                     )}
                                                     {l.google_calendar_html_link && (
-                                                        <button onClick={() => window.open(l.google_calendar_html_link!, '_blank')}
+                                                        <button onClick={() => openExternal(l.google_calendar_html_link)}
                                                             className="text-xs font-semibold text-gray-600 border border-gray-200 hover:border-gray-300 px-3 py-1.5 rounded-lg transition-colors">
                                                             <Calendar className="w-3.5 h-3.5" />
                                                         </button>
@@ -369,7 +370,7 @@ const StudentDashboard: React.FC = () => {
                                                 <p className="text-xs text-gray-400">by {p.course.tutor?.username || 'Mentor'}</p>
                                             </div>
                                             {p.course.course_url && (
-                                                <a href={p.course.course_url} target="_blank" rel="noopener noreferrer"
+                                                <a href={safeExternalUrl(p.course.course_url)} target="_blank" rel="noopener noreferrer"
                                                     className="shrink-0 text-xs font-semibold text-purple-700 hover:text-purple-900 flex items-center gap-1">
                                                     Open <ExternalLink className="w-3 h-3" />
                                                 </a>

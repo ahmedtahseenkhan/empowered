@@ -3,10 +3,26 @@ import prisma from '../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
 
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+const MAX_RULES = 50;
+const MAX_REASON_LENGTH = 500;
+
+const isValidTimeZone = (tz: string) => {
+    if (tz.length > 64) return false;
+    try {
+        new Intl.DateTimeFormat('en-US', { timeZone: tz });
+        return true;
+    } catch {
+        return false;
+    }
+};
+
+const bodyString = (value: unknown) => (typeof value === 'string' ? value.trim() : undefined);
+
+class InvalidDateError extends Error {}
 
 const parseISO = (value: string) => {
     const d = new Date(value);
-    if (Number.isNaN(d.getTime())) throw new Error('Invalid date');
+    if (Number.isNaN(d.getTime())) throw new InvalidDateError('Invalid date');
     return d;
 };
 
@@ -51,8 +67,9 @@ export const setMyTimezone = async (req: AuthRequest, res: Response) => {
         if (!userId) return res.status(401).json({ error: 'Unauthorized' });
         if (role !== 'TUTOR') return res.status(403).json({ error: 'Only tutors can update timezone' });
 
-        const timezone = (req.body?.timezone as string | undefined)?.trim();
+        const timezone = bodyString(req.body?.timezone);
         if (!timezone) return res.status(400).json({ error: 'timezone is required' });
+        if (!isValidTimeZone(timezone)) return res.status(400).json({ error: 'timezone is not a valid IANA time zone' });
 
         const tutorId = await getTutorIdForUser(userId);
         if (!tutorId) return res.status(404).json({ error: 'Tutor profile not found' });
@@ -104,9 +121,13 @@ export const replaceFreeSessionAvailability = async (req: AuthRequest, res: Resp
 
         const rules = req.body?.rules as Array<{ day_of_week: number; start_time: string; end_time: string }> | undefined;
         if (!Array.isArray(rules)) return res.status(400).json({ error: 'rules must be an array' });
+        if (rules.length > MAX_RULES) return res.status(400).json({ error: `At most ${MAX_RULES} rules are allowed` });
 
         for (const r of rules) {
-            if (typeof r.day_of_week !== 'number' || r.day_of_week < 0 || r.day_of_week > 6) {
+            if (!r || typeof r !== 'object' || typeof r.start_time !== 'string' || typeof r.end_time !== 'string') {
+                return res.status(400).json({ error: 'Each rule needs day_of_week, start_time and end_time' });
+            }
+            if (!Number.isInteger(r.day_of_week) || r.day_of_week < 0 || r.day_of_week > 6) {
                 return res.status(400).json({ error: 'day_of_week must be between 0 and 6' });
             }
             if (!TIME_RE.test(r.start_time) || !TIME_RE.test(r.end_time)) {
@@ -155,9 +176,13 @@ export const replaceMyWeeklyAvailability = async (req: AuthRequest, res: Respons
 
         const rules = req.body?.rules as Array<{ day_of_week: number; start_time: string; end_time: string }> | undefined;
         if (!Array.isArray(rules)) return res.status(400).json({ error: 'rules must be an array' });
+        if (rules.length > MAX_RULES) return res.status(400).json({ error: `At most ${MAX_RULES} rules are allowed` });
 
         for (const r of rules) {
-            if (typeof r.day_of_week !== 'number' || r.day_of_week < 0 || r.day_of_week > 6) {
+            if (!r || typeof r !== 'object' || typeof r.start_time !== 'string' || typeof r.end_time !== 'string') {
+                return res.status(400).json({ error: 'Each rule needs day_of_week, start_time and end_time' });
+            }
+            if (!Number.isInteger(r.day_of_week) || r.day_of_week < 0 || r.day_of_week > 6) {
                 return res.status(400).json({ error: 'day_of_week must be between 0 and 6' });
             }
             if (!TIME_RE.test(r.start_time) || !TIME_RE.test(r.end_time)) {
@@ -204,9 +229,10 @@ export const createMyTimeBlock = async (req: AuthRequest, res: Response) => {
         if (!userId) return res.status(401).json({ error: 'Unauthorized' });
         if (role !== 'TUTOR') return res.status(403).json({ error: 'Only tutors can create time blocks' });
 
-        const startStr = (req.body?.start_time as string | undefined)?.trim();
-        const endStr = (req.body?.end_time as string | undefined)?.trim();
-        const reason = (req.body?.reason as string | undefined)?.trim();
+        const startStr = bodyString(req.body?.start_time);
+        const endStr = bodyString(req.body?.end_time);
+        const reason = bodyString(req.body?.reason);
+        if (reason && reason.length > MAX_REASON_LENGTH) return res.status(400).json({ error: `reason must be at most ${MAX_REASON_LENGTH} characters` });
 
         if (!startStr) return res.status(400).json({ error: 'start_time is required' });
         if (!endStr) return res.status(400).json({ error: 'end_time is required' });
@@ -229,6 +255,7 @@ export const createMyTimeBlock = async (req: AuthRequest, res: Response) => {
 
         return res.status(201).json({ block });
     } catch (e) {
+        if (e instanceof InvalidDateError) return res.status(400).json({ error: 'Dates must be valid ISO strings' });
         console.error('createMyTimeBlock error:', e);
         return res.status(500).json({ error: 'Failed to create time block' });
     }
@@ -278,9 +305,10 @@ export const updateMyTimeBlock = async (req: AuthRequest, res: Response) => {
             return res.status(404).json({ error: 'Time block not found' });
         }
 
-        const startStr = (req.body?.start_time as string | undefined)?.trim();
-        const endStr = (req.body?.end_time as string | undefined)?.trim();
-        const reason = (req.body?.reason as string | undefined)?.trim();
+        const startStr = bodyString(req.body?.start_time);
+        const endStr = bodyString(req.body?.end_time);
+        const reason = bodyString(req.body?.reason);
+        if (reason && reason.length > MAX_REASON_LENGTH) return res.status(400).json({ error: `reason must be at most ${MAX_REASON_LENGTH} characters` });
 
         const start = startStr ? parseISO(startStr) : existing.start_time;
         const end = endStr ? parseISO(endStr) : existing.end_time;
@@ -297,6 +325,7 @@ export const updateMyTimeBlock = async (req: AuthRequest, res: Response) => {
 
         return res.json({ block: updated });
     } catch (e) {
+        if (e instanceof InvalidDateError) return res.status(400).json({ error: 'Dates must be valid ISO strings' });
         console.error('updateMyTimeBlock error:', e);
         return res.status(500).json({ error: 'Failed to update time block' });
     }
@@ -333,6 +362,7 @@ export const listMyTimeBlocks = async (req: AuthRequest, res: Response) => {
 
         return res.json({ blocks });
     } catch (e) {
+        if (e instanceof InvalidDateError) return res.status(400).json({ error: 'Dates must be valid ISO strings' });
         console.error('listMyTimeBlocks error:', e);
         return res.status(500).json({ error: 'Failed to fetch time blocks' });
     }

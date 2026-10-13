@@ -2,6 +2,17 @@ import { Request, Response } from 'express';
 import prisma from '../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
 import { recalculateTutorReviewStats } from '../utils/reviewStats';
+import { z } from 'zod';
+import { firstIssue } from '../utils/validation';
+
+const CreateReviewSchema = z.object({
+    tutorId: z.string().min(1).max(64),
+    rating: z.coerce.number().int('Rating must be a whole number').min(1).max(5),
+    comment: z.string().trim().max(2000, 'Comment must be 2000 characters or fewer').optional().nullable(),
+    lessonId: z.string().min(1).max(64).optional().nullable(),
+});
+
+const MAX_REVIEWS = 100;
 
 // Create a Review
 export const createReview = async (req: AuthRequest, res: Response) => {
@@ -9,11 +20,12 @@ export const createReview = async (req: AuthRequest, res: Response) => {
         const studentId = req.user?.id; // This is the User ID
         if (!studentId) return res.status(401).json({ error: 'Unauthorized' });
 
-        const { tutorId, rating, comment, lessonId } = req.body;
+        if (req.user?.role !== 'STUDENT') return res.status(403).json({ error: 'Only students can leave reviews' });
 
-        if (!tutorId || !rating) {
-            return res.status(400).json({ error: 'Tutor ID and rating are required' });
-        }
+        const parsed = CreateReviewSchema.safeParse(req.body);
+        if (!parsed.success) return res.status(400).json({ error: firstIssue(parsed.error) });
+        const { tutorId, rating, lessonId } = parsed.data;
+        const comment = parsed.data.comment || null;
 
         // Verify student profile exists
         const studentProfile = await prisma.studentProfile.findUnique({
@@ -46,14 +58,30 @@ export const createReview = async (req: AuthRequest, res: Response) => {
             return res.status(400).json({ error: 'You have already reviewed this mentor.' });
         }
 
-        // Optional: Check if student has actually had a lesson with this tutor
-        // For now, we'll skipping this strict check or you can enforce it if lessonId is provided
+        // Only students who have actually completed a session with this mentor may review them.
+        const completedLesson = await prisma.lesson.findFirst({
+            where: { student_id: studentProfile.id, tutor_id: tutorId, status: 'COMPLETED' },
+            select: { id: true },
+        });
+        if (!completedLesson) {
+            return res.status(403).json({ error: 'You can review a mentor after completing a session with them.' });
+        }
+
+        if (lessonId) {
+            const lesson = await prisma.lesson.findUnique({
+                where: { id: lessonId },
+                select: { student_id: true, tutor_id: true },
+            });
+            if (!lesson || lesson.student_id !== studentProfile.id || lesson.tutor_id !== tutorId) {
+                return res.status(400).json({ error: 'Invalid session for this review' });
+            }
+        }
 
         const review = await prisma.review.create({
             data: {
                 student_id: studentProfile.id,
                 tutor_id: tutorId,
-                rating: parseInt(rating),
+                rating,
                 comment,
                 lesson_id: lessonId || undefined
             }
@@ -107,7 +135,8 @@ export const getReviewsByTutorId = async (req: Request, res: Response) => {
                     }
                 }
             },
-            orderBy: { created_at: 'desc' }
+            orderBy: { created_at: 'desc' },
+            take: MAX_REVIEWS,
         });
 
         res.json({ reviews });

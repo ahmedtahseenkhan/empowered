@@ -5,6 +5,8 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import api from '../api/axios';
+import BotProtectionFields from '../components/common/BotProtectionFields';
+import { useBotProtection } from '../hooks/useBotProtection';
 
 const ForgotPasswordPage: React.FC = () => {
     const [step, setStep] = useState<'REQUEST' | 'RESET'>('REQUEST');
@@ -16,6 +18,7 @@ const ForgotPasswordPage: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [message, setMessage] = useState('');
+    const bot = useBotProtection();
 
     const requestCode = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -23,12 +26,13 @@ const ForgotPasswordPage: React.FC = () => {
         setMessage('');
         setLoading(true);
         try {
-            const res = await api.post('/auth/forgot-password', { email });
+            const res = await api.post('/auth/forgot-password', { email, ...bot.fields });
             setMessage(res.data?.message || 'If an account exists for that email, a reset code has been sent.');
             setStep('RESET');
         } catch (err: any) {
             setError(err.response?.data?.error || 'Failed to request reset code');
         } finally {
+            bot.reset();
             setLoading(false);
         }
     };
@@ -84,7 +88,9 @@ const ForgotPasswordPage: React.FC = () => {
                                     placeholder="your.email@example.com"
                                 />
 
-                                <Button type="submit" variant="primary" size="lg" className="w-full" disabled={loading}>
+                                <BotProtectionFields bot={bot} action="forgot-password" />
+
+                                <Button type="submit" variant="primary" size="lg" className="w-full" disabled={loading || !bot.ready}>
                                     {loading ? 'Sending code...' : 'Send Reset Code'}
                                 </Button>
                             </form>

@@ -1,5 +1,6 @@
 import prisma from '../config/db';
-import emailService from './emailService';
+import emailService, { maskEmail } from './emailService';
+import { escapeHtml } from '../utils/html';
 import { formatTimezoneLabel, resolveDemoTimezone } from './demoAvailability';
 
 type OutboxRow = {
@@ -613,9 +614,9 @@ async function sendOutboxRow(row: OutboxRow) {
             html: `
 <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 24px;color:#222">
   <h2 style="color:#4A1D96;margin:0 0 16px 0">Payment Confirmed</h2>
-  <p style="margin:0 0 12px 0">Hi ${p.studentName || 'there'},</p>
-  <p style="margin:0 0 12px 0">Your payment of <strong>$${amountDollars}</strong> has been successfully received for your upcoming session with <strong>${p.tutorName || 'your mentor'}</strong>.</p>
-  ${lessonStart ? `<p style="margin:0 0 12px 0">📅 Session: <strong>${formatDatePart(lessonStart, studentTimeZone)} at ${formatTimePart(lessonStart, studentTimeZone)}</strong></p>` : ''}
+  <p style="margin:0 0 12px 0">Hi ${escapeHtml(p.studentName || 'there')},</p>
+  <p style="margin:0 0 12px 0">Your payment of <strong>$${escapeHtml(amountDollars)}</strong> has been successfully received for your upcoming session with <strong>${escapeHtml(p.tutorName || 'your mentor')}</strong>.</p>
+  ${lessonStart ? `<p style="margin:0 0 12px 0">📅 Session: <strong>${escapeHtml(formatDatePart(lessonStart, studentTimeZone))} at ${escapeHtml(formatTimePart(lessonStart, studentTimeZone))}</strong></p>` : ''}
   <p style="margin:0 0 24px 0">The session is fully confirmed. See you then!</p>
   <p style="margin:0;color:#999;font-size:12px">Team EmpowerEd Learnings</p>
 </div>`,
@@ -659,10 +660,16 @@ async function sendOutboxRow(row: OutboxRow) {
     }
 
     if (row.type === 'SUBSCRIPTION_ACTIVATED') {
-        const p = row.payload as { mentorName?: string; planName?: string; amount?: string; nextBillingDate?: string; dashboardUrl?: string };
+        const raw = row.payload as { mentorName?: string; planName?: string; amount?: string; nextBillingDate?: string; dashboardUrl?: string };
+        const p = {
+            mentorName: escapeHtml(raw.mentorName || ''),
+            planName: escapeHtml(raw.planName || ''),
+            amount: escapeHtml(raw.amount || ''),
+            nextBillingDate: escapeHtml(raw.nextBillingDate || ''),
+        };
         await emailService.sendEmail({
             to: row.to_email,
-            subject: `Your ${p.planName || 'Subscription'} Plan is Now Active`,
+            subject: `Your ${raw.planName || 'Subscription'} Plan is Now Active`,
             html: `
 <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 24px;color:#222">
   <h2 style="color:#7c3aed;margin:0 0 16px 0">🎉 Your ${p.planName || 'Subscription'} Plan is Active</h2>
@@ -681,10 +688,17 @@ async function sendOutboxRow(row: OutboxRow) {
     }
 
     if (row.type === 'SUBSCRIPTION_RENEWED') {
-        const p = row.payload as { mentorName?: string; planName?: string; amount?: string; periodStart?: string; periodEnd?: string; dashboardUrl?: string };
+        const raw = row.payload as { mentorName?: string; planName?: string; amount?: string; periodStart?: string; periodEnd?: string; dashboardUrl?: string };
+        const p = {
+            mentorName: escapeHtml(raw.mentorName || ''),
+            planName: escapeHtml(raw.planName || ''),
+            amount: escapeHtml(raw.amount || ''),
+            periodStart: escapeHtml(raw.periodStart || ''),
+            periodEnd: escapeHtml(raw.periodEnd || ''),
+        };
         await emailService.sendEmail({
             to: row.to_email,
-            subject: `Your ${p.planName || 'Subscription'} Has Been Renewed`,
+            subject: `Your ${raw.planName || 'Subscription'} Has Been Renewed`,
             html: `
 <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 24px;color:#222">
   <h2 style="color:#059669;margin:0 0 16px 0">✅ Subscription Renewed</h2>
@@ -845,6 +859,37 @@ async function sendOutboxRow(row: OutboxRow) {
         return;
     }
 
+    if (row.type === 'BETA_APPLICATION_ADMIN') {
+        const p = row.payload as {
+            full_name?: string; email?: string; phone_number?: string; service_description?: string; category?: string;
+            session_management?: string[]; has_active_clients?: boolean; biggest_challenge?: string;
+            profile_link?: string | null; referral_source?: string;
+        };
+        await emailService.sendBetaApplicationNotification({
+            adminEmail: row.to_email,
+            full_name: p.full_name || '—',
+            email: p.email || '—',
+            phone_number: p.phone_number || '—',
+            service_description: p.service_description || '—',
+            category: p.category || '—',
+            session_management: Array.isArray(p.session_management) ? p.session_management : [],
+            has_active_clients: p.has_active_clients === true,
+            biggest_challenge: p.biggest_challenge || '—',
+            profile_link: p.profile_link || null,
+            referral_source: p.referral_source,
+        });
+        return;
+    }
+
+    if (row.type === 'BETA_APPLICATION_CONFIRMATION') {
+        const p = row.payload as { full_name?: string };
+        await emailService.sendBetaApplicationConfirmation({
+            full_name: p.full_name || 'there',
+            email: row.to_email,
+        });
+        return;
+    }
+
     throw new Error(`Unknown outbox type: ${row.type}`);
 }
 
@@ -876,7 +921,7 @@ export function startEmailOutboxProcessor() {
             });
 
             for (const row of rows) {
-                console.log(`[EmailOutbox] Processing ${row.type} for ${row.to_email} (id=${row.id}, attempt=${row.attempts || 0})`);
+                console.log(`[EmailOutbox] Processing ${row.type} for ${maskEmail(row.to_email)} (id=${row.id}, attempt=${row.attempts || 0})`);
 
                 const claimed = await prisma.emailOutbox.updateMany({
                     where: { id: row.id, status: row.status },
@@ -902,7 +947,7 @@ export function startEmailOutboxProcessor() {
                             last_error: null,
                         },
                     });
-                    console.log(`[EmailOutbox] ✅ Successfully sent ${row.type} to ${row.to_email} (id=${row.id})`);
+                    console.log(`[EmailOutbox] ✅ Successfully sent ${row.type} to ${maskEmail(row.to_email)} (id=${row.id})`);
                 } catch (e: any) {
                     const msg = e?.message ? String(e.message) : String(e);
                     const isRetryable = attemptNumber < 8;
@@ -915,7 +960,7 @@ export function startEmailOutboxProcessor() {
                             next_retry_at: isRetryable ? computeNextRetryAt(attemptNumber) : null,
                         },
                     });
-                    console.error(`[EmailOutbox] ❌ Failed to send ${row.type} to ${row.to_email} (id=${row.id}, attempt=${attemptNumber}):`, msg);
+                    console.error(`[EmailOutbox] ❌ Failed to send ${row.type} to ${maskEmail(row.to_email)} (id=${row.id}, attempt=${attemptNumber}):`, msg);
                 }
             }
         } catch (e) {

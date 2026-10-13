@@ -2,6 +2,32 @@ import transporter from '../config/email';
 import handlebars from 'handlebars';
 import fs from 'fs';
 import path from 'path';
+import { escapeHtml } from '../utils/html';
+
+/** Mask an address for logs: "ab***@gmail.com". */
+export const maskEmail = (value: unknown): string => {
+    const list = Array.isArray(value) ? value : [value];
+    return list
+        .map((v) => {
+            const email = String(v ?? '');
+            const at = email.lastIndexOf('@');
+            if (at < 1) return '***';
+            return `${email.slice(0, Math.min(2, at))}***${email.slice(at)}`;
+        })
+        .join(', ');
+};
+
+/** Template values used as link targets must be http(s) (or mailto) — never javascript: etc. */
+const isLinkKey = (key: string) => /(Link|Url|URL|Href)$/.test(key);
+const safeLink = (value: unknown): unknown => {
+    if (typeof value !== 'string' || !value) return value;
+    return /^(https?:\/\/|mailto:)/i.test(value.trim()) ? value : '';
+};
+const sanitizeTemplateLinks = (data: TemplateData): TemplateData => {
+    const out: TemplateData = {};
+    for (const [key, value] of Object.entries(data)) out[key] = isLinkKey(key) ? safeLink(value) : value;
+    return out;
+};
 
 interface EmailOptions {
     to: string | string[];
@@ -46,9 +72,9 @@ class EmailService {
                 subject: safeSubject,
                 html: options.html,
             });
-            console.log(`✅ Email sent to: ${options.to}`);
+            console.log(`✅ Email sent to: ${maskEmail(options.to)}`);
         } catch (error) {
-            console.error('❌ Email sending failed:', error);
+            console.error(`❌ Email sending failed for ${maskEmail(options.to)}:`, (error as Error)?.message || error);
             throw error;
         }
     }
@@ -83,10 +109,10 @@ class EmailService {
                 compiled = handlebars.compile(this.loadTemplateSource(templateName));
                 this.templateCache.set(templateName, compiled);
             }
-            return compiled(data);
+            return compiled(sanitizeTemplateLinks(data));
         } catch (error) {
             console.error(`❌ Template rendering failed for ${templateName}:`, error);
-            return this.renderFallbackEmail(data);
+            return this.renderFallbackEmail(sanitizeTemplateLinks(data));
         }
     }
 
@@ -97,13 +123,15 @@ class EmailService {
     private renderFallbackEmail(data: TemplateData): string {
         const name = (data.username || data.name || data.fullName || data.mentorName || data.studentName || 'there') as string;
         const actionUrl = (data.dashboardUrl || data.loginLink || data.verificationLink || this.getClientBaseUrl()) as string;
+        const safeName = escapeHtml(name);
+        const safeActionUrl = escapeHtml(actionUrl);
         return `
             <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 24px;color:#333333">
               <h2 style="color:#4f46e5;margin:0 0 16px">EmpowerEd Learnings</h2>
-              <p style="font-size:16px;line-height:1.6;margin:0 0 16px">Hi ${name},</p>
+              <p style="font-size:16px;line-height:1.6;margin:0 0 16px">Hi ${safeName},</p>
               <p style="font-size:16px;line-height:1.6;margin:0 0 16px">There's an update on your EmpowerEd Learnings account. Sign in to your dashboard to view the details.</p>
               <p style="margin:24px 0">
-                <a href="${actionUrl}" style="display:inline-block;background:#4f46e5;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:6px;font-size:16px;font-weight:bold">Go to your dashboard</a>
+                <a href="${safeActionUrl}" style="display:inline-block;background:#4f46e5;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:6px;font-size:16px;font-weight:bold">Go to your dashboard</a>
               </p>
               <p style="font-size:13px;color:#999999;margin:24px 0 0">— Team EmpowerEd Learnings</p>
             </div>`;
@@ -869,10 +897,10 @@ class EmailService {
         const html = `
             <div style="font-family:Arial,sans-serif;line-height:1.6;max-width:480px;margin:0 auto">
               <h2 style="color:#1a1a1a">Verify your email</h2>
-              <p>Hi ${data.username},</p>
+              <p>Hi ${escapeHtml(data.username)},</p>
               <p>Use the code below to verify your email address. It expires in <strong>30 minutes</strong>.</p>
               <div style="margin:24px 0;text-align:center">
-                <span style="display:inline-block;font-size:36px;font-weight:bold;letter-spacing:10px;color:#4f46e5;background:#f0f0ff;padding:16px 24px;border-radius:8px">${data.code}</span>
+                <span style="display:inline-block;font-size:36px;font-weight:bold;letter-spacing:10px;color:#4f46e5;background:#f0f0ff;padding:16px 24px;border-radius:8px">${escapeHtml(data.code)}</span>
               </div>
               <p style="color:#555">If you did not create an account, you can safely ignore this email.</p>
               <p style="color:#999;font-size:12px">— EmpowerEd Learnings</p>
@@ -971,7 +999,6 @@ class EmailService {
     async sendSubAdminWelcome(data: {
         email: string;
         username: string;
-        password: string;
         permissionsList?: string;
     }): Promise<void> {
         // Admin portal lives on a separate domain; never use CLIENT_URL here.
@@ -1012,7 +1039,7 @@ class EmailService {
             ['How did you hear about us', data.referral_source || '—'],
             ['Profile link', data.profile_link || '—'],
         ]
-            .map(([label, value]) => `<tr><td style="padding:6px 12px;font-weight:600;background:#f3e5f5;white-space:nowrap">${label}</td><td style="padding:6px 12px">${value}</td></tr>`)
+            .map(([label, value]) => `<tr><td style="padding:6px 12px;font-weight:600;background:#f3e5f5;white-space:nowrap">${escapeHtml(label)}</td><td style="padding:6px 12px;white-space:pre-wrap">${escapeHtml(value)}</td></tr>`)
             .join('');
 
         const html = `
@@ -1031,7 +1058,7 @@ class EmailService {
 
         await this.sendEmail({
             to: data.adminEmail,
-            subject: `[Beta Application] ${data.full_name}`,
+            subject: `[Beta Application] ${data.full_name.replace(/[\r\n]+/g, ' ')}`,
             html,
         });
     }
@@ -1040,7 +1067,7 @@ class EmailService {
         full_name: string;
         email: string;
     }): Promise<void> {
-        const firstName = data.full_name.split(' ')[0];
+        const firstName = escapeHtml(data.full_name.split(' ')[0]);
         const html = `
 <!DOCTYPE html>
 <html>
@@ -1067,7 +1094,7 @@ class EmailService {
         full_name: string;
         email: string;
     }): Promise<void> {
-        const firstName = data.full_name.split(' ')[0];
+        const firstName = escapeHtml(data.full_name.split(' ')[0]);
         const baseUrl = this.getClientBaseUrl();
         const createAccountUrl = `${baseUrl}/tutor-register`;
         const bookDemoUrl = `${baseUrl}/book-demo`;
@@ -1097,7 +1124,7 @@ class EmailService {
         });
     }
     async sendBetaEndingReminder(data: { tutorName: string; email: string }): Promise<void> {
-        const firstName = data.tutorName.split(' ')[0];
+        const firstName = escapeHtml(data.tutorName.split(' ')[0]);
         const baseUrl = this.getClientBaseUrl();
         const continueUrl = `${baseUrl}/pricing`;
         const bookAdminCallUrl = `${baseUrl}/book-demo`;

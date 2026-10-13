@@ -1,0 +1,9 @@
+#!/bin/sh
+# Blocks commits that contain secrets. Enable once per clone:  git config core.hooksPath .githooks
+if command -v gitleaks >/dev/null 2>&1; then
+  exec gitleaks protect --staged --redact --no-banner
+elif command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+  exec docker run --rm -v "$(git rev-parse --show-toplevel):/repo" -w /repo ghcr.io/gitleaks/gitleaks:v8.18.4 protect --staged --redact --no-banner --source /repo
+else
+  echo "pre-commit: gitleaks not found (brew install gitleaks) — secret scan skipped" >&2
+fi
