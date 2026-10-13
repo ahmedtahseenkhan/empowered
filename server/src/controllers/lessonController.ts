@@ -1,13 +1,53 @@
 import { Response } from 'express';
 import prisma from '../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
-import { isTutorSlotAvailable } from '../services/availability';
+import { z } from 'zod';
+import { isTutorSlotAvailable, isTutorSlotFreeTx, lockTutorSchedule } from '../services/availability';
 import { updateMeetEventForLesson, ensureMeetLinkForLesson, updateMentorMeetEvent } from '../services/googleCalendar';
 import { completeLessonNow, WalletError } from '../services/walletService';
 
 // Student-initiated reschedule policy
 const RESCHEDULE_CUTOFF_HOURS = 24; // cannot reschedule within 24h of start
 const MAX_RESCHEDULES = 1; // each session can be moved once
+
+const PAYMENT_DUE_LEAD_MS = 48 * 60 * 60 * 1000;
+const JOIN_GRACE_MS = 15 * 60 * 1000;
+
+const RescheduleSchema = z.object({
+    newStart: z.string().min(1).max(64),
+    clientTimezone: z.string().max(64).optional(),
+});
+
+const isFreeOfCharge = (billingType: string) =>
+    billingType === 'CUSTOM_FREE' || billingType === 'FREE_INTRO' || billingType === 'FREE_TRIAL';
+
+/**
+ * Same rule joinLesson applies before handing a student the (open-access) Meet link:
+ * credit-funded and free sessions are always joinable; card sessions only once the
+ * matching payment row is paid, or after the session is over.
+ */
+const studentMayJoin = (
+    lesson: {
+        booking_id: string | null;
+        origin: string;
+        status: string;
+        billing_type: string;
+        start_time: Date;
+        end_time: Date;
+        booking: { funding: string } | null;
+    },
+    schedules: Array<{ due_date: Date; status: string }>,
+) => {
+    const isCustom = lesson.origin === 'MENTOR_OFFER';
+    if (!lesson.booking_id && !isCustom) return false;
+    if (isCustom && lesson.status === 'PENDING') return false;
+    if (lesson.booking?.funding === 'CREDITS' || isFreeOfCharge(lesson.billing_type)) return true;
+    if (Date.now() > lesson.end_time.getTime() + JOIN_GRACE_MS) return true;
+    const dueMs = lesson.start_time.getTime() - PAYMENT_DUE_LEAD_MS;
+    const schedule = schedules.find((sch) => Math.abs(sch.due_date.getTime() - dueMs) <= 60 * 1000);
+    // The first session of a card booking is paid at checkout and has no schedule row
+    return !schedule || schedule.status === 'paid';
+};
 
 export const getMyLessons = async (req: AuthRequest, res: Response) => {
     try {
@@ -109,7 +149,11 @@ export const getMyLessons = async (req: AuthRequest, res: Response) => {
         const DUE_LEAD_MS = 48 * 60 * 60 * 1000;
         const DUE_WINDOW_MS = 2 * 60 * 60 * 1000;
 
-        const enriched = lessons.map((lesson) => {
+        const enriched = lessons.map((rawLesson) => {
+            const lesson = role === 'STUDENT' && rawLesson.meeting_link
+                && !studentMayJoin(rawLesson, rawLesson.booking_id ? schedulesByBooking.get(rawLesson.booking_id) || [] : [])
+                ? { ...rawLesson, meeting_link: null }
+                : rawLesson;
             if (lesson.billing_type === 'FREE_INTRO' || lesson.billing_type === 'FREE_TRIAL' || lesson.billing_type === 'CUSTOM_FREE') {
                 return { ...lesson, payment_status: 'not_required' as const };
             }
@@ -241,7 +285,24 @@ export const getLessonDetail = async (req: AuthRequest, res: Response) => {
             }
         }
 
-        return res.json({ lesson: { ...lesson, payment_status } });
+        let meeting_link = lesson.meeting_link;
+        if (role === 'STUDENT' && meeting_link) {
+            const schedules = lesson.booking_id
+                ? await prisma.paymentSchedule.findMany({
+                    where: {
+                        booking_id: lesson.booking_id,
+                        due_date: {
+                            gte: new Date(lesson.start_time.getTime() - PAYMENT_DUE_LEAD_MS - 60 * 1000),
+                            lte: new Date(lesson.start_time.getTime() - PAYMENT_DUE_LEAD_MS + 60 * 1000),
+                        },
+                    },
+                    select: { due_date: true, status: true },
+                })
+                : [];
+            if (!studentMayJoin(lesson, schedules)) meeting_link = null;
+        }
+
+        return res.json({ lesson: { ...lesson, meeting_link, payment_status } });
     } catch (e) {
         console.error('getLessonDetail error:', e);
         return res.status(500).json({ error: 'Failed to fetch session details' });
@@ -332,7 +393,8 @@ export const joinLesson = async (req: AuthRequest, res: Response) => {
                 },
             });
 
-            if (!schedule || schedule.status !== 'paid') {
+            // No schedule row = the booking's first session, paid at checkout
+            if (schedule && schedule.status !== 'paid') {
                 return res.status(402).json({
                     error: 'Payment required to join this session.',
                     bookingId: lesson.booking_id,
@@ -467,8 +529,9 @@ export const rescheduleLesson = async (req: AuthRequest, res: Response) => {
         const lessonId = (req.params.lessonId || '').trim();
         if (!lessonId) return res.status(400).json({ error: 'lessonId is required' });
 
-        const { newStart, clientTimezone } = req.body as { newStart?: string; clientTimezone?: string };
-        if (!newStart) return res.status(400).json({ error: 'newStart is required (ISO string)' });
+        const parsed = RescheduleSchema.safeParse(req.body);
+        if (!parsed.success) return res.status(400).json({ error: 'newStart is required (ISO string)' });
+        const { newStart, clientTimezone } = parsed.data;
 
         const newStartDate = new Date(newStart);
         if (Number.isNaN(newStartDate.getTime())) return res.status(400).json({ error: 'newStart is invalid' });
@@ -532,15 +595,26 @@ export const rescheduleLesson = async (req: AuthRequest, res: Response) => {
         const newDue = new Date(newStartDate.getTime() - DUE_OFFSET_MS);
         const dueWindowMs = 2 * 60 * 60 * 1000;
 
-        await prisma.$transaction(async (tx) => {
-            await tx.lesson.update({
-                where: { id: lesson.id },
+        const moved = await prisma.$transaction(async (tx) => {
+            await lockTutorSchedule(tx, lesson.tutor_id);
+            const free = await isTutorSlotFreeTx(tx, {
+                tutorId: lesson.tutor_id,
+                start: newStartDate,
+                end: newEndDate,
+                excludeLessonId: lesson.id,
+            });
+            if (!free) return false;
+
+            // Conditional on the values we validated, so two concurrent reschedules can't both apply.
+            const updated = await tx.lesson.updateMany({
+                where: { id: lesson.id, status: 'BOOKED', reschedule_count: lesson.reschedule_count },
                 data: {
                     start_time: newStartDate,
                     end_time: newEndDate,
                     reschedule_count: { increment: 1 },
                 },
             });
+            if (updated.count !== 1) return false;
 
             if (lesson.booking_id) {
                 const schedule = await tx.paymentSchedule.findFirst({
@@ -559,7 +633,9 @@ export const rescheduleLesson = async (req: AuthRequest, res: Response) => {
                     });
                 }
             }
+            return true;
         });
+        if (!moved) return res.status(409).json({ error: 'Selected time is no longer available' });
 
         // Move the calendar event (non-fatal; the Meet link is preserved). Mentor-hosted
         // sessions live on the mentor's calendar, and Google tells the student about the change.

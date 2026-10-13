@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
@@ -16,10 +16,13 @@ async function main() {
         return;
     }
 
-    // Create admin user
-    const adminEmail = 'admin@empoweredlearnings.com';
-    const adminPassword = 'admin123'; // Change this to a secure password
-    const hashedPassword = await bcrypt.hash(adminPassword, 10);
+    // Credentials come from the environment so no default admin password exists anywhere
+    const adminEmail = process.env.SEED_ADMIN_EMAIL?.trim().toLowerCase();
+    const adminPassword = process.env.SEED_ADMIN_PASSWORD;
+    if (!adminEmail || !adminPassword || adminPassword.length < 12) {
+        throw new Error('Set SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD (12+ characters) to create the first admin.');
+    }
+    const hashedPassword = await bcrypt.hash(adminPassword, 12);
 
     const adminUser = await prisma.user.create({
         data: {
@@ -38,14 +41,12 @@ async function main() {
         data: {
             user_id: adminUser.id,
             username: 'Administrator',
+            is_super_admin: true,
         },
     });
 
     console.log('✅ Admin profile created');
-    console.log('\n📧 Login credentials:');
-    console.log('   Email:', adminEmail);
-    console.log('   Password:', adminPassword);
-    console.log('\n⚠️  Please change the password after first login!\n');
+    console.log('\n⚠️  Remove SEED_ADMIN_PASSWORD from the environment now that the admin exists.\n');
 }
 
 main()

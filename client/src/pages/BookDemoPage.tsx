@@ -4,6 +4,8 @@ import { Card } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import api from '../api/axios';
+import BotProtectionFields from '../components/common/BotProtectionFields';
+import { useBotProtection } from '../hooks/useBotProtection';
 
 const CATEGORY_OPTIONS = [
     'Academic Tutoring',
@@ -159,6 +161,8 @@ const BookDemoPage: React.FC = () => {
         }));
     };
 
+    const bot = useBotProtection();
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
@@ -186,11 +190,13 @@ const BookDemoPage: React.FC = () => {
                 looking_for: formData.looking_for,
                 slot_start_time: formData.slot_start_time,
                 timezone: visitorTimezone,
+                ...bot.fields,
             });
             setSubmitted(true);
         } catch (err: any) {
             setError(err.response?.data?.error || 'Failed to book demo. Please try again.');
         } finally {
+            bot.reset();
             setBusy(false);
         }
     };
@@ -401,7 +407,9 @@ const BookDemoPage: React.FC = () => {
                                 </div>
                             </div>
 
-                            <Button type="submit" className="w-full" disabled={busy}>
+                            <BotProtectionFields bot={bot} action="demo" className="flex justify-center" />
+
+                            <Button type="submit" className="w-full" disabled={busy || !bot.ready}>
                                 {busy ? 'Booking...' : 'Book Demo'}
                             </Button>
                         </form>

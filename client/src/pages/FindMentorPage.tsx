@@ -6,6 +6,8 @@ import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
+import BotProtectionFields from '../components/common/BotProtectionFields';
+import { useBotProtection } from '../hooks/useBotProtection';
 import { MENTOR_SEARCH_AGE_OPTIONS } from '../constants/mentorSearch';
 
 type Frequency = 'WEEKLY' | 'TWICE_WEEKLY';
@@ -92,6 +94,7 @@ const FindMentorPage: React.FC = () => {
 
     const [error, setError] = useState<string>('');
     const [busy, setBusy] = useState(false);
+    const bot = useBotProtection();
     const [catsBusy, setCatsBusy] = useState(false);
     const [categories, setCategories] = useState<CategoryNode[]>([]);
 
@@ -284,27 +287,23 @@ const FindMentorPage: React.FC = () => {
         try {
             setBusy(true);
 
-            // New account: created but not usable until the email is verified.
-            try {
-                await api.post('/auth/register', { email, password: formData.password, role: 'STUDENT', username });
-                navigate(verifyUrl);
-                return;
-            } catch (e: any) {
-                if (e.response?.data?.error !== 'User already exists') throw e;
-            }
-
-            // Existing account: log in. If the email was never verified, send them to verify.
+            // Existing, verified account with these credentials: just sign in.
             try {
                 const loginRes = await api.post('/auth/login', { email, password: formData.password });
-                login(loginRes.data.token, loginRes.data.user);
+                login(loginRes.data.user);
                 navigate(mentorsUrl);
+                return;
             } catch (loginErr: any) {
-                if (loginErr.response?.data?.code === 'EMAIL_NOT_VERIFIED') {
-                    navigate(verifyUrl);
-                    return;
-                }
-                throw loginErr;
+                const status = loginErr.response?.status;
+                const unverified = loginErr.response?.data?.code === 'EMAIL_NOT_VERIFIED';
+                // 401 = no account with these credentials; anything else (suspended, rate limit) is shown as-is.
+                if (status !== 401 && !unverified) throw loginErr;
             }
+
+            // New (or not yet verified) account: register always answers the same way and emails a
+            // verification code; the account is usable only after the code is confirmed.
+            await api.post('/auth/register', { email, password: formData.password, role: 'STUDENT', username, ...bot.fields });
+            navigate(verifyUrl);
         } catch (e: any) {
             const apiErr = e.response?.data?.error;
             if (Array.isArray(apiErr)) {
@@ -313,6 +312,7 @@ const FindMentorPage: React.FC = () => {
                 setError(apiErr || e?.message || 'Failed to create your account');
             }
         } finally {
+            bot.reset();
             setBusy(false);
         }
     };
@@ -584,9 +584,10 @@ const FindMentorPage: React.FC = () => {
                 })}
             </div>
             <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">{CONSISTENCY_NOTE}</p>
+            {user?.role !== 'STUDENT' && <BotProtectionFields bot={bot} action="register" className="flex justify-center" />}
             <div className="flex items-center gap-3 justify-center">
                 <Button variant="outline" onClick={onBack}>Back</Button>
-                <Button onClick={handleFinish} disabled={busy}>
+                <Button onClick={handleFinish} disabled={busy || (user?.role !== 'STUDENT' && !bot.ready)}>
                     Create account & see mentors
                 </Button>
             </div>

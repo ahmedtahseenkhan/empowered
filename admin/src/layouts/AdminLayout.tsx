@@ -3,15 +3,20 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { LogOut, ShieldCheck, Menu, X } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { ADMIN_MODULES, getStoredAdminUser, canAccessModule } from '../lib/permissions';
+import api, { clearCachedAdminUser } from '../api/axios';
 
 const AdminLayout: React.FC = () => {
     const navigate = useNavigate();
     const user = getStoredAdminUser();
     const [mobileOpen, setMobileOpen] = useState(false);
 
-    const handleLogout = () => {
-        localStorage.removeItem('adminToken');
-        localStorage.removeItem('adminUser');
+    const handleLogout = async () => {
+        try {
+            await api.post('/auth/logout');
+        } catch {
+            // Clear the local state regardless; the cookie expires on its own.
+        }
+        clearCachedAdminUser();
         navigate('/login');
     };
 

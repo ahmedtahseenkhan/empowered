@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import api from '../api/axios';
+import { safeHttpUrl } from '../lib/urls';
 import { CheckCircle, XCircle, Clock, ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -261,11 +262,11 @@ const BetaApplicationsPage: React.FC = () => {
                                                         <p className="font-semibold text-gray-700 mb-1">How did you hear about us</p>
                                                         <p className="text-gray-600">{app.referral_source || '—'}</p>
                                                     </div>
-                                                    {app.profile_link && (
+                                                    {safeHttpUrl(app.profile_link) && (
                                                         <div>
                                                             <p className="font-semibold text-gray-700 mb-1">Profile link</p>
                                                             <a
-                                                                href={app.profile_link}
+                                                                href={safeHttpUrl(app.profile_link)!}
                                                                 target="_blank"
                                                                 rel="noopener noreferrer"
                                                                 className="text-primary-600 hover:underline break-all"

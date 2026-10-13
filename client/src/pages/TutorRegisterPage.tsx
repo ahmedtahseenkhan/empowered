@@ -8,6 +8,8 @@ import { Card } from '../components/ui/Card';
 import { Check, X, Shield, CreditCard, Mail } from 'lucide-react';
 import BetaConfirmationModal from '../components/ui/BetaConfirmationModal';
 import api from '../api/axios';
+import BotProtectionFields from '../components/common/BotProtectionFields';
+import { useBotProtection } from '../hooks/useBotProtection';
 
 const STEPS = [
     { id: 1, title: 'Basic Info', icon: <Shield className="w-5 h-5" /> },
@@ -155,6 +157,8 @@ const TutorRegisterPage: React.FC = () => {
     }, []);
 
     const { login, user } = useAuth();
+    const registerBot = useBotProtection();
+    const resendBot = useBotProtection();
 
     // Approved beta mentors get the Premium plan assigned automatically on the server (at email
     // verification), so they never see the Plan / Payment steps and go straight to the dashboard.
@@ -180,12 +184,14 @@ const TutorRegisterPage: React.FC = () => {
                 email: formData.email,
                 password: formData.password,
                 role: 'TUTOR',
+                ...registerBot.fields,
             });
             if (res.data?.is_beta) setIsBeta(true);
             setCurrentStep(2);
         } catch (err: any) {
             setError(err.response?.data?.error || 'Registration failed.');
         } finally {
+            registerBot.reset();
             setLoading(false);
         }
     };
@@ -200,11 +206,13 @@ const TutorRegisterPage: React.FC = () => {
                 email: formData.email,
                 code: verificationCode.trim(),
             });
-            // The account is only authenticated once the email is verified.
-            if (response.data?.token && response.data?.user) {
-                login(response.data.token, response.data.user);
-                if (response.data.user.is_beta) setIsBeta(true);
+            // The account is only authenticated (session cookie set) once the email is verified.
+            if (!response.data?.user) {
+                setError('Your email is verified. Please sign in to continue.');
+                return;
             }
+            login(response.data.user);
+            if (response.data.user.is_beta) setIsBeta(true);
             setCurrentStep(3);
         } catch (err: any) {
             setError(err.response?.data?.error || 'Invalid or expired code. Please try again.');
@@ -219,12 +227,13 @@ const TutorRegisterPage: React.FC = () => {
         setResendMessage('');
         setError('');
         try {
-            await api.post('/auth/resend-verification', { email: formData.email });
+            const res = await api.post('/auth/resend-verification', { email: formData.email, ...resendBot.fields });
             setVerificationCode('');
-            setResendMessage('A new code has been sent to your email.');
+            setResendMessage(res.data?.message || 'If this account still needs verification, a new code has been sent.');
         } catch (err: any) {
             setError(err.response?.data?.error || 'Failed to resend code.');
         } finally {
+            resendBot.reset();
             setResendLoading(false);
         }
     };
@@ -326,7 +335,8 @@ const TutorRegisterPage: React.FC = () => {
                             autoComplete="new-password"
                             helperText="At least 8 characters"
                         />
-                        <Button type="submit" className="w-full" disabled={loading}>
+                        <BotProtectionFields bot={registerBot} action="register" />
+                        <Button type="submit" className="w-full" disabled={loading || !registerBot.ready}>
                             {loading ? 'Creating Account...' : 'Continue'}
                         </Button>
                     </form>
@@ -374,12 +384,13 @@ const TutorRegisterPage: React.FC = () => {
                             </Button>
                         </form>
 
-                        <div className="text-center text-sm text-gray-500">
+                        <div className="text-center text-sm text-gray-500 space-y-3">
+                            <BotProtectionFields bot={resendBot} action="resend-verification" className="flex justify-center" />
                             Didn't receive a code?{' '}
                             <button
                                 type="button"
                                 onClick={handleResendCode}
-                                disabled={resendLoading}
+                                disabled={resendLoading || !resendBot.ready}
                                 className="text-primary-600 font-semibold hover:underline disabled:opacity-50"
                             >
                                 {resendLoading ? 'Sending...' : 'Resend Code'}

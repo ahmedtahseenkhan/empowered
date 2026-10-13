@@ -4,6 +4,7 @@ import { Card } from '../components/ui/Card';
 import api from '../api/axios';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
+import { safeExternalUrl } from '../utils/safeUrl';
 
 type UploadAttachment = {
     file_url: string;
@@ -124,7 +125,7 @@ const MentorNotesPage: React.FC = () => {
         return (
             <div className="mt-2 space-y-1">
                 {arr.map((a: any) => (
-                    <a key={a.id || a.file_url} href={a.file_url} target="_blank" rel="noreferrer" className="block text-xs text-[#4A1D96] hover:underline">
+                    <a key={a.id || a.file_url} href={safeExternalUrl(a.file_url)} target="_blank" rel="noopener noreferrer" className="block text-xs text-[#4A1D96] hover:underline">
                         {a.file_name}
                     </a>
                 ))}

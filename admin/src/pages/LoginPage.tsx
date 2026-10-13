@@ -17,15 +17,16 @@ const LoginPage: React.FC = () => {
 
         try {
             const res = await api.post('/auth/login', { email, password });
-            const { token, user } = res.data;
+            // The session itself is an HttpOnly cookie; only the (non-secret) profile is cached
+            // for the sidebar and route guards.
+            const { user } = res.data;
 
-            if (user.role !== 'ADMIN') {
+            if (user?.role !== 'ADMIN') {
                 setError('Access denied: Admin privileges required.');
                 setLoading(false);
                 return;
             }
 
-            localStorage.setItem('adminToken', token);
             localStorage.setItem('adminUser', JSON.stringify(user));
             navigate('/');
         } catch (err: any) {

@@ -168,10 +168,10 @@ export default function TutorWhiteboardPage() {
         setBoardTitle(`${lesson.student_name} ↔ ${lesson.tutor_name}`);
         setLiveRole(role);
 
-        const token = localStorage.getItem('token');
         const apiBase = (api.defaults.baseURL || '').replace(/\/api\/?$/, '');
         const socket = io(`${apiBase}/whiteboard`, {
-          auth: { token },
+          // The handshake carries the HttpOnly session cookie.
+          withCredentials: true,
           path: '/socket.io',
           transports: ['websocket', 'polling'],
         });

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
-import api from '../api/axios';
+import api, { clearCachedAdminUser } from '../api/axios';
 
 const ProtectedRoute = () => {
     const [isLoading, setIsLoading] = useState(true);
@@ -8,28 +8,19 @@ const ProtectedRoute = () => {
 
     useEffect(() => {
         const verifyAuth = async () => {
-            const token = localStorage.getItem('adminToken');
-            if (!token) {
-                setIsLoading(false);
-                return;
-            }
-
             try {
-                // Verify token + role and refresh the cached admin user so that
-                // is_super_admin / permissions stay current for the sidebar + route guards.
+                // The session is an HttpOnly cookie: /auth/me verifies it and the role, and refreshes the
+                // cached admin user so is_super_admin / permissions stay current for the sidebar + route guards.
                 const res = await api.get('/auth/me');
                 const user = res.data.user;
                 if (user?.role === 'ADMIN') {
                     localStorage.setItem('adminUser', JSON.stringify(user));
                     setIsAuthenticated(true);
                 } else {
-                    localStorage.removeItem('adminToken');
-                    localStorage.removeItem('adminUser');
+                    clearCachedAdminUser();
                 }
-            } catch (error) {
-                console.error('Auth verification failed', error);
-                localStorage.removeItem('adminToken');
-                localStorage.removeItem('adminUser');
+            } catch {
+                clearCachedAdminUser();
             } finally {
                 setIsLoading(false);
             }

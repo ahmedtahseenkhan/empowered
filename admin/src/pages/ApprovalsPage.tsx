@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import api from '../api/axios';
 import { BadgeCheck, XCircle, ExternalLink } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { resolveApiFileUrl, openExternal, safeHttpUrl } from '../lib/urls';
 
 interface CertificationRequest {
     id: string;
@@ -32,24 +33,37 @@ interface ReviewRequest {
     };
 }
 
+// Only these types may be turned into a same-origin blob: an attacker-controlled data: URL with
+// e.g. text/html or image/svg+xml would otherwise run script in the admin origin.
+const SAFE_DOCUMENT_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'application/pdf']);
+
 /**
- * Open a proof document in a new tab. Certification proofs are stored as base64
- * `data:` URIs, and Chrome/Edge BLOCK top-level navigation to data: URLs for
- * security — so a plain <a href="data:..."> just shows the raw string and renders
- * nothing. We convert the data URI to a Blob and open its object URL instead,
- * which browsers permit. Regular http(s) links open directly.
+ * Open a proof document in a new tab. Certification proofs may be stored as base64
+ * `data:` URIs, and Chrome/Edge BLOCK top-level navigation to data: URLs — so we convert
+ * an allow-listed image/PDF data URI to a Blob and open its object URL instead. Regular
+ * http(s) links and API file paths open directly (noopener); anything else is refused.
  */
 const openDocument = (url: string) => {
     try {
         if (!url.startsWith('data:')) {
-            window.open(url, '_blank', 'noopener,noreferrer');
+            const resolved = resolveApiFileUrl(url);
+            if (!resolved) {
+                alert('This document link is not a valid http(s) URL and was not opened.');
+                return;
+            }
+            openExternal(resolved);
             return;
         }
 
         const commaIdx = url.indexOf(',');
+        if (commaIdx < 0) throw new Error('Malformed data URL');
         const meta = url.substring(5, commaIdx); // strip leading "data:"
         const data = url.substring(commaIdx + 1);
-        const mime = meta.split(';')[0] || 'application/octet-stream';
+        const mime = (meta.split(';')[0] || '').trim().toLowerCase();
+        if (!SAFE_DOCUMENT_MIME_TYPES.has(mime)) {
+            alert('This document type is not allowed. Only PNG, JPEG, WEBP, GIF images and PDFs can be opened.');
+            return;
+        }
         const isBase64 = /;base64/i.test(meta);
 
         let bytes: Uint8Array;
@@ -64,11 +78,14 @@ const openDocument = (url: string) => {
         const blob = new Blob([bytes as unknown as BlobPart], { type: mime });
         const objectUrl = URL.createObjectURL(blob);
         const win = window.open(objectUrl, '_blank');
-        if (!win) {
+        if (win) {
+            win.opener = null;
+        } else {
             // Popup blocked — fall back to a download so the admin can still see it.
             const a = document.createElement('a');
             a.href = objectUrl;
-            a.download = `document.${mime.split('/')[1] || 'bin'}`;
+            a.download = `document.${mime === 'application/pdf' ? 'pdf' : mime.split('/')[1]}`;
+            a.rel = 'noopener';
             document.body.appendChild(a);
             a.click();
             a.remove();
@@ -286,8 +303,8 @@ const ApprovalsPage: React.FC = () => {
                                                 {rev.comment && <div className="text-xs text-gray-600 line-clamp-2 max-w-xs">{rev.comment}</div>}
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
-                                                {rev.external_url ? (
-                                                    <a href={rev.external_url} target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:text-primary-800 flex items-center gap-1 text-sm">
+                                                {safeHttpUrl(rev.external_url) ? (
+                                                    <a href={safeHttpUrl(rev.external_url)!} target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:text-primary-800 flex items-center gap-1 text-sm">
                                                         Link <ExternalLink className="w-3 h-3" />
                                                     </a>
                                                 ) : (

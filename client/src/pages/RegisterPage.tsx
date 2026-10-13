@@ -5,6 +5,9 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
 import api from '../api/axios';
+import BotProtectionFields from '../components/common/BotProtectionFields';
+import { useBotProtection } from '../hooks/useBotProtection';
+import { safeRedirectPath } from '../utils/safeRedirect';
 
 const RegisterPage: React.FC = () => {
     const [formData, setFormData] = useState({
@@ -18,6 +21,7 @@ const RegisterPage: React.FC = () => {
 
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
+    const bot = useBotProtection();
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -25,14 +29,15 @@ const RegisterPage: React.FC = () => {
         setLoading(true);
 
         try {
-            await api.post('/auth/register', formData);
+            await api.post('/auth/register', { ...formData, ...bot.fields });
 
             // Account created but not yet usable — must verify email first.
-            const redirect = searchParams.get('redirect') || '/dashboard';
+            const redirect = safeRedirectPath(searchParams.get('redirect'));
             navigate(`/verify-code?email=${encodeURIComponent(formData.email.trim())}&redirect=${encodeURIComponent(redirect)}`);
         } catch (err: any) {
             setError(err.response?.data?.error || 'Registration failed. Please try again.');
         } finally {
+            bot.reset();
             setLoading(false);
         }
     };
@@ -111,12 +116,14 @@ const RegisterPage: React.FC = () => {
                                 </div>
                             </div>
 
+                            <BotProtectionFields bot={bot} action="register" />
+
                             <Button
                                 type="submit"
                                 variant="primary"
                                 size="lg"
                                 className="w-full"
-                                disabled={loading}
+                                disabled={loading || !bot.ready}
                             >
                                 {loading ? 'Creating account...' : 'Create Account'}
                             </Button>

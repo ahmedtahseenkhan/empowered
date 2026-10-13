@@ -1,6 +1,7 @@
 import prisma from '../config/db';
 import { Prisma, CreditSource, CreditTransactionType, PayoutMethod } from '@prisma/client';
 import { StripeService } from './stripeService';
+import { encryptField, decryptField } from '../utils/crypto';
 
 /**
  * Learning Credits wallet — Phase 1.
@@ -473,6 +474,18 @@ export async function resolveDispute(args: {
         const earning = dispute.lesson.earning;
         if (!earning) throw new WalletError('No mentor earning is linked to this session');
 
+        // Claim the dispute first: only one concurrent resolver can move it out of OPEN.
+        const claimed = await tx.sessionDispute.updateMany({
+            where: { id: dispute.id, status: 'OPEN' },
+            data: {
+                status: action === 'REFUND' ? 'RESOLVED_REFUNDED' : 'RESOLVED_RELEASED',
+                resolution_note: note || null,
+                resolved_by_user_id: adminUserId,
+                resolved_at: now(),
+            },
+        });
+        if (claimed.count !== 1) throw new WalletError('This dispute is already resolved', 409);
+
         if (action === 'REFUND') {
             const credits = Math.round(earning.gross_cents / 100);
             const promo = Math.round(earning.promo_cents / 100);
@@ -516,15 +529,7 @@ export async function resolveDispute(args: {
             });
         }
 
-        return tx.sessionDispute.update({
-            where: { id: dispute.id },
-            data: {
-                status: action === 'REFUND' ? 'RESOLVED_REFUNDED' : 'RESOLVED_RELEASED',
-                resolution_note: note || null,
-                resolved_by_user_id: adminUserId,
-                resolved_at: now(),
-            },
-        });
+        return tx.sessionDispute.findUniqueOrThrow({ where: { id: dispute.id } });
     });
 }
 
@@ -558,6 +563,9 @@ export async function markEarningsPaid(args: {
     const note = (args.note || '').trim();
     if (!note) throw new WalletError('A payout reference / note is required');
     const proofUrl = (args.proofUrl || '').trim() || null;
+    if (proofUrl && !/^\/api\/(files|uploads)\/[A-Za-z0-9._-]+$/.test(proofUrl)) {
+        throw new WalletError('Payout proof must be a file uploaded through the admin panel');
+    }
     return prisma.$transaction(async (tx) => {
         const tutor = await tx.tutorProfile.findUnique({ where: { id: args.tutorId }, select: { payout_method: true } });
         if (!tutor) throw new WalletError('Tutor not found', 404);
@@ -736,12 +744,12 @@ function shapePayoutSettings(t: {
     return {
         method: t.payout_method, // null = not chosen (Stripe used automatically if connected)
         stripe_connected: !!t.stripe_account_id,
-        zelle_contact: t.payout_zelle_contact,
+        zelle_contact: decryptField(t.payout_zelle_contact),
         bank: {
             bank_name: t.payout_bank_name,
             account_name: t.payout_bank_account_name,
-            account_number: t.payout_bank_account_number,
-            routing: t.payout_bank_routing,
+            account_number: decryptField(t.payout_bank_account_number),
+            routing: decryptField(t.payout_bank_routing),
             notes: t.payout_bank_notes,
         },
     };
@@ -792,11 +800,11 @@ export async function updateMentorPayoutSettings(tutorId: string, args: {
         where: { id: tutorId },
         data: {
             payout_method: method,
-            payout_zelle_contact: zelle,
+            payout_zelle_contact: encryptField(zelle),
             payout_bank_name: bankName,
             payout_bank_account_name: bankAccountName,
-            payout_bank_account_number: bankAccountNumber,
-            payout_bank_routing: clean(args.bank_routing, 60),
+            payout_bank_account_number: encryptField(bankAccountNumber),
+            payout_bank_routing: encryptField(clean(args.bank_routing, 60)),
             payout_bank_notes: clean(args.bank_notes, 500),
         },
         select: PAYOUT_SETTINGS_SELECT,

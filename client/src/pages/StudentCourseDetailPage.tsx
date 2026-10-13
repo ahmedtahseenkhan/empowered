@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import api from '../api/axios';
+import { safeExternalUrl } from '../utils/safeUrl';
 
 
 interface CourseDetail {
@@ -197,7 +198,7 @@ const StudentCourseDetailPage: React.FC = () => {
                             <div>
                                 <h2 className="text-xl font-bold text-gray-900 mb-3">Preview</h2>
                                 <a
-                                    href={course.preview_url}
+                                    href={safeExternalUrl(course.preview_url)}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="inline-flex items-center gap-2 bg-gray-900 text-white px-5 py-3 rounded-xl hover:bg-gray-700 transition-colors"
@@ -229,7 +230,7 @@ const StudentCourseDetailPage: React.FC = () => {
                                         You're enrolled in this course
                                     </div>
                                     <a
-                                        href={course.course_url}
+                                        href={safeExternalUrl(course.course_url)}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className="w-full flex items-center justify-center gap-2 bg-[#4A1D96] text-white py-3 rounded-xl font-semibold hover:bg-purple-800 transition-colors"

@@ -5,6 +5,7 @@ import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { Check, X, ExternalLink, Star, Award, MessageSquareQuote, RefreshCw } from 'lucide-react';
 import api from '../api/axios';
+import { safeExternalUrl } from '../utils/safeUrl';
 
 type Status = 'PENDING' | 'APPROVED' | 'REJECTED';
 type Tab = 'certifications' | 'external-reviews';
@@ -229,7 +230,7 @@ const AdminReviewPage: React.FC = () => {
                             return (
                                 <Card key={c.id} className="flex flex-col md:flex-row md:items-center gap-4">
                                     {img && (
-                                        <a href={img} target="_blank" rel="noreferrer" className="shrink-0">
+                                        <a href={img} target="_blank" rel="noopener noreferrer" className="shrink-0">
                                             <img src={img} alt={c.name} className="w-full md:w-28 h-28 object-cover rounded-lg border border-gray-200" />
                                         </a>
                                     )}
@@ -266,7 +267,7 @@ const AdminReviewPage: React.FC = () => {
                                         </span>
                                         {statusBadge(r.verification_status)}
                                         {r.external_url && (
-                                            <a href={r.external_url} target="_blank" rel="noreferrer" className="text-primary-700 hover:underline text-xs inline-flex items-center gap-1">
+                                            <a href={safeExternalUrl(r.external_url)} target="_blank" rel="noopener noreferrer" className="text-primary-700 hover:underline text-xs inline-flex items-center gap-1">
                                                 source <ExternalLink className="w-3 h-3" />
                                             </a>
                                         )}

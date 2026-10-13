@@ -6,6 +6,7 @@ import { isTutorSlotAvailable } from '../services/availability';
 import { ensureMeetLinkForLesson } from '../services/googleCalendar';
 import { applyCreditsPurchase, handleCardDisputeOnPurchase, markTransferredAsPaidForAccount } from '../services/walletService';
 import { SESSION_MINUTES } from '../config/session';
+import { tierForSubscription } from '../config/fees';
 
 export const handleStripeWebhook = async (req: Request, res: Response) => {
     const sig = req.headers['stripe-signature'];
@@ -32,7 +33,7 @@ export const handleStripeWebhook = async (req: Request, res: Response) => {
     }
     if (!event) {
         console.error(`Webhook Error: ${lastError?.message}`);
-        return res.status(400).send(`Webhook Error: ${lastError?.message}`);
+        return res.status(400).send('Webhook signature verification failed');
     }
 
     // Log event (optional, for debugging)
@@ -114,17 +115,17 @@ async function handlePaymentIntentSucceeded(paymentIntent: any) {
 export async function handleCheckoutSessionCompleted(session: any) {
     console.log(`[Stripe Webhook] Processing checkout session: ${session.id}`);
     const metadata = session.metadata;
-    console.log('[Stripe Webhook] Metadata:', metadata);
+    console.log(`[Stripe Webhook] Session type: ${metadata?.type ?? 'none'}`);
     if (!metadata) {
         console.warn('[Stripe Webhook] No metadata found in session');
         return;
     }
 
     if (metadata.type === 'mentor_subscription') {
-        const { tutorId, tier } = metadata as { tutorId?: string; tier?: string };
+        const { tutorId } = metadata as { tutorId?: string };
         const subscriptionId = session.subscription as string | null;
 
-        console.log(`[Stripe Webhook] Mentor Subscription flow. TutorID: ${tutorId}, Tier: ${tier}, SubID: ${subscriptionId}, SessionID: ${session.id}, PaymentStatus: ${session.payment_status}`);
+        console.log(`[Stripe Webhook] Mentor Subscription flow. TutorID: ${tutorId}, SubID: ${subscriptionId}, SessionID: ${session.id}, PaymentStatus: ${session.payment_status}`);
 
         if (!tutorId || !subscriptionId) {
             console.error(`[Stripe Webhook] Missing tutorId (${tutorId}) or subscriptionId (${subscriptionId}). Full session.subscription type: ${typeof session.subscription}`);
@@ -135,6 +136,9 @@ export async function handleCheckoutSessionCompleted(session: any) {
         const trialEnd = (subscription as any).trial_end as number | null;
         const currentPeriodEnd = (subscription as any).current_period_end as number | null;
         const endEpoch = trialEnd || currentPeriodEnd;
+        // Tier is derived from the price actually billed, never from client-influenced metadata.
+        const tier = tierForSubscription(subscription as any);
+        if (!tier) console.warn(`[Stripe Webhook] Subscription ${subscriptionId} uses an unknown price; tier left unchanged.`);
 
         await prisma.tutorProfile.update({
             where: { id: tutorId },
@@ -142,7 +146,7 @@ export async function handleCheckoutSessionCompleted(session: any) {
                 stripe_subscription_id: subscriptionId,
                 subscription_status: (subscription as any).status || 'active',
                 subscription_end_date: endEpoch ? new Date(endEpoch * 1000) : undefined,
-                tier: (tier === 'STANDARD' || tier === 'PRO' || tier === 'PREMIUM') ? (tier as any) : undefined,
+                ...(tier ? { tier } : {}),
                 // Mark trial as used if this subscription has a trial period
                 ...(trialEnd ? { has_used_trial: true } : {}),
             }
@@ -514,8 +518,17 @@ export async function handleCheckoutSessionCompleted(session: any) {
             console.error('[Stripe Webhook] Missing courseId or studentId for course_purchase');
             return;
         }
+        if (session.payment_status !== 'paid') {
+            console.log(`[Stripe Webhook] course_purchase session ${session.id} not paid (${session.payment_status}). Skipping.`);
+            return;
+        }
+        const course = await prisma.course.findUnique({ where: { id: courseId }, select: { price: true } });
         const amountTotal = session.amount_total as number | null;
-        const amountPaid = amountTotal ? amountTotal / 100 : 0;
+        if (!course || !amountTotal || amountTotal < Math.round(Number(course.price) * 100)) {
+            console.error(`[Stripe Webhook] course_purchase session ${session.id}: course missing or amount ${amountTotal} below price. Skipping.`);
+            return;
+        }
+        const amountPaid = amountTotal / 100;
         const stripePaymentId = (session.payment_intent as string) || session.id;
 
         const { createCoursePurchaseFromWebhook } = await import('./courseController');
@@ -525,7 +538,7 @@ export async function handleCheckoutSessionCompleted(session: any) {
 
 async function handleInvoicePaid(invoice: any) {
     // Handle Recurring Payments success
-    console.log('[Stripe Webhook] Invoice Object:', JSON.stringify(invoice, null, 2));
+    console.log(`[Stripe Webhook] invoice.paid ${invoice?.id}`);
 
     let subscriptionId = invoice.subscription;
 
@@ -592,7 +605,7 @@ async function handleInvoicePaid(invoice: any) {
             const subscription = await StripeService.getSubscription(subscriptionId);
             const metadata = (subscription as any)?.metadata as Record<string, string> | undefined;
             const metaTutorId = metadata?.tutorId;
-            const metaTier = metadata?.tier;
+            const billedTier = tierForSubscription(subscription as any);
 
             const trialEnd = (subscription as any).trial_end as number | null;
             const currentPeriodEnd = (subscription as any).current_period_end as number | null;
@@ -605,7 +618,7 @@ async function handleInvoicePaid(invoice: any) {
                         stripe_subscription_id: subscriptionId,
                         subscription_status: (subscription as any).status || 'active',
                         subscription_end_date: endEpoch ? new Date(endEpoch * 1000) : undefined,
-                        tier: (metaTier === 'STANDARD' || metaTier === 'PRO' || metaTier === 'PREMIUM') ? (metaTier as any) : undefined,
+                        ...(billedTier ? { tier: billedTier } : {}),
                     },
                 });
                 console.log(`[Stripe Webhook] Reconciled TutorProfile ${metaTutorId} from invoice.paid via subscription metadata.`);

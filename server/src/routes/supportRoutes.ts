@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { createTicket } from '../controllers/supportController';
 import { optionalAuth } from '../middleware/authMiddleware';
 import { rateLimit } from '../middleware/rateLimiter';
+import { botGuard } from '../middleware/botGuard';
 
 const router = Router();
 
@@ -12,6 +13,12 @@ const supportLimiter = rateLimit({
     message: 'Too many submissions from this address. Please try again later.',
 });
 
-router.post('/', supportLimiter, optionalAuth, createTicket);
+// Contact-form spam bots fill fields with random strings ("MzdcxDSaOXCSmjVWJbx").
+const supportBotGuard = botGuard({
+    textFields: ['subject', 'name', 'message'],
+    fakeSuccess: { status: 201, body: { message: 'Your message has been sent. We will get back to you soon.' } },
+});
+
+router.post('/', supportLimiter, optionalAuth, supportBotGuard, createTicket);
 
 export default router;

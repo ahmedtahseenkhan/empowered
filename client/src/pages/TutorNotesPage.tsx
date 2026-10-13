@@ -5,6 +5,7 @@ import api from '../api/axios';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
+import { safeExternalUrl } from '../utils/safeUrl';
 
 type MyStudent = {
     student: {
@@ -277,9 +278,9 @@ const TutorNotesPage: React.FC = () => {
                 {arr.map((a: any) => (
                     <a
                         key={a.id || a.file_url}
-                        href={a.file_url}
+                        href={safeExternalUrl(a.file_url)}
                         target="_blank"
-                        rel="noreferrer"
+                        rel="noopener noreferrer"
                         className="block text-xs text-[#4A1D96] hover:underline"
                     >
                         {a.file_name}

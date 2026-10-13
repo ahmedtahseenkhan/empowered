@@ -1,7 +1,9 @@
 import { Server as HttpServer } from 'http';
 import { Server, Socket } from 'socket.io';
-import jwt from 'jsonwebtoken';
 import prisma from '../config/db';
+import { verifyAccessToken } from '../utils/auth';
+import { getAllTokensFromCookieHeader } from '../utils/authCookie';
+import { isOriginAllowed } from '../config/origins';
 
 interface AuthedSocket extends Socket {
     userId?: string;
@@ -12,6 +14,9 @@ interface AuthedSocket extends Socket {
 // Tracks pending saves per lesson so we don't write to DB on every keystroke
 const saveTimers = new Map<string, NodeJS.Timeout>();
 const SAVE_DEBOUNCE_MS = 1500;
+// Caps on what one client can push into a room and the database
+const MAX_SCENE_ELEMENTS = 5000;
+const MAX_SNAPSHOTS_PER_10S = 50;
 
 function debouncedSave(lessonId: string, elements: any[]) {
     const existing = saveTimers.get(lessonId);
@@ -47,43 +52,49 @@ async function userHasLessonAccess(userId: string, lessonId: string): Promise<bo
 
 export function initWhiteboardSocket(httpServer: HttpServer) {
     const io = new Server(httpServer, {
-        cors: { origin: true, credentials: true },
+        cors: { origin: (origin, cb) => cb(null, isOriginAllowed(origin)), credentials: true },
         path: '/socket.io',
+        maxHttpBufferSize: 2 * 1024 * 1024,
+        // Reject cross-site WebSocket handshakes (CORS does not cover WebSockets)
+        allowRequest: (req, cb) => cb(null, isOriginAllowed(req.headers.origin)),
     });
 
     const whiteboard = io.of('/whiteboard');
 
-    // JWT auth handshake
+    // Session-cookie auth handshake (the HttpOnly cookie is sent with the upgrade request)
     whiteboard.use(async (socket: AuthedSocket, next) => {
         try {
-            const token = socket.handshake.auth?.token;
-            if (!token) return next(new Error('Missing auth token'));
-            const secret = process.env.JWT_SECRET || 'supersecret';
-            const decoded = jwt.verify(token, secret) as { id: string; role: string };
+            // Main-site session first: the whiteboard lives in the main app
+            const decoded = getAllTokensFromCookieHeader(socket.handshake.headers.cookie).reverse()
+                .map(verifyAccessToken)
+                .find((d) => d !== null);
+            if (!decoded) return next(new Error('Unauthorized'));
             const user = await prisma.user.findUnique({
                 where: { id: decoded.id },
                 select: {
                     id: true,
                     role: true,
                     is_suspended: true,
+                    token_version: true,
                     tutor_profile: { select: { username: true } },
                     student_profile: { select: { username: true } },
                 },
             });
-            if (!user || user.is_suspended) return next(new Error('Unauthorized'));
+            if (!user || user.is_suspended || user.token_version !== decoded.tv) return next(new Error('Unauthorized'));
             socket.userId = user.id;
             socket.role = user.role;
             socket.displayName = user.tutor_profile?.username || user.student_profile?.username || 'User';
             next();
         } catch {
-            next(new Error('Invalid token'));
+            next(new Error('Unauthorized'));
         }
     });
 
     whiteboard.on('connection', (socket: AuthedSocket) => {
-        socket.on('join', async ({ lessonId }: { lessonId: string }) => {
-            if (!lessonId || !socket.userId) return;
-            const ok = await userHasLessonAccess(socket.userId, lessonId);
+        socket.on('join', async (payload: unknown) => {
+            const lessonId = (payload as { lessonId?: unknown } | null)?.lessonId;
+            if (typeof lessonId !== 'string' || lessonId.length > 64 || !socket.userId) return;
+            const ok = await userHasLessonAccess(socket.userId, lessonId).catch(() => false);
             if (!ok) {
                 socket.emit('error', { message: 'Access denied to this lesson' });
                 return;
@@ -107,9 +118,19 @@ export function initWhiteboardSocket(httpServer: HttpServer) {
         });
 
         // Full Excalidraw elements array — broadcast to peers AND persist (debounced)
-        socket.on('scene:snapshot', ({ elements }: { elements: any[] }) => {
+        let windowStart = Date.now();
+        let snapshotsInWindow = 0;
+        socket.on('scene:snapshot', (payload: unknown) => {
             const lessonId = socket.data.lessonId;
-            if (!lessonId || !Array.isArray(elements)) return;
+            const elements = (payload as { elements?: unknown } | null)?.elements;
+            if (!lessonId || !Array.isArray(elements) || elements.length > MAX_SCENE_ELEMENTS) return;
+            if (!elements.every((el) => el !== null && typeof el === 'object' && !Array.isArray(el))) return;
+            const now = Date.now();
+            if (now - windowStart > 10_000) {
+                windowStart = now;
+                snapshotsInWindow = 0;
+            }
+            if (++snapshotsInWindow > MAX_SNAPSHOTS_PER_10S) return;
             socket.to(`lesson:${lessonId}`).emit('scene:snapshot', { elements, from: socket.id });
             debouncedSave(lessonId, elements);
         });

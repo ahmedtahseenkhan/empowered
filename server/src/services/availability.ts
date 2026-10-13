@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import prisma from '../config/db';
 import { getFreeBusy } from './googleCalendar';
 
@@ -199,6 +200,42 @@ export const isTutorSlotAvailable = async (args: {
 
     const blocks = await getBlocks(args.tutorId, args.start, args.end, args.excludeLessonId);
     return isSlotFree({ start: args.start, end: args.end }, blocks);
+};
+
+/**
+ * Serialize lesson creation per tutor for the rest of the transaction (released on commit/rollback),
+ * so two concurrent bookings cannot both pass the slot check and double-book the same time.
+ */
+export const lockTutorSchedule = async (tx: Prisma.TransactionClient, tutorId: string) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${tutorId}))`;
+};
+
+/**
+ * In-transaction re-check (after lockTutorSchedule): the slot must not overlap any
+ * non-cancelled lesson or tutor time block. Weekly rules and Google busy times are
+ * checked beforehand by isTutorSlotAvailable / isFreeSessionSlotAvailable.
+ */
+export const isTutorSlotFreeTx = async (
+    tx: Prisma.TransactionClient,
+    args: { tutorId: string; start: Date; end: Date; excludeLessonId?: string },
+) => {
+    if (args.start >= args.end) return false;
+    const lesson = await tx.lesson.findFirst({
+        where: {
+            tutor_id: args.tutorId,
+            start_time: { lt: args.end },
+            end_time: { gt: args.start },
+            status: { not: 'CANCELLED' },
+            ...(args.excludeLessonId ? { id: { not: args.excludeLessonId } } : {}),
+        },
+        select: { id: true },
+    });
+    if (lesson) return false;
+    const block = await tx.tutorTimeBlock.findFirst({
+        where: { tutor_id: args.tutorId, start_time: { lt: args.end }, end_time: { gt: args.start } },
+        select: { id: true },
+    });
+    return !block;
 };
 
 const FREE_SESSION_DURATION_MINUTES = 25;

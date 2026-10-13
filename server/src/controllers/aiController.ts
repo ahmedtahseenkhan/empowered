@@ -49,13 +49,51 @@ interface ChatMessage {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export const chat = async (req: AuthRequest, res: Response): Promise<void> => {
-    const { messages } = req.body as { messages: ChatMessage[] };
+const MAX_MESSAGES = 30;
+const MAX_MESSAGE_CHARS = 4000;
+const MAX_TOTAL_CHARS = 30000;
+const MAX_INCOMING_MESSAGES = 200;
+const ALLOWED_ROLES = new Set(['user', 'assistant']);
 
-    if (!messages || !Array.isArray(messages) || messages.length === 0) {
-        res.status(400).json({ error: 'messages array is required' });
+/**
+ * Validate the conversation and bound what is sent to the model: user messages may be at
+ * most MAX_MESSAGE_CHARS; only the most recent MAX_MESSAGES messages (and MAX_TOTAL_CHARS)
+ * are forwarded, with long assistant replies truncated, so long chats keep working.
+ */
+/** Validate the chat history and trim it to what is sent to the model; returns an error message when invalid. */
+const prepareMessages = (raw: unknown): { messages: ChatMessage[] } | { error: string } => {
+    if (!Array.isArray(raw) || raw.length === 0) return { error: 'Please enter a message.' };
+    // Long conversations are trimmed, not rejected: only the most recent turns are sent anyway.
+    const all: ChatMessage[] = [];
+    for (const m of raw.slice(-MAX_INCOMING_MESSAGES)) {
+        if (!m || typeof m !== 'object') return { error: 'Invalid chat history.' };
+        const { role, content } = m as { role?: unknown; content?: unknown };
+        if (typeof role !== 'string' || !ALLOWED_ROLES.has(role) || typeof content !== 'string') return { error: 'Invalid chat history.' };
+        all.push({ role: role as ChatMessage['role'], content: content.slice(0, MAX_MESSAGE_CHARS) });
+    }
+    // The model replies to the last message, which must come from the user.
+    const last = all[all.length - 1];
+    const rawLast = (raw[raw.length - 1] as { content?: unknown }).content;
+    if (last.role !== 'user' || !last.content.trim()) return { error: 'Please enter a message.' };
+    if (typeof rawLast === 'string' && rawLast.length > MAX_MESSAGE_CHARS) {
+        return { error: `Messages must be at most ${MAX_MESSAGE_CHARS} characters.` };
+    }
+
+    const recent = all.slice(-MAX_MESSAGES);
+    let total = recent.reduce((n, m) => n + m.content.length, 0);
+    while (recent.length > 1 && total > MAX_TOTAL_CHARS) total -= recent.shift()!.content.length;
+    // Gemini history must start with a user turn.
+    while (recent.length > 1 && recent[0].role !== 'user') recent.shift();
+    return { messages: recent };
+};
+
+export const chat = async (req: AuthRequest, res: Response): Promise<void> => {
+    const prepared = prepareMessages(req.body?.messages);
+    if ('error' in prepared) {
+        res.status(400).json({ error: prepared.error });
         return;
     }
+    const { messages } = prepared;
 
     const tutorProfile = await prisma.tutorProfile.findUnique({
         where: { user_id: req.user!.id },
@@ -114,9 +152,10 @@ export const chat = async (req: AuthRequest, res: Response): Promise<void> => {
             return;
         } catch (err: any) {
             const status = err?.status;
-            const isRetryable = status === 503 || status === 429;
+            // Once tokens have been streamed, retrying would duplicate output.
+            const isRetryable = !res.headersSent && (status === 503 || status === 429);
 
-            if (status === 429 && modelIndex < modelChain.length - 1) {
+            if (isRetryable && status === 429 && modelIndex < modelChain.length - 1) {
                 console.warn(`[AI] ${modelName} quota exhausted, falling back to ${modelChain[modelIndex + 1]}`);
                 modelIndex++;
                 attempt = 0;
@@ -138,6 +177,10 @@ export const chat = async (req: AuthRequest, res: Response): Promise<void> => {
                 } else {
                     res.status(500).json({ error: 'Failed to reach AI service. Please try again.' });
                 }
+            } else {
+                // Mid-stream failure: tell the client generically and close the stream.
+                res.write(`data: ${JSON.stringify({ token: '\n\n⚠️ The AI response was interrupted. Please try again.' })}\n\n`);
+                res.end();
             }
             return;
         }

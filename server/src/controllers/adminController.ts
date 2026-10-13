@@ -1,8 +1,12 @@
 import { Response } from 'express';
+import crypto from 'crypto';
+import { Prisma } from '@prisma/client';
 import prisma from '../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
 import emailService from '../services/emailService';
 import { hashPassword } from '../utils/auth';
+import { logAdminAction } from '../utils/auditLog';
+import { EmailSchema, PasswordSchema, firstIssue } from '../utils/validation';
 import { ADMIN_PERMISSION_KEYS, isValidPermissionKey, formatPermissionList } from '../constants/adminPermissions';
 import {
     ADMIN_TIMEZONE,
@@ -124,6 +128,22 @@ export const adminGetStudent = async (req: AuthRequest, res: Response) => {
     }
 };
 
+const MAX_REASON_LENGTH = 2000;
+
+const getActorAdminProfile = async (req: AuthRequest) => {
+    const actorId = req.user?.id;
+    if (!actorId) return null;
+    return prisma.adminProfile.findUnique({
+        where: { user_id: actorId },
+        select: { is_super_admin: true, permissions: true },
+    });
+};
+
+/**
+ * Suspend / unsuspend a user. Rules: nobody suspends themselves, a super admin can never be
+ * suspended, only a super admin may act on another admin, and a sub-admin may only act on the
+ * user types their module permissions cover (mentors → TUTOR, students → STUDENT).
+ */
 export const adminSetUserSuspended = async (req: AuthRequest, res: Response) => {
     try {
         const { userId } = req.params;
@@ -131,11 +151,42 @@ export const adminSetUserSuspended = async (req: AuthRequest, res: Response) => 
 
         if (!userId) return res.status(400).json({ error: 'userId is required' });
         if (typeof is_suspended !== 'boolean') return res.status(400).json({ error: 'is_suspended must be a boolean' });
+        if (userId === req.user?.id) return res.status(403).json({ error: 'You cannot change the suspension of your own account' });
+
+        const [target, actor] = await Promise.all([
+            prisma.user.findUnique({
+                where: { id: userId },
+                select: { id: true, role: true, admin_profile: { select: { is_super_admin: true } } },
+            }),
+            getActorAdminProfile(req),
+        ]);
+        if (!target) return res.status(404).json({ error: 'User not found' });
+        if (!actor) return res.status(403).json({ error: 'Admin access required' });
+        if (target.admin_profile?.is_super_admin) return res.status(403).json({ error: 'A super admin cannot be suspended' });
+
+        if (!actor.is_super_admin) {
+            const allowed =
+                (target.role === 'TUTOR' && actor.permissions.includes('mentors')) ||
+                (target.role === 'STUDENT' && actor.permissions.includes('students'));
+            if (!allowed) {
+                return res.status(403).json({
+                    error: target.role === 'ADMIN'
+                        ? 'Only a super admin can suspend or unsuspend an admin'
+                        : 'You do not have permission to manage this user',
+                });
+            }
+        }
 
         const updated = await prisma.user.update({
             where: { id: userId },
-            data: { is_suspended },
+            // Suspending also revokes every existing session for that user.
+            data: is_suspended ? { is_suspended, token_version: { increment: 1 } } : { is_suspended },
             select: { id: true, email: true, role: true, is_suspended: true },
+        });
+
+        await logAdminAction(req, is_suspended ? 'user.suspend' : 'user.unsuspend', { type: 'user', id: updated.id }, {
+            email: updated.email,
+            role: updated.role,
         });
 
         return res.json({ user: updated });
@@ -167,6 +218,12 @@ export const adminSetMentorApproved = async (req: AuthRequest, res: Response) =>
             where: { id },
             data: { is_verified },
             select: { id: true, username: true, is_verified: true, user: { select: { email: true } } },
+        });
+
+        await logAdminAction(req, is_verified ? 'mentor.approve' : 'mentor.unapprove', { type: 'tutor_profile', id: updated.id }, {
+            username: updated.username,
+            email: updated.user?.email,
+            previous: existing.is_verified,
         });
 
         if (is_verified && !existing.is_verified && updated.user?.email) {
@@ -227,6 +284,11 @@ export const adminApproveCertification = async (req: AuthRequest, res: Response)
             },
         });
 
+        await logAdminAction(req, 'certification.approve', { type: 'tutor_certification', id: updated.id }, {
+            tutorId: updated.tutor_id,
+            name: updated.name,
+        });
+
         return res.json({ certification: updated });
     } catch (error) {
         console.error('adminApproveCertification error:', error);
@@ -239,7 +301,8 @@ export const adminRejectCertification = async (req: AuthRequest, res: Response) 
         const { id } = req.params;
         const { reason } = req.body as { reason?: string };
         if (!id) return res.status(400).json({ error: 'Certification id is required' });
-        if (!reason || typeof reason !== 'string') return res.status(400).json({ error: 'reason is required' });
+        if (!reason || typeof reason !== 'string' || !reason.trim()) return res.status(400).json({ error: 'reason is required' });
+        if (reason.length > MAX_REASON_LENGTH) return res.status(400).json({ error: `reason must be at most ${MAX_REASON_LENGTH} characters` });
 
         const updated = await prisma.tutorCertification.update({
             where: { id },
@@ -249,6 +312,12 @@ export const adminRejectCertification = async (req: AuthRequest, res: Response) 
                 rejection_reason: reason,
                 reviewed_at: new Date(),
             },
+        });
+
+        await logAdminAction(req, 'certification.reject', { type: 'tutor_certification', id: updated.id }, {
+            tutorId: updated.tutor_id,
+            name: updated.name,
+            reason,
         });
 
         return res.json({ certification: updated });
@@ -295,6 +364,11 @@ export const adminApproveExternalReview = async (req: AuthRequest, res: Response
             },
         });
 
+        await logAdminAction(req, 'external_review.approve', { type: 'tutor_external_review', id: updated.id }, {
+            tutorId: updated.tutor_id,
+            platform: updated.platform,
+        });
+
         return res.json({ review: updated });
     } catch (error) {
         console.error('adminApproveExternalReview error:', error);
@@ -307,7 +381,8 @@ export const adminRejectExternalReview = async (req: AuthRequest, res: Response)
         const { id } = req.params;
         const { reason } = req.body as { reason?: string };
         if (!id) return res.status(400).json({ error: 'Review id is required' });
-        if (!reason || typeof reason !== 'string') return res.status(400).json({ error: 'reason is required' });
+        if (!reason || typeof reason !== 'string' || !reason.trim()) return res.status(400).json({ error: 'reason is required' });
+        if (reason.length > MAX_REASON_LENGTH) return res.status(400).json({ error: `reason must be at most ${MAX_REASON_LENGTH} characters` });
 
         const updated = await prisma.tutorExternalReview.update({
             where: { id },
@@ -317,6 +392,12 @@ export const adminRejectExternalReview = async (req: AuthRequest, res: Response)
                 rejection_reason: reason,
                 reviewed_at: new Date(),
             },
+        });
+
+        await logAdminAction(req, 'external_review.reject', { type: 'tutor_external_review', id: updated.id }, {
+            tutorId: updated.tutor_id,
+            platform: updated.platform,
+            reason,
         });
 
         return res.json({ review: updated });
@@ -439,7 +520,8 @@ export const adminReplyTicket = async (req: AuthRequest, res: Response) => {
         const { message, status } = req.body;
 
         if (!id) return res.status(400).json({ error: 'Ticket ID required' });
-        if (!message) return res.status(400).json({ error: 'Reply message required' });
+        if (typeof message !== 'string' || !message.trim()) return res.status(400).json({ error: 'Reply message required' });
+        if (message.length > 10000) return res.status(400).json({ error: 'Reply message is too long' });
 
         const ticket = await prisma.supportTicket.update({
             where: { id },
@@ -459,6 +541,11 @@ export const adminReplyTicket = async (req: AuthRequest, res: Response) => {
                     }
                 }
             },
+        });
+
+        await logAdminAction(req, 'support_ticket.reply', { type: 'support_ticket', id: ticket.id }, {
+            status: ticket.status,
+            messageLength: message.length,
         });
 
         const replyEmail = ticket.submitter_email ?? ticket.user?.email;
@@ -657,6 +744,7 @@ export const adminListDemoBookings = async (req: AuthRequest, res: Response) => 
         const bookings = await prisma.demoBooking.findMany({
             where,
             orderBy: { slot_start_time: 'asc' },
+            take: 500,
         });
 
         return res.json({ bookings });
@@ -778,6 +866,12 @@ export const adminRescheduleDemoBooking = async (req: AuthRequest, res: Response
             },
         });
 
+        await logAdminAction(req, 'demo_booking.reschedule', { type: 'demo_booking', id: updated.id }, {
+            from: previousStart.toISOString(),
+            to: start.toISOString(),
+            allowOutsideHours,
+        });
+
         // The prospect booked in their own timezone; keep their emails in it.
         const prospectTimezone = resolveDemoTimezone(updated.timezone);
         const previous = formatDemoSlot(previousStart, prospectTimezone);
@@ -831,6 +925,9 @@ export const adminPutDemoAvailability = async (req: AuthRequest, res: Response) 
         if (!Array.isArray(rules)) {
             return res.status(400).json({ error: 'rules must be an array' });
         }
+        if (rules.length > 200) {
+            return res.status(400).json({ error: 'Too many availability rules' });
+        }
         for (const r of rules) {
             if (typeof r.day_of_week !== 'number' || r.day_of_week < 0 || r.day_of_week > 6) {
                 return res.status(400).json({ error: 'day_of_week must be 0–6 (Sun–Sat)' });
@@ -859,6 +956,7 @@ export const adminPutDemoAvailability = async (req: AuthRequest, res: Response) 
         const updated = await prisma.adminDemoAvailability.findMany({
             orderBy: [{ day_of_week: 'asc' }, { start_time: 'asc' }],
         });
+        await logAdminAction(req, 'demo_availability.update', { type: 'demo_availability' }, { ruleCount: rules.length });
         return res.json({ rules: updated });
     } catch (error) {
         console.error('adminPutDemoAvailability error:', error);
@@ -908,7 +1006,11 @@ export const adminCreateDemoBlock = async (req: AuthRequest, res: Response) => {
         }
 
         const block = await prisma.adminDemoTimeBlock.create({
-            data: { start_time: start, end_time: end, reason: reason?.trim() || null },
+            data: { start_time: start, end_time: end, reason: typeof reason === 'string' ? reason.trim().slice(0, MAX_REASON_LENGTH) || null : null },
+        });
+        await logAdminAction(req, 'demo_block.create', { type: 'demo_block', id: block.id }, {
+            start: block.start_time.toISOString(),
+            end: block.end_time.toISOString(),
         });
         return res.status(201).json({ block });
     } catch (error) {
@@ -934,11 +1036,15 @@ export const adminUpdateDemoBlock = async (req: AuthRequest, res: Response) => {
             if (Number.isNaN(end.getTime())) return res.status(400).json({ error: 'Invalid end_time' });
             update.end_time = end;
         }
-        if (reason !== undefined) update.reason = reason?.trim() || null;
+        if (reason !== undefined) update.reason = typeof reason === 'string' ? reason.trim().slice(0, MAX_REASON_LENGTH) || null : null;
 
         const block = await prisma.adminDemoTimeBlock.update({
             where: { id },
             data: update,
+        });
+        await logAdminAction(req, 'demo_block.update', { type: 'demo_block', id: block.id }, {
+            start: block.start_time.toISOString(),
+            end: block.end_time.toISOString(),
         });
         return res.json({ block });
     } catch (error: any) {
@@ -952,7 +1058,11 @@ export const adminDeleteDemoBlock = async (req: AuthRequest, res: Response) => {
     try {
         const { id } = req.params;
         if (!id) return res.status(400).json({ error: 'Block id is required' });
-        await prisma.adminDemoTimeBlock.delete({ where: { id } });
+        const deleted = await prisma.adminDemoTimeBlock.delete({ where: { id } });
+        await logAdminAction(req, 'demo_block.delete', { type: 'demo_block', id }, {
+            start: deleted.start_time.toISOString(),
+            end: deleted.end_time.toISOString(),
+        });
         return res.status(204).send();
     } catch (error: any) {
         if (error?.code === 'P2025') return res.status(404).json({ error: 'Block not found' });
@@ -970,6 +1080,7 @@ export const adminListBetaApplications = async (req: AuthRequest, res: Response)
         const applications = await prisma.betaApplication.findMany({
             where,
             orderBy: { created_at: 'desc' },
+            take: 500,
         });
         return res.json({ applications });
     } catch (error) {
@@ -991,6 +1102,7 @@ export const adminApproveBetaApplication = async (req: AuthRequest, res: Respons
             where: { id },
             data: { status: 'APPROVED', actioned_at: new Date() },
         });
+        await logAdminAction(req, 'beta_application.approve', { type: 'beta_application', id }, { email: application.email });
 
         try {
             await emailService.sendBetaApplicationAccepted({
@@ -1021,6 +1133,7 @@ export const adminRejectBetaApplication = async (req: AuthRequest, res: Response
             where: { id },
             data: { status: 'REJECTED', actioned_at: new Date() },
         });
+        await logAdminAction(req, 'beta_application.reject', { type: 'beta_application', id }, { email: application.email });
 
         return res.json({ application: updated });
     } catch (error) {
@@ -1067,29 +1180,34 @@ export const adminListSubAdmins = async (_req: AuthRequest, res: Response) => {
     }
 };
 
+const SUB_ADMIN_USERNAME_MAX = 80;
+
 export const adminCreateSubAdmin = async (req: AuthRequest, res: Response) => {
     try {
         const { email, password, username, permissions } = req.body as {
-            email?: string;
-            password?: string;
-            username?: string;
+            email?: unknown;
+            password?: unknown;
+            username?: unknown;
             permissions?: unknown;
         };
 
-        const trimmedEmail = email?.trim().toLowerCase();
-        const trimmedUsername = username?.trim();
-
-        if (!trimmedEmail || !password || !trimmedUsername) {
+        const trimmedUsername = typeof username === 'string' ? username.trim() : '';
+        if (!email || !password || !trimmedUsername) {
             return res.status(400).json({ error: 'email, password, and username are required' });
         }
-        if (password.length < 8) {
-            return res.status(400).json({ error: 'Password must be at least 8 characters' });
+        if (trimmedUsername.length > SUB_ADMIN_USERNAME_MAX) {
+            return res.status(400).json({ error: `username must be at most ${SUB_ADMIN_USERNAME_MAX} characters` });
         }
+        const emailParsed = EmailSchema.safeParse(email);
+        if (!emailParsed.success) return res.status(400).json({ error: 'A valid email is required' });
+        const passwordParsed = PasswordSchema.safeParse(password);
+        if (!passwordParsed.success) return res.status(400).json({ error: firstIssue(passwordParsed.error) });
+        const trimmedEmail = emailParsed.data;
 
         const existing = await prisma.user.findUnique({ where: { email: trimmedEmail } });
         if (existing) return res.status(409).json({ error: 'A user with that email already exists' });
 
-        const password_hash = await hashPassword(password);
+        const password_hash = await hashPassword(passwordParsed.data);
 
         const user = await prisma.user.create({
             data: {
@@ -1112,14 +1230,19 @@ export const adminCreateSubAdmin = async (req: AuthRequest, res: Response) => {
             },
         });
 
-        // Email the new sub-admin their credentials. Best-effort: the account is
-        // already created, so don't fail the request if the email can't be sent.
+        await logAdminAction(req, 'sub_admin.create', { type: 'user', id: user.id }, {
+            email: user.email,
+            username: user.admin_profile!.username,
+            permissions: user.admin_profile!.permissions,
+        });
+
+        // Tell the new sub-admin their account exists. The password is NEVER emailed: the super
+        // admin shares it out of band, or the sub-admin uses "Forgot password". Best-effort.
         let emailSent = true;
         try {
             await emailService.sendSubAdminWelcome({
                 email: user.email,
                 username: user.admin_profile!.username,
-                password,
                 permissionsList: formatPermissionList(user.admin_profile!.permissions),
             });
         } catch (e) {
@@ -1147,29 +1270,47 @@ export const adminCreateSubAdmin = async (req: AuthRequest, res: Response) => {
 export const adminUpdateSubAdmin = async (req: AuthRequest, res: Response) => {
     try {
         const { id } = req.params;
-        const { username, permissions, isSuspended } = req.body as {
-            username?: string;
+        const { username, permissions, isSuspended, password } = req.body as {
+            username?: unknown;
             permissions?: unknown;
-            isSuspended?: boolean;
+            isSuspended?: unknown;
+            password?: unknown;
         };
 
         const profile = await prisma.adminProfile.findUnique({
             where: { id },
-            select: { id: true, is_super_admin: true, user_id: true },
+            select: { id: true, is_super_admin: true, user_id: true, username: true, permissions: true },
         });
         if (!profile) return res.status(404).json({ error: 'Sub-admin not found' });
         if (profile.is_super_admin) return res.status(403).json({ error: 'Cannot modify a super admin' });
+        if (profile.user_id === req.user?.id) return res.status(403).json({ error: 'You cannot modify your own admin account here' });
 
         const data: { username?: string; permissions?: string[] } = {};
-        if (typeof username === 'string' && username.trim()) data.username = username.trim();
+        if (typeof username === 'string' && username.trim()) {
+            if (username.trim().length > SUB_ADMIN_USERNAME_MAX) {
+                return res.status(400).json({ error: `username must be at most ${SUB_ADMIN_USERNAME_MAX} characters` });
+            }
+            data.username = username.trim();
+        }
         if (permissions !== undefined) data.permissions = sanitizePermissions(permissions);
 
-        if (Object.keys(data).length > 0) {
-            await prisma.adminProfile.update({ where: { id }, data });
+        let newPasswordHash: string | null = null;
+        if (password !== undefined && password !== null && password !== '') {
+            const parsed = PasswordSchema.safeParse(password);
+            if (!parsed.success) return res.status(400).json({ error: firstIssue(parsed.error) });
+            newPasswordHash = await hashPassword(parsed.data);
         }
-        if (typeof isSuspended === 'boolean') {
-            await prisma.user.update({ where: { id: profile.user_id }, data: { is_suspended: isSuspended } });
-        }
+
+        const userData: Prisma.UserUpdateInput = {};
+        if (typeof isSuspended === 'boolean') userData.is_suspended = isSuspended;
+        if (newPasswordHash) userData.password_hash = newPasswordHash;
+        // A password reset or a suspension revokes every existing session.
+        if (newPasswordHash || isSuspended === true) userData.token_version = { increment: 1 };
+
+        await prisma.$transaction([
+            ...(Object.keys(data).length > 0 ? [prisma.adminProfile.update({ where: { id }, data })] : []),
+            ...(Object.keys(userData).length > 0 ? [prisma.user.update({ where: { id: profile.user_id }, data: userData })] : []),
+        ]);
 
         const updated = await prisma.adminProfile.findUnique({
             where: { id },
@@ -1179,6 +1320,16 @@ export const adminUpdateSubAdmin = async (req: AuthRequest, res: Response) => {
                 permissions: true,
                 user: { select: { id: true, email: true, is_suspended: true } },
             },
+        });
+
+        const changes: Record<string, unknown> = {};
+        if (data.username !== undefined && data.username !== profile.username) changes.username = { from: profile.username, to: data.username };
+        if (data.permissions !== undefined) changes.permissions = { from: profile.permissions, to: data.permissions };
+        if (typeof isSuspended === 'boolean') changes.isSuspended = isSuspended;
+        if (newPasswordHash) changes.passwordReset = true;
+        await logAdminAction(req, 'sub_admin.update', { type: 'user', id: profile.user_id }, {
+            email: updated!.user.email,
+            ...changes,
         });
 
         return res.json({
@@ -1203,19 +1354,100 @@ export const adminDeleteSubAdmin = async (req: AuthRequest, res: Response) => {
 
         const profile = await prisma.adminProfile.findUnique({
             where: { id },
-            select: { id: true, is_super_admin: true, user_id: true },
+            select: { id: true, is_super_admin: true, user_id: true, username: true, user: { select: { email: true } } },
         });
         if (!profile) return res.status(404).json({ error: 'Sub-admin not found' });
         if (profile.is_super_admin) return res.status(403).json({ error: 'Cannot delete a super admin' });
         if (profile.user_id === req.user?.id) return res.status(403).json({ error: 'You cannot delete yourself' });
 
-        // Remove the admin profile then the user account.
-        await prisma.adminProfile.delete({ where: { id } });
-        await prisma.user.delete({ where: { id: profile.user_id } });
+        let mode: 'deleted' | 'deactivated' = 'deleted';
+        try {
+            // Remove the admin profile then the user account (atomically).
+            await prisma.$transaction([
+                prisma.adminProfile.delete({ where: { id } }),
+                prisma.user.delete({ where: { id: profile.user_id } }),
+            ]);
+        } catch (e) {
+            // P2003: rows still reference the user (e.g. their audit-log entries, which must be
+            // kept). Deactivate instead: drop admin access, suspend, kill sessions, scramble password.
+            if (!(e instanceof Prisma.PrismaClientKnownRequestError) || e.code !== 'P2003') throw e;
+            mode = 'deactivated';
+            const scrambled = await hashPassword(crypto.randomBytes(32).toString('hex'));
+            await prisma.$transaction([
+                prisma.adminProfile.delete({ where: { id } }),
+                prisma.user.update({
+                    where: { id: profile.user_id },
+                    data: { is_suspended: true, password_hash: scrambled, token_version: { increment: 1 } },
+                }),
+            ]);
+        }
+
+        await logAdminAction(req, 'sub_admin.delete', { type: 'user', id: profile.user_id }, {
+            email: profile.user.email,
+            username: profile.username,
+            mode,
+        });
 
         return res.json({ message: 'Sub-admin removed' });
     } catch (error) {
         console.error('adminDeleteSubAdmin error:', error);
+        return res.status(500).json({ error: 'Server error' });
+    }
+};
+
+/**
+ * GET /api/admin/audit-logs?take=50&cursor=<id>&action=&actorId=&targetType=&targetId=
+ * Super admin only. Newest first, cursor-paginated (pass `nextCursor` back as `cursor`).
+ */
+export const adminListAuditLogs = async (req: AuthRequest, res: Response) => {
+    try {
+        const rawTake = Number.parseInt(String(req.query.take ?? ''), 10);
+        const take = Number.isFinite(rawTake) ? Math.min(Math.max(rawTake, 1), 100) : 50;
+        const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 200) : undefined);
+        const cursor = str(req.query.cursor);
+
+        const where: Prisma.AdminAuditLogWhereInput = {};
+        const action = str(req.query.action);
+        const actorId = str(req.query.actorId);
+        const targetType = str(req.query.targetType);
+        const targetId = str(req.query.targetId);
+        if (action) where.action = action;
+        if (actorId) where.actor_user_id = actorId;
+        if (targetType) where.target_type = targetType;
+        if (targetId) where.target_id = targetId;
+
+        const rows = await prisma.adminAuditLog.findMany({
+            where,
+            orderBy: [{ created_at: 'desc' }, { id: 'desc' }],
+            take: take + 1,
+            ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+            include: {
+                actor: { select: { id: true, email: true, admin_profile: { select: { username: true } } } },
+            },
+        });
+
+        const hasMore = rows.length > take;
+        const page = hasMore ? rows.slice(0, take) : rows;
+
+        return res.json({
+            logs: page.map((l) => ({
+                id: l.id,
+                action: l.action,
+                targetType: l.target_type,
+                targetId: l.target_id,
+                details: l.details,
+                ip: l.ip,
+                createdAt: l.created_at,
+                actor: {
+                    id: l.actor.id,
+                    email: l.actor.email,
+                    username: l.actor.admin_profile?.username ?? null,
+                },
+            })),
+            nextCursor: hasMore ? page[page.length - 1].id : null,
+        });
+    } catch (error) {
+        console.error('adminListAuditLogs error:', error);
         return res.status(500).json({ error: 'Server error' });
     }
 };
@@ -1237,9 +1469,11 @@ export const adminGetGoogleMeetStatus = async (_req: AuthRequest, res: Response)
  * POST /api/admin/google-meet/upgrade-sessions
  * Switch upcoming sessions whose link still needs host approval to OPEN access.
  */
-export const adminUpgradeSessionsToOpenAccess = async (_req: AuthRequest, res: Response) => {
+export const adminUpgradeSessionsToOpenAccess = async (req: AuthRequest, res: Response) => {
     try {
-        return res.json(await upgradeUpcomingLessonsToOpenAccess(200, { verifyLive: true }));
+        const result = await upgradeUpcomingLessonsToOpenAccess(200, { verifyLive: true });
+        await logAdminAction(req, 'google_meet.upgrade_sessions', { type: 'lesson' });
+        return res.json(result);
     } catch (e) {
         console.error('adminUpgradeSessionsToOpenAccess error:', e);
         return res.status(500).json({ error: 'Failed to update the session meeting links' });

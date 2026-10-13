@@ -8,6 +8,7 @@ import { Modal } from '../components/ui/Modal';
 import SessionListCard from '../components/sessions/SessionListCard';
 import api from '../api/axios';
 import { SLOT_STEP_MINUTES } from '../constants/session';
+import { safeExternalUrl } from '../utils/safeUrl';
 
 // Earliest date the Past tab looks back to (before the platform launched)
 const PAST_SESSIONS_FROM = '2020-01-01T00:00:00.000Z';
@@ -519,9 +520,9 @@ const StudentSessionsPage: React.FC = () => {
                                                                     setJoinBusyId(l.id);
                                                                     setJoinError('');
                                                                     const res = await api.get(`/lessons/${l.id}/join`);
-                                                                    const url = res.data?.meeting_link as string | undefined;
+                                                                    const url = safeExternalUrl(res.data?.meeting_link);
                                                                     if (url) {
-                                                                        window.open(url, '_blank');
+                                                                        window.open(url, '_blank', 'noopener,noreferrer');
                                                                     } else {
                                                                         setJoinError('Meeting link is not available yet.');
                                                                         setErrorModalOpen(true);
@@ -537,7 +538,7 @@ const StudentSessionsPage: React.FC = () => {
                                                             <ExternalLink className="w-4 h-4" />
                                                             {joinBusyId === l.id ? 'Joining…' : 'Join Session'}
                                                         </Button>
-                                                        <a href={`/student/whiteboard?lesson=${l.id}`} target="_blank" rel="noreferrer">
+                                                        <a href={`/student/whiteboard?lesson=${l.id}`} target="_blank" rel="noopener noreferrer">
                                                             <Button variant="outline" className="flex items-center gap-2">
                                                                 <ExternalLink className="w-4 h-4" />
                                                                 Open Whiteboard
@@ -625,7 +626,7 @@ const StudentSessionsPage: React.FC = () => {
                                                 )
                                             ) : null}
                                             {l.google_calendar_html_link ? (
-                                                <a href={l.google_calendar_html_link} target="_blank" rel="noreferrer">
+                                                <a href={safeExternalUrl(l.google_calendar_html_link)} target="_blank" rel="noopener noreferrer">
                                                     <Button variant="outline">Open in Calendar</Button>
                                                 </a>
                                             ) : null}

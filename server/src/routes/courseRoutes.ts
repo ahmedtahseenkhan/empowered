@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticateToken } from '../middleware/authMiddleware';
+import { authenticateToken, optionalAuth } from '../middleware/authMiddleware';
 import {
     getMyCourses,
     getCourseById,
@@ -9,7 +9,6 @@ import {
     toggleCourseStatus,
     getCourseSalesStats,
     getStudentCourses,
-    purchaseCourse,
     getMarketplaceCourses,
     createCourseCheckout,
     getPublicTutorCourses,
@@ -31,10 +30,9 @@ router.patch('/:id/status', authenticateToken, toggleCourseStatus);
 
 // Student routes
 router.get('/student/purchased', authenticateToken, getStudentCourses);
-router.post('/:id/purchase', authenticateToken, purchaseCourse);
 router.post('/:id/checkout', authenticateToken, createCourseCheckout);
 
 // Public course detail (must be last to avoid catching named segments)
-router.get('/:id', getCourseById);
+router.get('/:id', optionalAuth, getCourseById);
 
 export default router;

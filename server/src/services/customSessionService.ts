@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import prisma from '../config/db';
 import { WalletError } from './walletService';
 import { ensureMeetLinkForLesson } from './googleCalendar';
+import { lockTutorSchedule } from './availability';
 
 /**
  * Custom sessions: a mentor offers a free session (make-up for a missed one, or an extra)
@@ -86,22 +87,23 @@ const isMentorsStudent = async (tutorId: string, studentId: string) => {
 };
 
 /** Any non-cancelled lesson (for either party) or mentor time block overlapping [start, end). */
-const findConflict = async (args: { tutorId: string; studentId: string; start: Date; end: Date; excludeLessonId?: string }) => {
+const findConflict = async (
+    args: { tutorId: string; studentId: string; start: Date; end: Date; excludeLessonId?: string },
+    db: Prisma.TransactionClient = prisma,
+) => {
     const overlap = { start_time: { lt: args.end }, end_time: { gt: args.start }, status: { not: 'CANCELLED' as const } };
-    const [tutorLesson, studentLesson, block] = await Promise.all([
-        prisma.lesson.findFirst({
-            where: { tutor_id: args.tutorId, ...overlap, ...(args.excludeLessonId ? { id: { not: args.excludeLessonId } } : {}) },
-            select: { id: true },
-        }),
-        prisma.lesson.findFirst({
-            where: { student_id: args.studentId, ...overlap, ...(args.excludeLessonId ? { id: { not: args.excludeLessonId } } : {}) },
-            select: { id: true },
-        }),
-        prisma.tutorTimeBlock.findFirst({
-            where: { tutor_id: args.tutorId, start_time: { lt: args.end }, end_time: { gt: args.start } },
-            select: { id: true },
-        }),
-    ]);
+    const tutorLesson = await db.lesson.findFirst({
+        where: { tutor_id: args.tutorId, ...overlap, ...(args.excludeLessonId ? { id: { not: args.excludeLessonId } } : {}) },
+        select: { id: true },
+    });
+    const studentLesson = await db.lesson.findFirst({
+        where: { student_id: args.studentId, ...overlap, ...(args.excludeLessonId ? { id: { not: args.excludeLessonId } } : {}) },
+        select: { id: true },
+    });
+    const block = await db.tutorTimeBlock.findFirst({
+        where: { tutor_id: args.tutorId, start_time: { lt: args.end }, end_time: { gt: args.start } },
+        select: { id: true },
+    });
     if (tutorLesson) return 'You already have a session at that time.';
     if (block) return 'That time is blocked in your schedule.';
     if (studentLesson) return 'The student already has a session at that time.';
@@ -170,22 +172,27 @@ export async function createOffer(args: {
     const expiresAt = new Date(Math.min(startTime.getTime(), Date.now() + CUSTOM_SESSION_RULES.offerExpiryHours * 3600 * 1000));
     const message = (args.message || '').trim().slice(0, 500) || null;
 
-    const lesson = await prisma.lesson.create({
-        data: {
-            tutor_id: tutorId,
-            student_id: studentId,
-            start_time: startTime,
-            end_time: endTime,
-            duration: durationMinutes,
-            status: 'PENDING',
-            billing_type: 'CUSTOM_FREE',
-            origin: 'MENTOR_OFFER',
-            custom_kind: kind,
-            makeup_for_lesson_id: makeupForLessonId,
-            offer_message: message,
-            offer_expires_at: expiresAt,
-        },
-        include: OFFER_INCLUDE,
+    const lesson = await prisma.$transaction(async (tx) => {
+        await lockTutorSchedule(tx, tutorId);
+        const raced = await findConflict({ tutorId, studentId, start: startTime, end: endTime }, tx);
+        if (raced) throw new WalletError(raced, 409);
+        return tx.lesson.create({
+            data: {
+                tutor_id: tutorId,
+                student_id: studentId,
+                start_time: startTime,
+                end_time: endTime,
+                duration: durationMinutes,
+                status: 'PENDING',
+                billing_type: 'CUSTOM_FREE',
+                origin: 'MENTOR_OFFER',
+                custom_kind: kind,
+                makeup_for_lesson_id: makeupForLessonId,
+                offer_message: message,
+                offer_expires_at: expiresAt,
+            },
+            include: OFFER_INCLUDE,
+        });
     });
 
     await queueEmail('SESSION_OFFER_STUDENT', lesson.student.user.email, { lessonId: lesson.id }, `session-offer:${lesson.id}`);
@@ -220,10 +227,19 @@ export async function respondToOffer(args: { lessonId: string; studentId: string
     });
     if (conflict) throw new WalletError(`This time is no longer available: ${conflict.replace(/^You /, 'The mentor ')}`, 409);
 
-    const updated = await prisma.lesson.update({
-        where: { id: lesson.id },
-        data: { status: 'BOOKED', offer_responded_at: new Date() },
-        include: OFFER_INCLUDE,
+    const updated = await prisma.$transaction(async (tx) => {
+        await lockTutorSchedule(tx, lesson.tutor_id);
+        const raced = await findConflict({
+            tutorId: lesson.tutor_id, studentId: lesson.student_id,
+            start: lesson.start_time, end: lesson.end_time, excludeLessonId: lesson.id,
+        }, tx);
+        if (raced) throw new WalletError(`This time is no longer available: ${raced.replace(/^You /, 'The mentor ')}`, 409);
+        const accepted = await tx.lesson.updateMany({
+            where: { id: lesson.id, status: 'PENDING' },
+            data: { status: 'BOOKED', offer_responded_at: new Date() },
+        });
+        if (accepted.count !== 1) throw new WalletError('This offer is no longer open');
+        return tx.lesson.findUniqueOrThrow({ where: { id: lesson.id }, include: OFFER_INCLUDE });
     });
 
     try {

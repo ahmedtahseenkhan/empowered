@@ -10,6 +10,7 @@ import { MentorSocialLinks } from '../components/common/MentorSocialLinks';
 import api from '../api/axios';
 import { SESSION_MINUTES, SLOT_STEP_MINUTES } from '../constants/session';
 import { parseKeyStrengths } from '../utils/strengths';
+import { safeExternalUrl } from '../utils/safeUrl';
 
 type PublicTutorProfile = {
     id: string;
@@ -210,9 +211,11 @@ const MentorPublicProfilePage: React.FC = () => {
             );
         }
 
-        // Direct video file
+        // Direct video file (http(s) or our own uploads only)
+        const directUrl = safeExternalUrl(videoUrl);
+        if (!directUrl) return null;
         return (
-            <video src={videoUrl} controls className="w-full h-full rounded-xl" />
+            <video src={directUrl} controls className="w-full h-full rounded-xl" />
         );
     };
 

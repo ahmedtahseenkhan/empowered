@@ -2,6 +2,44 @@ import { Response } from 'express';
 import prisma from '../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
 import { HomeworkStatus } from '@prisma/client';
+import { isSafeHttpUrl } from '../utils/validation';
+
+const MAX_NOTE_CHARS = 10000;
+const MAX_TITLE_CHARS = 200;
+const MAX_ATTACHMENTS = 10;
+const MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024;
+
+type AttachmentInput = { file_url: string; file_name: string; mime_type: string; size: number };
+
+const isUploadPath = (v: string) => /^\/api\/(?:uploads|files)\/[A-Za-z0-9._-]+$/.test(v);
+
+/** Validates attachment metadata from the client; returns an error message or the cleaned list. */
+const parseAttachments = (raw: unknown): { error: string } | { attachments: AttachmentInput[] } => {
+    if (raw === undefined || raw === null) return { attachments: [] };
+    if (!Array.isArray(raw)) return { error: 'attachments must be a list' };
+    if (raw.length > MAX_ATTACHMENTS) return { error: `At most ${MAX_ATTACHMENTS} attachments are allowed` };
+    const attachments: AttachmentInput[] = [];
+    for (const a of raw) {
+        const fileUrl = typeof a?.file_url === 'string' ? a.file_url.trim() : '';
+        if (!fileUrl || !(isUploadPath(fileUrl) || isSafeHttpUrl(fileUrl))) {
+            return { error: 'Attachment link must be an uploaded file or an http(s) URL' };
+        }
+        const fileName = typeof a?.file_name === 'string' && a.file_name.trim() ? a.file_name.trim().slice(0, 255) : 'attachment';
+        const mimeType = typeof a?.mime_type === 'string' && /^[\w.+-]+\/[\w.+-]+$/.test(a.mime_type) && a.mime_type.length <= 127
+            ? a.mime_type
+            : 'application/octet-stream';
+        const size = Number(a?.size);
+        attachments.push({
+            file_url: fileUrl,
+            file_name: fileName,
+            mime_type: mimeType,
+            size: Number.isInteger(size) && size >= 0 && size <= MAX_ATTACHMENT_BYTES ? size : 0,
+        });
+    }
+    return { attachments };
+};
+
+const textField = (v: unknown): string | undefined => (typeof v === 'string' ? v.trim() : undefined);
 
 const ensureTutorStudentRelationship = async (tutorId: string, studentId: string) => {
     const existing = await prisma.lesson.findFirst({
@@ -105,11 +143,14 @@ export const tutorCreateNote = async (req: AuthRequest, res: Response) => {
         const studentId = (req.params.studentId as string | undefined)?.trim();
         if (!studentId) return res.status(400).json({ error: 'studentId is required' });
 
-        const body = (req.body?.body as string | undefined)?.trim();
-        const visibilityRaw = (req.body?.visibility as string | undefined)?.trim();
-        const attachments = (req.body?.attachments as any[] | undefined) || [];
+        const body = textField(req.body?.body);
+        const visibilityRaw = textField(req.body?.visibility);
+        const parsedAttachments = parseAttachments(req.body?.attachments);
 
         if (!body) return res.status(400).json({ error: 'body is required' });
+        if (body.length > MAX_NOTE_CHARS) return res.status(400).json({ error: `Note must be at most ${MAX_NOTE_CHARS} characters` });
+        if ('error' in parsedAttachments) return res.status(400).json({ error: parsedAttachments.error });
+        const { attachments } = parsedAttachments;
 
         const tutor = await prisma.tutorProfile.findUnique({ where: { user_id: userId }, select: { id: true } });
         if (!tutor) return res.status(404).json({ error: 'Tutor profile not found' });
@@ -133,13 +174,7 @@ export const tutorCreateNote = async (req: AuthRequest, res: Response) => {
 
             if (attachments.length > 0) {
                 await tx.attachment.createMany({
-                    data: attachments.map((a: any) => ({
-                        note_id: note.id,
-                        file_url: String(a.file_url),
-                        file_name: String(a.file_name || a.file_name === '' ? a.file_name : 'attachment'),
-                        mime_type: String(a.mime_type || 'application/octet-stream'),
-                        size: Number(a.size || 0),
-                    }))
+                    data: attachments.map((a) => ({ note_id: note.id, ...a }))
                 });
             }
 
@@ -164,13 +199,17 @@ export const tutorCreateTask = async (req: AuthRequest, res: Response) => {
         const studentId = (req.params.studentId as string | undefined)?.trim();
         if (!studentId) return res.status(400).json({ error: 'studentId is required' });
 
-        const title = (req.body?.title as string | undefined)?.trim();
-        const instructions = (req.body?.instructions as string | undefined)?.trim();
-        const dueAtStr = (req.body?.due_at as string | undefined)?.trim();
-        const attachments = (req.body?.attachments as any[] | undefined) || [];
+        const title = textField(req.body?.title);
+        const instructions = textField(req.body?.instructions);
+        const dueAtStr = textField(req.body?.due_at);
+        const parsedAttachments = parseAttachments(req.body?.attachments);
 
         if (!title) return res.status(400).json({ error: 'title is required' });
         if (!instructions) return res.status(400).json({ error: 'instructions is required' });
+        if (title.length > MAX_TITLE_CHARS) return res.status(400).json({ error: `Title must be at most ${MAX_TITLE_CHARS} characters` });
+        if (instructions.length > MAX_NOTE_CHARS) return res.status(400).json({ error: `Instructions must be at most ${MAX_NOTE_CHARS} characters` });
+        if ('error' in parsedAttachments) return res.status(400).json({ error: parsedAttachments.error });
+        const { attachments } = parsedAttachments;
 
         const due_at = dueAtStr ? new Date(dueAtStr) : null;
         if (dueAtStr && Number.isNaN(due_at?.getTime())) return res.status(400).json({ error: 'due_at is invalid' });
@@ -196,13 +235,7 @@ export const tutorCreateTask = async (req: AuthRequest, res: Response) => {
 
             if (attachments.length > 0) {
                 await tx.attachment.createMany({
-                    data: attachments.map((a: any) => ({
-                        task_id: task.id,
-                        file_url: String(a.file_url),
-                        file_name: String(a.file_name || a.file_name === '' ? a.file_name : 'attachment'),
-                        mime_type: String(a.mime_type || 'application/octet-stream'),
-                        size: Number(a.size || 0),
-                    }))
+                    data: attachments.map((a) => ({ task_id: task.id, ...a }))
                 });
             }
 
@@ -233,7 +266,7 @@ export const tutorUpdateTaskStatus = async (req: AuthRequest, res: Response) => 
         const taskId = (req.params.taskId as string | undefined)?.trim();
         if (!taskId) return res.status(400).json({ error: 'taskId is required' });
 
-        const statusRaw = (req.body?.status as string | undefined)?.trim();
+        const statusRaw = textField(req.body?.status);
         const allowed = new Set<HomeworkStatus>(['ASSIGNED', 'SUBMITTED', 'REVIEWED', 'COMPLETED']);
         if (!statusRaw || !allowed.has(statusRaw as HomeworkStatus)) return res.status(400).json({ error: 'Invalid status' });
         const status = statusRaw as HomeworkStatus;
@@ -263,8 +296,9 @@ export const tutorGetActivityFeed = async (req: AuthRequest, res: Response) => {
         const tutor = await prisma.tutorProfile.findUnique({ where: { user_id: userId }, select: { id: true } });
         if (!tutor) return res.status(404).json({ error: 'Tutor profile not found' });
 
-        const limitRaw = (req.query.limit as string | undefined)?.trim();
-        const limit = limitRaw ? Math.min(100, Math.max(1, parseInt(limitRaw, 10))) : 20;
+        const limitRaw = textField(req.query.limit);
+        const limitParsed = limitRaw ? parseInt(limitRaw, 10) : NaN;
+        const limit = Number.isFinite(limitParsed) ? Math.min(100, Math.max(1, limitParsed)) : 20;
 
         const [notes, tasks, submissions] = await Promise.all([
             prisma.progressNote.findMany({
@@ -376,10 +410,13 @@ export const studentCreateNote = async (req: AuthRequest, res: Response) => {
         const tutorId = (req.params.tutorId as string | undefined)?.trim();
         if (!tutorId) return res.status(400).json({ error: 'tutorId is required' });
 
-        const body = (req.body?.body as string | undefined)?.trim();
-        const attachments = (req.body?.attachments as any[] | undefined) || [];
+        const body = textField(req.body?.body);
+        const parsedAttachments = parseAttachments(req.body?.attachments);
 
         if (!body) return res.status(400).json({ error: 'body is required' });
+        if (body.length > MAX_NOTE_CHARS) return res.status(400).json({ error: `Note must be at most ${MAX_NOTE_CHARS} characters` });
+        if ('error' in parsedAttachments) return res.status(400).json({ error: parsedAttachments.error });
+        const { attachments } = parsedAttachments;
 
         const student = await prisma.studentProfile.findUnique({ where: { user_id: userId }, select: { id: true } });
         if (!student) return res.status(404).json({ error: 'Student profile not found' });
@@ -401,13 +438,7 @@ export const studentCreateNote = async (req: AuthRequest, res: Response) => {
 
             if (attachments.length > 0) {
                 await tx.attachment.createMany({
-                    data: attachments.map((a: any) => ({
-                        note_id: note.id,
-                        file_url: String(a.file_url),
-                        file_name: String(a.file_name || a.file_name === '' ? a.file_name : 'attachment'),
-                        mime_type: String(a.mime_type || 'application/octet-stream'),
-                        size: Number(a.size || 0),
-                    }))
+                    data: attachments.map((a) => ({ note_id: note.id, ...a }))
                 });
             }
 
@@ -432,8 +463,11 @@ export const studentSubmitHomework = async (req: AuthRequest, res: Response) => 
         const taskId = (req.params.taskId as string | undefined)?.trim();
         if (!taskId) return res.status(400).json({ error: 'taskId is required' });
 
-        const message = (req.body?.message as string | undefined)?.trim();
-        const attachments = (req.body?.attachments as any[] | undefined) || [];
+        const message = textField(req.body?.message);
+        const parsedAttachments = parseAttachments(req.body?.attachments);
+        if (message && message.length > MAX_NOTE_CHARS) return res.status(400).json({ error: `Message must be at most ${MAX_NOTE_CHARS} characters` });
+        if ('error' in parsedAttachments) return res.status(400).json({ error: parsedAttachments.error });
+        const { attachments } = parsedAttachments;
 
         const student = await prisma.studentProfile.findUnique({ where: { user_id: userId }, select: { id: true } });
         if (!student) return res.status(404).json({ error: 'Student profile not found' });
@@ -454,13 +488,7 @@ export const studentSubmitHomework = async (req: AuthRequest, res: Response) => 
 
             if (attachments.length > 0) {
                 await tx.attachment.createMany({
-                    data: attachments.map((a: any) => ({
-                        submission_id: submission.id,
-                        file_url: String(a.file_url),
-                        file_name: String(a.file_name || a.file_name === '' ? a.file_name : 'attachment'),
-                        mime_type: String(a.mime_type || 'application/octet-stream'),
-                        size: Number(a.size || 0),
-                    }))
+                    data: attachments.map((a) => ({ submission_id: submission.id, ...a }))
                 });
             }
 

@@ -7,6 +7,7 @@ import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/axios';
+import { safeExternalUrl } from '../utils/safeUrl';
 
 const apiError = (e: unknown, fallback: string) =>
     (e as { response?: { data?: { error?: string } } })?.response?.data?.error || fallback;
@@ -207,9 +208,9 @@ const SessionDetailPage: React.FC = () => {
             setJoinBusy(true);
             setJoinError('');
             const res = await api.get(`/lessons/${lesson.id}/join`);
-            const url = res.data?.meeting_link as string | undefined;
+            const url = safeExternalUrl(res.data?.meeting_link);
             if (url) {
-                window.open(url, '_blank');
+                window.open(url, '_blank', 'noopener,noreferrer');
             } else {
                 setJoinError('Meeting link is not available yet.');
                 setErrorModalOpen(true);
@@ -451,7 +452,7 @@ const SessionDetailPage: React.FC = () => {
                                         <div className="flex-1 min-w-0">
                                             <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">Google Meet</p>
                                             {link ? (
-                                                <a href={link} target="_blank" rel="noreferrer" className="text-sm font-medium text-[#4A1D96] hover:underline break-all">{link}</a>
+                                                <a href={safeExternalUrl(link)} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-[#4A1D96] hover:underline break-all">{link}</a>
                                             ) : (
                                                 <p className="text-sm text-gray-600">The meeting link has not been created yet.</p>
                                             )}
@@ -599,7 +600,7 @@ const SessionDetailPage: React.FC = () => {
                             )}
 
                             {lesson.google_calendar_html_link && (
-                                <a href={lesson.google_calendar_html_link} target="_blank" rel="noreferrer">
+                                <a href={safeExternalUrl(lesson.google_calendar_html_link)} target="_blank" rel="noopener noreferrer">
                                     <Button variant="outline">Open in Calendar</Button>
                                 </a>
                             )}

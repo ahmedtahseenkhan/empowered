@@ -6,17 +6,20 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import api from '../api/axios';
+import BotProtectionFields from '../components/common/BotProtectionFields';
+import { useBotProtection } from '../hooks/useBotProtection';
+import { safeRedirectPath } from '../utils/safeRedirect';
 
 /**
  * Standalone email-verification step shared by every signup flow (student/mentor
  * generic register, student register, find-a-mentor inline signup) and by the
  * login screen when it reports EMAIL_NOT_VERIFIED. The account is created at
- * registration but receives no token until the 6-digit code is confirmed here.
+ * registration but gets no session cookie until the 6-digit code is confirmed here.
  */
 const VerifyCodePage: React.FC = () => {
     const [searchParams] = useSearchParams();
     const email = (searchParams.get('email') || '').trim();
-    const redirect = searchParams.get('redirect') || '';
+    const redirect = safeRedirectPath(searchParams.get('redirect'));
 
     const { login } = useAuth();
     const navigate = useNavigate();
@@ -26,6 +29,7 @@ const VerifyCodePage: React.FC = () => {
     const [resendLoading, setResendLoading] = useState(false);
     const [error, setError] = useState('');
     const [message, setMessage] = useState('');
+    const bot = useBotProtection();
 
     const handleVerify = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -34,12 +38,13 @@ const VerifyCodePage: React.FC = () => {
         setLoading(true);
         try {
             const res = await api.post('/auth/verify-email-code', { email, code: code.trim() });
-            if (res.data?.token && res.data?.user) {
-                login(res.data.token, res.data.user);
-                navigate(redirect || '/dashboard');
+            if (res.data?.user) {
+                // The server set the session cookie along with the response.
+                login(res.data.user);
+                navigate(redirect);
             } else {
-                // Already verified or no token returned — send them to log in.
-                navigate('/login');
+                // Verified, but no session was issued (e.g. suspended account) — send them to log in.
+                navigate(`/login?redirect=${encodeURIComponent(redirect)}`);
             }
         } catch (err: any) {
             setError(err.response?.data?.error || 'Invalid or expired code. Please try again.');
@@ -53,12 +58,13 @@ const VerifyCodePage: React.FC = () => {
         setMessage('');
         setResendLoading(true);
         try {
-            await api.post('/auth/resend-verification', { email });
+            const res = await api.post('/auth/resend-verification', { email, ...bot.fields });
             setCode('');
-            setMessage('A new code has been sent to your email.');
+            setMessage(res.data?.message || 'If this account still needs verification, a new code has been sent.');
         } catch (err: any) {
             setError(err.response?.data?.error || 'Failed to resend code.');
         } finally {
+            bot.reset();
             setResendLoading(false);
         }
     };
@@ -118,15 +124,22 @@ const VerifyCodePage: React.FC = () => {
                                     {loading ? 'Verifying...' : 'Verify & Continue'}
                                 </Button>
 
-                                <div className="text-center">
+                                <div className="text-center space-y-3">
+                                    <BotProtectionFields bot={bot} action="resend-verification" className="flex justify-center" />
                                     <button
                                         type="button"
                                         onClick={handleResend}
-                                        disabled={resendLoading}
+                                        disabled={resendLoading || !bot.ready}
                                         className="text-sm text-primary-900 font-semibold hover:underline disabled:opacity-50"
                                     >
                                         {resendLoading ? 'Sending...' : "Didn't get a code? Resend"}
                                     </button>
+                                    <p className="text-xs text-gray-500">
+                                        Already have an account with this email? We've emailed you instead of sending a code.{' '}
+                                        <Link to="/login" className="text-primary-900 font-semibold hover:underline">Sign in</Link>
+                                        {' '}or{' '}
+                                        <Link to="/forgot-password" className="text-primary-900 font-semibold hover:underline">reset your password</Link>.
+                                    </p>
                                 </div>
                             </form>
                         )}

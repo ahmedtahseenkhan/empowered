@@ -187,7 +187,7 @@ export const MarketingVideoSection: React.FC<{ onBack: () => void; tutorUsername
                             className="text-sm text-gray-500 self-center"
                             href={mailtoHref}
                             target="_blank"
-                            rel="noreferrer"
+                            rel="noopener noreferrer"
                         >
                             Email: {supportEmail}
                         </a>

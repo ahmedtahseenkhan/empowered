@@ -3,10 +3,12 @@ import prisma from '../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
 import { ensureMeetLinkForLesson } from '../services/googleCalendar';
 import { StripeService } from '../services/stripeService';
-import { isTutorSlotAvailable } from '../services/availability';
+import { z } from 'zod';
+import { isTutorSlotAvailable, isTutorSlotFreeTx, lockTutorSchedule } from '../services/availability';
 import * as wallet from '../services/walletService';
 import { WalletError, WALLET_CONFIG } from '../services/walletService';
 import { SESSION_MINUTES } from '../config/session';
+import { firstIssue, isSafeHttpUrl } from '../utils/validation';
 
 type Frequency = 'WEEKLY' | 'TWICE_WEEKLY' | 'THRICE_WEEKLY';
 
@@ -18,6 +20,25 @@ const weeklySlotsForFrequency = (frequency: Frequency) => {
     if (frequency === 'THRICE_WEEKLY') return 3;
     return 1;
 };
+
+const CreditsBookingSchema = z.object({
+    tutorId: z.string().min(1).max(64),
+    frequency: z.enum(['WEEKLY', 'TWICE_WEEKLY', 'THRICE_WEEKLY'] as const).default('WEEKLY'),
+    slotStarts: z.array(z.string().max(64)).min(1).max(3),
+    // Sessions are charged at a flat per-session rate, so only the standard length is bookable.
+    durationMinutes: z.literal(SESSION_MINUTES).optional(),
+    clientTimezone: z.string().max(64).optional(),
+});
+
+const PayoutSettingsSchema = z.object({
+    method: z.enum(['STRIPE', 'ZELLE', 'BANK_TRANSFER'] as const),
+    zelle_contact: z.string().max(120).optional(),
+    bank_name: z.string().max(200).optional(),
+    bank_account_name: z.string().max(200).optional(),
+    bank_account_number: z.string().max(60).optional(),
+    bank_routing: z.string().max(60).optional(),
+    bank_notes: z.string().max(500).optional(),
+});
 
 const fail = (res: Response, e: unknown, fallback: string) => {
     if (e instanceof WalletError) return res.status(e.status).json({ error: e.message });
@@ -109,27 +130,22 @@ export const createCreditsBooking = async (req: AuthRequest, res: Response) => {
         if (!WALLET_CONFIG.enabled) throw new WalletError('Learning Credits are not enabled', 403);
         const student = await requireStudent(req);
 
-        const { tutorId, frequency, slotStarts, durationMinutes, clientTimezone } = req.body as {
-            tutorId?: string;
-            frequency?: Frequency;
-            slotStarts?: string[];
-            durationMinutes?: number;
-            clientTimezone?: string;
-        };
+        const parsed = CreditsBookingSchema.safeParse(req.body);
+        if (!parsed.success) throw new WalletError(firstIssue(parsed.error));
+        const { tutorId, frequency: bookingFrequency, slotStarts, clientTimezone } = parsed.data;
 
-        if (!tutorId) throw new WalletError('tutorId is required');
-        if (!slotStarts || !Array.isArray(slotStarts) || slotStarts.length === 0) throw new WalletError('slotStarts is required');
-
-        const bookingFrequency: Frequency = frequency === 'TWICE_WEEKLY' || frequency === 'THRICE_WEEKLY' ? frequency : 'WEEKLY';
         const requiredSlots = weeklySlotsForFrequency(bookingFrequency);
         if (slotStarts.length !== requiredSlots) {
             throw new WalletError(`Please select ${requiredSlots} weekly time slot${requiredSlots === 1 ? '' : 's'}`);
         }
 
-        const dur = typeof durationMinutes === 'number' && durationMinutes > 0 ? durationMinutes : SESSION_MINUTES;
+        const dur = SESSION_MINUTES;
 
-        const tutor = await prisma.tutorProfile.findUnique({ where: { id: tutorId } });
-        if (!tutor) throw new WalletError('Tutor not found', 404);
+        const tutor = await prisma.tutorProfile.findUnique({
+            where: { id: tutorId },
+            include: { user: { select: { is_suspended: true } } },
+        });
+        if (!tutor || !tutor.is_verified || tutor.user.is_suspended) throw new WalletError('This mentor is not available for booking', 404);
         if (!tutor.hourly_rate || tutor.hourly_rate <= 0) throw new WalletError('This mentor has not set a session rate yet');
 
         const starts = slotStarts
@@ -159,6 +175,13 @@ export const createCreditsBooking = async (req: AuthRequest, res: Response) => {
         const bookingEnd = addDays(bookingStart, weeks * 7);
 
         const result = await prisma.$transaction(async (tx) => {
+            await lockTutorSchedule(tx, tutorId);
+            for (const l of lessonsToCreate) {
+                if (!(await isTutorSlotFreeTx(tx, { tutorId, start: l.start, end: l.end }))) {
+                    throw new WalletError('One of the selected times is no longer available', 409);
+                }
+            }
+
             const createdBooking = await tx.booking.create({
                 data: {
                     student_id: student.id,
@@ -294,10 +317,12 @@ export const reportSessionProblem = async (req: AuthRequest, res: Response) => {
     try {
         const student = await requireStudent(req);
         const lessonId = (req.params.lessonId || '').trim();
-        const { reason } = req.body as { reason?: string };
+        const { reason } = req.body as { reason?: unknown };
         if (!lessonId) throw new WalletError('lessonId is required');
+        if (reason !== undefined && typeof reason !== 'string') throw new WalletError('reason must be text');
+        if (typeof reason === 'string' && reason.length > 2000) throw new WalletError('Please keep the description under 2000 characters');
 
-        const dispute = await wallet.openDispute({ studentId: student.id, lessonId, reason: reason || '' });
+        const dispute = await wallet.openDispute({ studentId: student.id, lessonId, reason: (reason as string | undefined) || '' });
         return res.status(201).json({ dispute });
     } catch (e) {
         return fail(res, e, 'Failed to report a problem');
@@ -316,7 +341,7 @@ export const createCreditsPurchaseCheckout = async (req: AuthRequest, res: Respo
         if (!Number.isInteger(amount) || amount < WALLET_CONFIG.purchaseMinCredits || amount > WALLET_CONFIG.purchaseMaxCredits) {
             throw new WalletError(`You can buy between ${WALLET_CONFIG.purchaseMinCredits} and ${WALLET_CONFIG.purchaseMaxCredits} credits at a time.`);
         }
-        if (!successUrl || !cancelUrl) throw new WalletError('successUrl and cancelUrl are required');
+        if (!successUrl || !cancelUrl || !isSafeHttpUrl(successUrl) || !isSafeHttpUrl(cancelUrl)) throw new WalletError('successUrl and cancelUrl must be valid URLs');
 
         const user = await prisma.user.findUnique({ where: { id: req.user!.id }, select: { email: true } });
 
@@ -360,8 +385,8 @@ export const createCreditsPurchaseCheckout = async (req: AuthRequest, res: Respo
 export const finalizeCreditsPurchase = async (req: AuthRequest, res: Response) => {
     try {
         const student = await requireStudent(req);
-        const { sessionId } = req.body as { sessionId?: string };
-        if (!sessionId) throw new WalletError('sessionId is required');
+        const { sessionId } = req.body as { sessionId?: unknown };
+        if (typeof sessionId !== 'string' || !sessionId || sessionId.length > 255) throw new WalletError('sessionId is required');
 
         const session = await StripeService.getCheckoutSessionById(sessionId);
         if (!session) throw new WalletError('Checkout session not found', 404);
@@ -402,12 +427,9 @@ export const getMentorPayoutSettings = async (req: AuthRequest, res: Response) =
 export const updateMentorPayoutSettings = async (req: AuthRequest, res: Response) => {
     try {
         const tutor = await requireTutor(req);
-        const { method, zelle_contact, bank_name, bank_account_name, bank_account_number, bank_routing, bank_notes } =
-            req.body as Record<string, string | undefined>;
-        const settings = await wallet.updateMentorPayoutSettings(tutor.id, {
-            method: method as 'STRIPE' | 'ZELLE' | 'BANK_TRANSFER',
-            zelle_contact, bank_name, bank_account_name, bank_account_number, bank_routing, bank_notes,
-        });
+        const parsed = PayoutSettingsSchema.safeParse(req.body);
+        if (!parsed.success) throw new WalletError(firstIssue(parsed.error));
+        const settings = await wallet.updateMentorPayoutSettings(tutor.id, parsed.data);
         return res.json(settings);
     } catch (e) {
         return fail(res, e, 'Failed to save payout settings');

@@ -4,6 +4,7 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Award, BookOpen, Star, Upload, X, Trash2 } from 'lucide-react';
 import api from '../../api/axios';
+import { safeExternalUrl } from '../../utils/safeUrl';
 
 interface EducationSectionProps {
     onBack: () => void;
@@ -461,7 +462,7 @@ export const EducationSection: React.FC<EducationSectionProps> = ({ onBack }) =>
                                             <span className="text-xs text-gray-500">{rev.platform}</span>
                                             {rev.external_url && (
                                                 <a
-                                                    href={rev.external_url}
+                                                    href={safeExternalUrl(rev.external_url)}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
                                                     className="block text-xs text-[#4A1D96] underline mt-1"

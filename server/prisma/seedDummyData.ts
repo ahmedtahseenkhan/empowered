@@ -27,8 +27,11 @@ const getRandomInt = (min: number, max: number) => Math.floor(Math.random() * (m
 async function main() {
     console.log("🌱 Starting seeding...");
 
-    // Password hash (password123)
-    const passwordHash = await bcrypt.hash("password123", 10);
+    // Dummy accounts are for local development only, with a password chosen at run time
+    if (process.env.NODE_ENV === "production") throw new Error("seedDummyData must not run in production");
+    const dummyPassword = process.env.DUMMY_USER_PASSWORD;
+    if (!dummyPassword || dummyPassword.length < 12) throw new Error("Set DUMMY_USER_PASSWORD (12+ characters) to seed dummy users");
+    const passwordHash = await bcrypt.hash(dummyPassword, 12);
 
     // 1. Fetch Categories for assignment
     const categories = await prisma.category.findMany();

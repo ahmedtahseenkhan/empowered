@@ -76,8 +76,14 @@ export const createCustomSessionOffer = async (req: AuthRequest, res: Response) 
             studentId?: string; startTime?: string; durationMinutes?: number | string;
             kind?: string; makeupForLessonId?: string | null; message?: string | null;
         };
-        if (!body.studentId) throw new WalletError('studentId is required');
-        if (!body.startTime) throw new WalletError('startTime is required');
+        if (typeof body.studentId !== 'string' || !body.studentId || body.studentId.length > 64) throw new WalletError('studentId is required');
+        if (typeof body.startTime !== 'string' || !body.startTime || body.startTime.length > 64) throw new WalletError('startTime is required');
+        if (body.message != null && (typeof body.message !== 'string' || body.message.length > 2000)) {
+            throw new WalletError('message must be text of at most 2000 characters');
+        }
+        if (body.makeupForLessonId != null && (typeof body.makeupForLessonId !== 'string' || body.makeupForLessonId.length > 64)) {
+            throw new WalletError('makeupForLessonId is invalid');
+        }
 
         const lesson = await createOffer({
             tutorId: tutor.id,

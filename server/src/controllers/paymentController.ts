@@ -5,48 +5,30 @@ import prisma from '../config/db';
 import { z } from 'zod';
 import { findApprovedBetaApplication, grantBetaPremium } from '../services/betaService';
 import { handleCheckoutSessionCompleted } from './webhookController';
-import { CARD_PLATFORM_FEE_RATE } from '../config/fees';
+import { CARD_PLATFORM_FEE_RATE, MENTOR_PLANS, tierForPriceId, tierForSubscription } from '../config/fees';
+import { SESSION_MINUTES } from '../config/session';
+import { isSafeHttpUrl } from '../utils/validation';
 
-/** Mentor subscription plans: annual billing. Price IDs from env or fallback for backward compatibility. */
-export const MENTOR_PLANS = [
-    {
-        id: 'STANDARD' as const,
-        name: 'Standard',
-        priceMonthly: 25,
-        annualAmount: 300,
-        priceId: process.env.STRIPE_PRICE_STANDARD_ANNUAL || 'price_1StboAByCQ0ee0A8u7BMs9cl',
-    },
-    {
-        id: 'PRO' as const,
-        name: 'Pro',
-        priceMonthly: 45,
-        annualAmount: 540,
-        priceId: process.env.STRIPE_PRICE_PRO_ANNUAL || 'price_1StboXByCQ0ee0A8GeuDW77K',
-    },
-    {
-        id: 'PREMIUM' as const,
-        name: 'Premium',
-        priceMonthly: 85,
-        annualAmount: 1020,
-        priceId: process.env.STRIPE_PRICE_PREMIUM_ANNUAL || 'price_1StbozByCQ0ee0A8vJMmBvce',
-    },
-];
+export { MENTOR_PLANS };
 
 export const getMentorPlans = async (_req: Request, res: Response) => {
     return res.json({ plans: MENTOR_PLANS });
 };
 
+const HttpUrlSchema = z.string().max(2048).refine(isSafeHttpUrl, { message: 'Must be a valid http(s) URL' });
+
 const CreateSubscriptionSchema = z.object({
-    priceId: z.string().min(1, 'Price ID is required'),
-    tier: z.enum(['STANDARD', 'PRO', 'PREMIUM'] as const),
-    successUrl: z.string().url(),
-    cancelUrl: z.string().url(),
+    priceId: z.string().min(1, 'Price ID is required').max(255),
+    // Accepted for backwards compatibility; the tier is always derived from priceId.
+    tier: z.enum(['STANDARD', 'PRO', 'PREMIUM'] as const).optional(),
+    successUrl: HttpUrlSchema,
+    cancelUrl: HttpUrlSchema,
 });
 
 const CreateConnectLinkSchema = z.object({
-    refreshUrl: z.string().url(),
-    returnUrl: z.string().url(),
-    country: z.string().optional(),
+    refreshUrl: HttpUrlSchema,
+    returnUrl: HttpUrlSchema,
+    country: z.string().trim().length(2).optional(),
 });
 
 type CreateConnectLinkInput = z.infer<typeof CreateConnectLinkSchema>;
@@ -104,7 +86,9 @@ async function resolveTutorSubId(tutor: {
 export const createMentorSubscriptionCheckout = async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user.id;
-        const { priceId, tier, successUrl, cancelUrl } = CreateSubscriptionSchema.parse(req.body);
+        const { priceId, successUrl, cancelUrl } = CreateSubscriptionSchema.parse(req.body);
+        const tier = tierForPriceId(priceId);
+        if (!tier) return res.status(400).json({ error: 'Unknown subscription plan' });
 
         const tutor = await prisma.tutorProfile.findUnique({
             where: { user_id: userId },
@@ -154,7 +138,7 @@ export const createMentorSubscriptionCheckout = async (req: Request, res: Respon
             },
             trialEligible
         );
-        console.log(`[Subscription Checkout] Created session ${session.id}, url=${session.url}`);
+        console.log(`[Subscription Checkout] Created session ${session.id}`);
 
         res.json({ url: session.url });
     } catch (error: any) {
@@ -221,7 +205,7 @@ export const activateMentorTrial = async (req: Request, res: Response) => {
             return res.status(400).json({ error: error.issues });
         }
         console.error('Activate trial error:', error);
-        return res.status(500).json({ error: error?.message || 'Failed to activate trial' });
+        return res.status(500).json({ error: 'Failed to activate trial' });
     }
 };
 
@@ -315,7 +299,7 @@ export const createConnectOnboardingLink = async (req: Request, res: Response) =
         if (error instanceof z.ZodError) {
             return res.status(400).json({ error: error.issues });
         }
-        res.status(500).json({ error: error.message || 'Failed to create onboarding link' });
+        res.status(500).json({ error: 'Failed to create onboarding link' });
     }
 };
 
@@ -347,7 +331,7 @@ export const createConnectLoginLink = async (req: Request, res: Response) => {
         res.json({ url });
     } catch (error: any) {
         console.error('Create login link error:', error);
-        res.status(500).json({ error: error.message || 'Failed to create dashboard login link' });
+        res.status(500).json({ error: 'Failed to create dashboard login link' });
     }
 };
 
@@ -402,14 +386,17 @@ export const getConnectAccountStatus = async (req: Request, res: Response) => {
 
 
 const UpdateSubscriptionSchema = z.object({
-    newPriceId: z.string().min(1, 'Price ID is required'),
-    tier: z.enum(['STANDARD', 'PRO', 'PREMIUM'] as const),
+    newPriceId: z.string().min(1, 'Price ID is required').max(255),
+    // Accepted for backwards compatibility; the tier is always derived from newPriceId.
+    tier: z.enum(['STANDARD', 'PRO', 'PREMIUM'] as const).optional(),
 });
 
 export const updateMentorSubscription = async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user.id;
-        const { newPriceId, tier } = UpdateSubscriptionSchema.parse(req.body);
+        const { newPriceId } = UpdateSubscriptionSchema.parse(req.body);
+        const tier = tierForPriceId(newPriceId);
+        if (!tier) return res.status(400).json({ error: 'Unknown subscription plan' });
 
         const tutor = await prisma.tutorProfile.findUnique({
             where: { user_id: userId }
@@ -422,15 +409,15 @@ export const updateMentorSubscription = async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'No active subscription found to update. Please subscribe first.' });
         }
 
-        await StripeService.updateSubscription(subscriptionId, newPriceId);
+        const updated = await StripeService.updateSubscription(subscriptionId, newPriceId);
+        const billedTier = tierForSubscription(updated as any) || tier;
 
-        // Optimistically update local DB
         await prisma.tutorProfile.update({
             where: { id: tutor.id },
-            data: { tier }
+            data: { tier: billedTier }
         });
 
-        res.json({ success: true, tier });
+        res.json({ success: true, tier: billedTier });
     } catch (error: any) {
         console.error('Update subscription error:', error);
         if (error instanceof z.ZodError) {
@@ -526,12 +513,12 @@ export const cancelMentorSubscription = async (req: Request, res: Response) => {
         return res.status(400).json({ error: 'No active subscription to cancel.' });
     } catch (error: any) {
         console.error('Cancel subscription error:', error);
-        return res.status(500).json({ error: error?.message || 'Failed to cancel subscription' });
+        return res.status(500).json({ error: 'Failed to cancel subscription' });
     }
 }
 
 const FinalizeMentorSubscriptionSchema = z.object({
-    sessionId: z.string().min(1),
+    sessionId: z.string().min(1).max(255),
 });
 
 /**
@@ -552,7 +539,6 @@ export const finalizeMentorSubscription = async (req: Request, res: Response) =>
         }
 
         console.log(`[Finalize Subscription] session.payment_status=${session.payment_status} session.status=${session.status} session.subscription=${session.subscription} session.mode=${session.mode}`);
-        console.log(`[Finalize Subscription] session.metadata=`, session.metadata);
 
         // Accept 'paid' or 'no_payment_required' (trial subscriptions have no_payment_required)
         if (session.payment_status !== 'paid' && session.payment_status !== 'no_payment_required') {
@@ -581,7 +567,7 @@ export const finalizeMentorSubscription = async (req: Request, res: Response) =>
         if (error instanceof z.ZodError) {
             return res.status(400).json({ error: error.issues });
         }
-        return res.status(500).json({ error: error?.message || 'Failed to finalize subscription' });
+        return res.status(500).json({ error: 'Failed to finalize subscription' });
     }
 };
 
@@ -625,9 +611,8 @@ export const verifyMentorSubscription = async (req: Request, res: Response) => {
         const currentPeriodEnd = (activeSub as any).current_period_end as number | null;
         const endEpoch = trialEnd || currentPeriodEnd;
 
-        // Determine tier from subscription metadata or existing profile
-        const subMeta = activeSub.metadata as Record<string, string> | null;
-        const tier = subMeta?.tier;
+        // Tier comes from the price the subscription is actually billed on, never from metadata.
+        const tier = tierForSubscription(activeSub as any);
 
         await prisma.tutorProfile.update({
             where: { id: tutor.id },
@@ -635,9 +620,7 @@ export const verifyMentorSubscription = async (req: Request, res: Response) => {
                 stripe_subscription_id: activeSub.id,
                 subscription_status: activeSub.status,
                 subscription_end_date: endEpoch ? new Date(endEpoch * 1000) : undefined,
-                ...(tier === 'STANDARD' || tier === 'PRO' || tier === 'PREMIUM'
-                    ? { tier: tier as any }
-                    : {}),
+                ...(tier ? { tier } : {}),
                 ...(trialEnd ? { has_used_trial: true } : {}),
             },
         });
@@ -646,29 +629,30 @@ export const verifyMentorSubscription = async (req: Request, res: Response) => {
         return res.json({ success: true, subscription_status: activeSub.status });
     } catch (error: any) {
         console.error('[Verify Subscription] Error:', error);
-        return res.status(500).json({ error: error?.message || 'Failed to verify subscription' });
+        return res.status(500).json({ error: 'Failed to verify subscription' });
     }
 };
 
 const CreateBookingSchema = z.object({
     tutorId: z.string().uuid(),
     frequency: z.enum(['ONCE', 'WEEKLY', 'TWICE_WEEKLY', 'THRICE_WEEKLY'] as const),
-    slotStarts: z.array(z.string().datetime()),
-    durationMinutes: z.number().int().positive().default(60),
-    successUrl: z.string().url(),
-    cancelUrl: z.string().url(),
-    clientTimezone: z.string().optional(),
+    slotStarts: z.array(z.string().datetime()).min(1).max(3),
+    // Charged at a flat per-session rate, so only the standard session length is bookable.
+    durationMinutes: z.literal(SESSION_MINUTES).default(SESSION_MINUTES),
+    successUrl: HttpUrlSchema,
+    cancelUrl: HttpUrlSchema,
+    clientTimezone: z.string().max(64).optional(),
 });
 
 const FinalizeStudentBookingSchema = z.object({
-    sessionId: z.string().min(1),
+    sessionId: z.string().min(1).max(255),
 });
 
 const PayNextBookingSessionSchema = z.object({
     lessonId: z.string().uuid().optional(),
     bookingId: z.string().uuid().optional(),
-    successUrl: z.string().url(),
-    cancelUrl: z.string().url(),
+    successUrl: HttpUrlSchema,
+    cancelUrl: HttpUrlSchema,
 });
 
 const requiredWeeklySlotsForFrequency = (frequency: 'ONCE' | 'WEEKLY' | 'TWICE_WEEKLY' | 'THRICE_WEEKLY') => {
@@ -768,7 +752,11 @@ export const createStudentBookingCheckout = async (req: Request, res: Response) 
 
 export const finalizeStudentBookingCheckout = async (req: Request, res: Response) => {
     try {
+        const studentUserId = (req as any).user.id;
         const { sessionId } = FinalizeStudentBookingSchema.parse(req.body);
+
+        const student = await prisma.studentProfile.findUnique({ where: { user_id: studentUserId }, select: { id: true } });
+        if (!student) return res.status(404).json({ error: 'Student profile not found' });
 
         const session = await StripeService.getCheckoutSessionById(sessionId);
         if (!session) return res.status(404).json({ error: 'Checkout session not found' });
@@ -779,6 +767,9 @@ export const finalizeStudentBookingCheckout = async (req: Request, res: Response
         const metaType = (session.metadata as any)?.type;
         if (metaType !== 'student_booking' && metaType !== 'student_booking_payment') {
             return res.status(400).json({ error: 'Invalid checkout session type' });
+        }
+        if ((session.metadata as any)?.studentId !== student.id) {
+            return res.status(403).json({ error: 'Session does not belong to this user' });
         }
 
         // Idempotent: handler already guards against duplicate processing via payment_intent
@@ -809,7 +800,7 @@ export const payNextStudentBookingSession = async (req: Request, res: Response) 
         if (lessonId) {
             // Find the PaymentSchedule for this specific lesson via its expected due_date
             const lesson = await prisma.lesson.findUnique({ where: { id: lessonId } });
-            if (!lesson) return res.status(404).json({ error: 'Lesson not found' });
+            if (!lesson || lesson.student_id !== student.id) return res.status(404).json({ error: 'Lesson not found' });
             if (!lesson.booking_id) return res.status(400).json({ error: 'Lesson is not part of a booking' });
 
             const expectedDue = new Date(lesson.start_time.getTime() - 48 * 60 * 60 * 1000);
@@ -932,8 +923,8 @@ export const getTutorEarningsOverview = async (req: Request, res: Response) => {
 export const getTutorPaymentHistory = async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user.id;
-        const page = parseInt(req.query.page as string) || 1;
-        const limit = parseInt(req.query.limit as string) || 20;
+        const page = Math.min(10000, Math.max(1, parseInt(req.query.page as string) || 1));
+        const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
         const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
         const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
 
@@ -1028,7 +1019,7 @@ export const exportPaymentHistoryCSV = async (req: Request, res: Response) => {
         res.setHeader('Content-Type', 'text/csv');
         res.setHeader(
             'Content-Disposition',
-            `attachment; filename="payment-history-${tutor.username}-${new Date().toISOString().split('T')[0]}.csv"`
+            `attachment; filename="payment-history-${tutor.username.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 60)}-${new Date().toISOString().split('T')[0]}.csv"`
         );
         res.send(csvContent);
     } catch (error: any) {

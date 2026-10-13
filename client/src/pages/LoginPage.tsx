@@ -6,6 +6,7 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
 import api from '../api/axios';
+import { safeRedirectPath } from '../utils/safeRedirect';
 
 const LoginPage: React.FC = () => {
     const [email, setEmail] = useState('');
@@ -25,7 +26,7 @@ const LoginPage: React.FC = () => {
         try {
             const response = await api.post('/auth/login', { email, password });
             const user = response.data.user;
-            login(response.data.token, user);
+            login(user);
 
             // Auto-sync tutor's browser timezone to their profile
             if (user.role === 'TUTOR') {
@@ -35,18 +36,13 @@ const LoginPage: React.FC = () => {
                 }
             }
 
-            const redirect = searchParams.get('redirect');
-            if (redirect) {
-                navigate(redirect);
-                return;
-            }
-
-            navigate('/dashboard');
+            navigate(safeRedirectPath(searchParams.get('redirect')));
         } catch (err: any) {
             // If the email was never verified, send them to the verification page
             // (pre-filled) instead of a dead-end error.
             if (err.response?.data?.code === 'EMAIL_NOT_VERIFIED') {
-                navigate(`/verify-code?email=${encodeURIComponent(email.trim())}`);
+                const redirect = safeRedirectPath(searchParams.get('redirect'));
+                navigate(`/verify-code?email=${encodeURIComponent(email.trim())}&redirect=${encodeURIComponent(redirect)}`);
                 return;
             }
             setError(err.response?.data?.error || 'Login failed. Please check your credentials.');

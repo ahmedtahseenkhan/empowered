@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import api from '../api/axios';
+import { resolveApiFileUrl } from '../lib/urls';
 import { Loader2, ArrowUpRight, ArrowDownLeft, AlertOctagon, Banknote } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -60,11 +61,9 @@ interface PayoutRecord {
 
 const METHOD_LABEL: Record<string, string> = { STRIPE: 'Stripe', ZELLE: 'Zelle', BANK_TRANSFER: 'Bank transfer' };
 
-const apiOrigin = (import.meta.env.VITE_API_URL || 'http://localhost:3000/api').replace(/\/api\/?$/, '');
-const resolveProofUrl = (url?: string | null) => {
-    if (!url) return null;
-    return url.startsWith('http') ? url : `${apiOrigin}${url.startsWith('/') ? '' : '/'}${url}`;
-};
+// Proofs are private files served by the API (/api/files/...); legacy ones live under /uploads/.
+// Resolve against the API origin and only ever render http(s) links.
+const resolveProofUrl = (url?: string | null) => resolveApiFileUrl(url);
 
 type Tab = 'ALL' | 'SUBSCRIPTION' | 'COURSE_SALE' | 'DISPUTES' | 'MENTOR_EARNINGS';
 
@@ -177,7 +176,8 @@ const PaymentsPage: React.FC = () => {
             });
             const ext = (file.name.split('.').pop() || '').toLowerCase();
             if (['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext)) {
-                const res = await api.post('/uploads/image', { dataUrl, fileName: file.name });
+                // Payout proofs can contain bank details: store them privately (signed-in access only).
+                const res = await api.post('/uploads/image', { dataUrl, fileName: file.name, private: true });
                 setProofUrl(res.data?.url || '');
             } else if (ext === 'pdf') {
                 const res = await api.post('/uploads/base64', { dataUrl, fileName: file.name });
@@ -458,7 +458,7 @@ const PaymentsPage: React.FC = () => {
                                                 <td className="px-6 py-2.5 text-gray-600 max-w-[220px] truncate" title={p.note || p.stripe_transfer_id || ''}>{p.note || p.stripe_transfer_id || '—'}</td>
                                                 <td className="px-6 py-2.5">
                                                     {p.proof_url ? (
-                                                        <a href={resolveProofUrl(p.proof_url) || '#'} target="_blank" rel="noreferrer" className="text-purple-700 underline text-xs">View proof</a>
+                                                        <a href={resolveProofUrl(p.proof_url) || '#'} target="_blank" rel="noopener noreferrer" className="text-purple-700 underline text-xs">View proof</a>
                                                     ) : '—'}
                                                 </td>
                                             </tr>
@@ -538,7 +538,7 @@ const PaymentsPage: React.FC = () => {
                             {proofBusy && <div className="text-xs text-gray-500 mt-1">Uploading…</div>}
                             {proofUrl && !proofBusy && (
                                 <div className="text-xs text-green-700 mt-1">
-                                    Proof attached — <a href={resolveProofUrl(proofUrl) || '#'} target="_blank" rel="noreferrer" className="underline">preview</a>
+                                    Proof attached — <a href={resolveProofUrl(proofUrl) || '#'} target="_blank" rel="noopener noreferrer" className="underline">preview</a>
                                 </div>
                             )}
                         </div>

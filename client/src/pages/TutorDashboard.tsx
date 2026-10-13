@@ -13,6 +13,7 @@ import { Modal } from '../components/ui/Modal';
 import { Input } from '../components/ui/Input';
 import { SESSION_MINUTES, SLOT_STEP_MINUTES } from '../constants/session';
 import GoogleMeetConnectCard from '../components/tutor/GoogleMeetConnectCard';
+import { openExternal } from '../utils/safeUrl';
 
 // ─── Stat Card ────────────────────────────────────────────────────────────────
 const StatCard = ({
@@ -781,7 +782,7 @@ const TutorDashboard: React.FC = () => {
                                                 const startMs = new Date(nextLesson.start_time).getTime();
                                                 const canJoin = Date.now() >= startMs - 15 * 60 * 1000 && Date.now() <= startMs + 50 * 60 * 1000;
                                                 return canJoin ? (
-                                                    <button onClick={() => window.open(nextLesson.meeting_link!, '_blank')}
+                                                    <button onClick={() => openExternal(nextLesson.meeting_link)}
                                                         className="flex-1 bg-purple-700 hover:bg-purple-800 text-white text-xs font-semibold py-2 rounded-xl transition-colors">
                                                         Join Session
                                                     </button>

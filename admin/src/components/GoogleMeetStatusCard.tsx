@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Video, RefreshCw, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
 import api from '../api/axios';
+import { safeHttpUrl } from '../lib/urls';
 
 type MeetStatus = {
     checkedAt: string;
@@ -232,7 +233,11 @@ const GoogleMeetStatusCard: React.FC = () => {
                                             </td>
                                             <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{new Date(c.startTime).toLocaleString()}</td>
                                             <td className="px-3 py-2">
-                                                <a href={c.link} target="_blank" rel="noreferrer" className="text-purple-700 hover:underline break-all">{c.link.replace(/^https?:\/\//, '')}</a>
+                                                {safeHttpUrl(c.link) ? (
+                                                    <a href={safeHttpUrl(c.link)!} target="_blank" rel="noopener noreferrer" className="text-purple-700 hover:underline break-all">{c.link.replace(/^https?:\/\//, '')}</a>
+                                                ) : (
+                                                    <span className="text-gray-500 break-all">{c.link}</span>
+                                                )}
                                             </td>
                                             <td className="px-3 py-2">
                                                 {c.liveAccess === 'MENTOR_HOSTED' ? (
@@ -270,7 +275,7 @@ const GoogleMeetStatusCard: React.FC = () => {
                         <a
                             href={reconnectUrl}
                             target="_blank"
-                            rel="noreferrer"
+                            rel="noopener noreferrer"
                             className="text-sm px-4 py-2 rounded-lg border border-gray-300 text-gray-700 font-medium hover:bg-gray-50"
                         >
                             Reconnect Google account

@@ -89,6 +89,8 @@ model User {
   role          Role     @default(STUDENT)
   is_verified   Boolean  @default(false) // For email verification
   is_suspended  Boolean  @default(false)
+  // Bumped on logout / password change / reset; tokens carrying an older value are rejected
+  token_version Int      @default(0)
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
 
@@ -100,7 +102,8 @@ model User {
   password_reset_codes     PasswordResetCode[]
   email_verification_codes EmailVerificationCode[]
 
-  support_tickets SupportTicket[]
+  support_tickets  SupportTicket[]
+  admin_audit_logs AdminAuditLog[]
 
   @@index([role])
 }
@@ -308,6 +311,7 @@ model PasswordResetCode {
   code_hash  String
   expires_at DateTime
   used_at    DateTime?
+  attempts   Int       @default(0)
 
   created_at DateTime @default(now())
 
@@ -320,9 +324,12 @@ model EmailVerificationCode {
   user_id String
   user    User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
-  code_hash  String
-  expires_at DateTime
-  used_at    DateTime?
+  code_hash             String
+  expires_at            DateTime
+  used_at               DateTime?
+  attempts              Int       @default(0)
+  // Password chosen when someone re-registers an unverified email; applied only if this code is verified
+  pending_password_hash String?
 
   created_at DateTime @default(now())
 
@@ -1134,4 +1141,29 @@ model BetaApplication {
 
   @@index([email])
   @@index([status])
+}
+
+// Who did what in the admin panel (suspensions, approvals, payouts, sub-admin changes)
+model AdminAuditLog {
+  id            String   @id @default(uuid())
+  actor_user_id String
+  actor         User     @relation(fields: [actor_user_id], references: [id])
+  action        String
+  target_type   String?
+  target_id     String?
+  details       Json?
+  ip            String?
+  created_at    DateTime @default(now())
+
+  @@index([actor_user_id])
+  @@index([target_type, target_id])
+  @@index([created_at])
+}
+
+// Sessions ended by logout; checked on every request until the token would have expired anyway
+model RevokedSession {
+  sid        String   @id
+  expires_at DateTime
+
+  @@index([expires_at])
 }
