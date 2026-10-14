@@ -643,7 +643,7 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({ onBack }) => {
                     </div>
 
                     {/* Selected Tags Display */}
-                    {editingItem?.expertiseIds.length! > 0 && (
+                    {(editingItem?.expertiseIds.length ?? 0) > 0 && (
                         <div>
                             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Selected Sub-categories:</label>
                             <div className="flex flex-wrap gap-2">

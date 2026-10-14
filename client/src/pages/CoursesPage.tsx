@@ -50,7 +50,7 @@ const CoursesPage: React.FC = () => {
         try {
             await api.delete(`/courses/${id}`);
             setCourses(courses.filter(c => c.id !== id));
-        } catch (err) {
+        } catch {
             alert('Failed to delete course');
         }
     };
@@ -59,7 +59,7 @@ const CoursesPage: React.FC = () => {
         try {
             const response = await api.patch(`/courses/${id}/status`);
             setCourses(courses.map(c => c.id === id ? response.data.course : c));
-        } catch (err) {
+        } catch {
             alert('Failed to update course status');
         }
     };

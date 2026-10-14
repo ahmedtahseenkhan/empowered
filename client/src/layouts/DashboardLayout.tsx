@@ -32,12 +32,16 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
         () => typeof window !== 'undefined' && localStorage.getItem('dismissedMobileNotice') !== '1',
     );
 
-    // Close the mobile drawer whenever the route changes
-    useEffect(() => { setMobileMenuOpen(false); }, [location.pathname]);
+    // Close the mobile drawer whenever the route changes (adjusted during render, not in an effect)
+    const [drawerPath, setDrawerPath] = useState(location.pathname);
+    if (drawerPath !== location.pathname) {
+        setDrawerPath(location.pathname);
+        setMobileMenuOpen(false);
+    }
 
     const dismissMobileNotice = () => {
         setShowMobileNotice(false);
-        try { localStorage.setItem('dismissedMobileNotice', '1'); } catch {}
+        try { localStorage.setItem('dismissedMobileNotice', '1'); } catch { /* storage unavailable */ }
     };
 
 

@@ -144,7 +144,7 @@ const StudentMentorPublicProfilePage: React.FC = () => {
                 setFreeEligibilityBusy(true);
                 const res = await api.get('/bookings/free-session/eligibility', { params: { tutorId: mentor.id } });
                 setFreeEligible(!!res.data?.eligible);
-            } catch (e) {
+            } catch {
                 // Fail open on eligibility check so we don't incorrectly hide free sessions.
                 setFreeEligible(true);
             } finally {
