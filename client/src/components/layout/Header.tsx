@@ -32,11 +32,13 @@ export const Header: React.FC = () => {
         return () => window.removeEventListener('scroll', handleScroll);
     }, []);
 
-    // Close mobile menu on route change
-    useEffect(() => {
+    // Close mobile menu on route change (adjusted during render, not in an effect)
+    const [menuPath, setMenuPath] = useState(location.pathname);
+    if (menuPath !== location.pathname) {
+        setMenuPath(location.pathname);
         setIsMenuOpen(false);
         setIsMoreOpen(false);
-    }, [location.pathname]);
+    }
 
     const isActive = (path: string) => location.pathname === path;
     const isMoreActive = moreLinks.some((l) => isActive(l.path));
