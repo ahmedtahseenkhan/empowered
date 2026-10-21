@@ -24,9 +24,14 @@ export const WALLET_CONFIG = {
     weeksPerBooking: Number(process.env.WALLET_WEEKS_PER_BOOKING || 4),
     /** Student can cancel a reserved session for a full credit return up to this many hours before start. */
     cancelCutoffHours: Number(process.env.WALLET_CANCEL_CUTOFF_HOURS || 24),
-    /** Backstop: minutes after end_time before a BOOKED credit-funded session is auto-marked COMPLETED
-     *  when neither side pressed the completion-confirmation buttons. */
-    completionGraceMinutes: Number(process.env.WALLET_COMPLETION_GRACE_MINUTES || 1440),
+    /** Confirmation window: minutes after end_time before a BOOKED session is auto-marked COMPLETED
+     *  (and, for credit-funded sessions, the mentor's payment approved) when the learner neither
+     *  confirmed it nor reported a problem. Default 72 hours. */
+    completionGraceMinutes: Number(process.env.WALLET_COMPLETION_GRACE_MINUTES || 4320),
+    /** Hours after the session ends at which the learner gets the first, then the final,
+     *  confirmation reminder (both must be inside the confirmation window). */
+    confirmationReminderHours: Number(process.env.WALLET_CONFIRMATION_REMINDER_HOURS || 24),
+    confirmationFinalReminderHours: Number(process.env.WALLET_CONFIRMATION_FINAL_REMINDER_HOURS || 48),
     /** Minimum AVAILABLE earnings before a payout is made (cents). */
     payoutMinimumCents: Number(process.env.WALLET_PAYOUT_MINIMUM_CENTS || 5000),
     /** Day of the month the automatic settlement runs. */
@@ -42,6 +47,12 @@ export const WALLET_CONFIG = {
 
 export const purchaseFeeCents = (credits: number) =>
     Math.round((credits * 100 * WALLET_CONFIG.purchaseFeePercent) / 100);
+
+/** The learner's confirmation window, in whole hours (72 by default). */
+export const confirmationWindowHours = () => Math.max(1, Math.round(WALLET_CONFIG.completionGraceMinutes / 60));
+
+/** Prisma filter: lessons with no report, or whose report an admin already resolved. */
+export const NO_OPEN_REPORT = { OR: [{ dispute: null }, { dispute: { status: { not: 'OPEN' as const } } }] };
 
 export class WalletError extends Error {
     status: number;
@@ -89,6 +100,7 @@ export function publicConfig() {
         cancelCutoffHours: WALLET_CONFIG.cancelCutoffHours,
         payoutMinimumCents: WALLET_CONFIG.payoutMinimumCents,
         completionGraceMinutes: WALLET_CONFIG.completionGraceMinutes,
+        confirmationWindowHours: confirmationWindowHours(),
         settlementDayOfMonth: WALLET_CONFIG.settlementDayOfMonth,
         purchaseMinCredits: WALLET_CONFIG.purchaseMinCredits,
         purchaseMaxCredits: WALLET_CONFIG.purchaseMaxCredits,
@@ -423,19 +435,25 @@ export async function openDispute(args: { studentId: string; lessonId: string; r
 
     const lesson = await prisma.lesson.findUnique({
         where: { id: lessonId },
-        include: { booking: { select: { funding: true } }, earning: true, dispute: true },
+        include: { booking: { select: { funding: true } }, reservation: true, earning: true, dispute: true },
     });
     if (!lesson) throw new WalletError('Session not found', 404);
     if (lesson.student_id !== studentId) throw new WalletError('Forbidden', 403);
     if (lesson.booking?.funding !== 'CREDITS') throw new WalletError('Only sessions paid with Learning Credits can be reported here');
-    if (lesson.status !== 'COMPLETED' || !lesson.earning) throw new WalletError('You can report a problem once the session is marked completed');
     if (lesson.dispute) throw new WalletError('A report has already been filed for this session');
-    if (lesson.earning.status !== 'PENDING') {
+    if (lesson.status === 'CANCELLED' || lesson.status === 'MISSED') {
+        throw new WalletError('This session was not held, so there is nothing to report');
+    }
+    if (lesson.end_time.getTime() > Date.now()) throw new WalletError('You can report a problem once the session has ended');
+    if (lesson.status === 'COMPLETED') {
         throw new WalletError(
-            `The ${WALLET_CONFIG.settlementDays}-day review window for this session has closed`,
+            `This session has already been confirmed, so the ${confirmationWindowHours()}-hour window to report a problem has closed. Please contact support if you still need help.`,
         );
     }
+    if (lesson.reservation?.status !== 'RESERVED') throw new WalletError('No credits are reserved for this session');
 
+    // Reported inside the confirmation window: the credits stay reserved and automatic
+    // completion is paused until an admin resolves the report (refund or release).
     return prisma.$transaction(async (tx) => {
         const dispute = await tx.sessionDispute.create({
             data: {
@@ -446,7 +464,9 @@ export async function openDispute(args: { studentId: string; lessonId: string; r
                 status: 'OPEN',
             },
         });
-        await tx.mentorEarning.update({ where: { id: lesson.earning!.id }, data: { status: 'ON_HOLD' } });
+        if (lesson.earning?.status === 'PENDING') {
+            await tx.mentorEarning.update({ where: { id: lesson.earning.id }, data: { status: 'ON_HOLD' } });
+        }
         return dispute;
     });
 }
@@ -467,12 +487,14 @@ export async function resolveDispute(args: {
     return prisma.$transaction(async (tx) => {
         const dispute = await tx.sessionDispute.findUnique({
             where: { id: disputeId },
-            include: { lesson: { include: { earning: true } } },
+            include: { lesson: { include: { earning: true, reservation: true } } },
         });
         if (!dispute) throw new WalletError('Dispute not found', 404);
         if (dispute.status !== 'OPEN') throw new WalletError('This dispute is already resolved');
         const earning = dispute.lesson.earning;
-        if (!earning) throw new WalletError('No mentor earning is linked to this session');
+        // Reported inside the confirmation window: no earning exists yet, the credits are still reserved.
+        const reservation = !earning && dispute.lesson.reservation?.status === 'RESERVED' ? dispute.lesson.reservation : null;
+        if (!earning && !reservation) throw new WalletError('No credits or mentor earning are linked to this session');
 
         // Claim the dispute first: only one concurrent resolver can move it out of OPEN.
         const claimed = await tx.sessionDispute.updateMany({
@@ -486,9 +508,26 @@ export async function resolveDispute(args: {
         });
         if (claimed.count !== 1) throw new WalletError('This dispute is already resolved', 409);
 
+        if (reservation) {
+            if (action === 'REFUND') {
+                await returnReservationTx(tx, reservation.id, `Session reported — credits returned${note ? `: ${note}` : ''}`);
+                await tx.lesson.update({
+                    where: { id: dispute.lesson_id },
+                    data: { status: 'MISSED', cancel_reason: 'Reported by student — credits returned' },
+                });
+            } else {
+                await tx.lesson.update({
+                    where: { id: dispute.lesson_id },
+                    data: { status: 'COMPLETED', completed_at: now() },
+                });
+                await releaseReservationTx(tx, reservation.id);
+            }
+            return tx.sessionDispute.findUniqueOrThrow({ where: { id: dispute.id } });
+        }
+
         if (action === 'REFUND') {
-            const credits = Math.round(earning.gross_cents / 100);
-            const promo = Math.round(earning.promo_cents / 100);
+            const credits = Math.round(earning!.gross_cents / 100);
+            const promo = Math.round(earning!.promo_cents / 100);
 
             const updated = await tx.studentProfile.update({
                 where: { id: dispute.student_id },
@@ -507,22 +546,22 @@ export async function resolveDispute(args: {
                     source: promo === credits ? 'PROMOTIONAL' : promo === 0 ? 'PURCHASED' : null,
                     balance_after: updated.credits_balance,
                     description: `Credits returned after review of reported session${note ? `: ${note}` : ''}`,
-                    booking_id: earning.booking_id,
+                    booking_id: earning!.booking_id,
                     lesson_id: dispute.lesson_id,
-                    reservation_id: earning.reservation_id,
+                    reservation_id: earning!.reservation_id,
                     created_by_user_id: adminUserId,
                     metadata: { disputeId, promo_credits: promo },
                 },
             });
 
             await tx.mentorEarning.update({
-                where: { id: earning.id },
+                where: { id: earning!.id },
                 data: { status: 'REVERSED', reversed_at: now() },
             });
         } else {
-            const pastWindow = earning.available_at.getTime() <= Date.now();
+            const pastWindow = earning!.available_at.getTime() <= Date.now();
             await tx.mentorEarning.update({
-                where: { id: earning.id },
+                where: { id: earning!.id },
                 data: pastWindow
                     ? { status: 'AVAILABLE', settled_at: now() }
                     : { status: 'PENDING' },
@@ -544,6 +583,7 @@ export async function listDisputes(status?: 'OPEN' | 'RESOLVED_REFUNDED' | 'RESO
             lesson: {
                 select: {
                     id: true, start_time: true, end_time: true, status: true,
+                    reservation: { select: { credits: true, status: true } },
                     earning: { select: { id: true, gross_cents: true, fee_cents: true, net_cents: true, status: true, available_at: true } },
                 },
             },
@@ -1019,8 +1059,8 @@ export async function getMentorEarnings(tutorId: string) {
 }
 
 /**
- * Immediately mark a lesson COMPLETED (both sides confirmed) and, for credit-funded
- * sessions, release the reserved credits into the mentor's pending earnings.
+ * Immediately mark a lesson COMPLETED (the learner confirmed it) and, for credit-funded
+ * sessions, release the reserved credits into the mentor's approved earnings.
  */
 export async function completeLessonNow(lessonId: string) {
     return prisma.$transaction(async (tx) => {
@@ -1047,34 +1087,57 @@ export async function completeLessonNow(lessonId: string) {
 // Scheduler jobs
 // ---------------------------------------------------------------------------
 
-/** Backstop: BOOKED sessions whose end time passed the grace window without both-sided
- *  confirmation -> COMPLETED. Credit-funded sessions also release their reserved credits
- *  to the mentor; card/free sessions are just marked completed so nothing is left
- *  showing "awaiting confirmation" forever. */
+/** End of the confirmation window: BOOKED sessions whose end time passed the window with no
+ *  learner confirmation and no open report -> COMPLETED. Credit-funded sessions also release
+ *  their reserved credits to the mentor and the learner is told by email; card/free sessions
+ *  are just marked completed so nothing is left showing "awaiting confirmation" forever. */
 export async function processCompletedLessons() {
     const cutoff = new Date(Date.now() - WALLET_CONFIG.completionGraceMinutes * 60 * 1000);
     const due = await prisma.lesson.findMany({
         where: {
             status: 'BOOKED',
-            end_time: { lte: cutoff },
+            AND: [
+                NO_OPEN_REPORT,
+                // Window closed, or the learner already confirmed (rows from before learner-only
+                // confirmation existed, where the mentor's second confirmation never came).
+                { OR: [{ end_time: { lte: cutoff } }, { student_confirmed_at: { not: null }, end_time: { lte: now() } }] },
+            ],
         },
-        select: { id: true, reservation: { select: { id: true, status: true } } },
+        select: {
+            id: true,
+            student_confirmed_at: true,
+            reservation: { select: { id: true, status: true } },
+            student: { select: { user: { select: { email: true } } } },
+        },
         take: 200,
     });
 
     let completed = 0;
     for (const lesson of due) {
         try {
+            const releasing = lesson.reservation?.status === 'RESERVED';
             await prisma.$transaction(async (tx) => {
                 await tx.lesson.update({
                     where: { id: lesson.id },
                     data: { status: 'COMPLETED', completed_at: now() },
                 });
-                if (lesson.reservation?.status === 'RESERVED') {
+                if (releasing && lesson.reservation) {
                     await releaseReservationTx(tx, lesson.reservation.id);
                 }
             });
             completed += 1;
+            const email = lesson.student?.user?.email;
+            if (releasing && email && !lesson.student_confirmed_at) {
+                await prisma.emailOutbox.createMany({
+                    data: [{
+                        type: 'SESSION_AUTO_CONFIRMED_STUDENT',
+                        to_email: email,
+                        payload: { lessonId: lesson.id },
+                        idempotency_key: `session-auto-confirmed:${lesson.id}`,
+                    }],
+                    skipDuplicates: true,
+                });
+            }
         } catch (e) {
             console.error(`[Wallet] Failed to complete lesson ${lesson.id}:`, e);
         }

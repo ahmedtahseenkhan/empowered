@@ -5,15 +5,17 @@ import { ensureMeetLinkForLesson } from './googleCalendar';
 import { lockTutorSchedule } from './availability';
 
 /**
- * Custom sessions: a mentor offers a free session (make-up for a missed one, or an extra)
- * to one of their own students. The offer is a Lesson with origin = MENTOR_OFFER:
+ * Custom sessions: a mentor schedules a FREE session (make-up for a missed one, or an extra)
+ * with one of their own students, who accepts or declines it. The request is a Lesson with
+ * origin = MENTOR_OFFER:
  *
- *   PENDING  -> offer waiting for the student (expires automatically)
+ *   PENDING  -> waiting for the student's answer (expires automatically)
  *   BOOKED   -> student accepted; from here on it behaves like any booked session
  *              (Meet link, reminders, join, completion)
  *   CANCELLED-> declined / withdrawn / expired / cancelled, with cancel_reason saying which
  *
- * Nothing is charged: billing_type = CUSTOM_FREE, no booking, no reservation, no earnings.
+ * The platform is not involved in any payment: billing_type = CUSTOM_FREE, no booking, no
+ * reservation, no credits are taken from the student and no earnings are recorded for the mentor.
  */
 
 export const CUSTOM_SESSION_RULES = {
@@ -148,7 +150,7 @@ export async function createOffer(args: {
         where: { tutor_id: tutorId, student_id: studentId, origin: 'MENTOR_OFFER', status: 'PENDING' },
     });
     if (openOffers >= CUSTOM_SESSION_RULES.maxOpenOffersPerStudent) {
-        throw new WalletError(`This student already has ${openOffers} open offer(s) from you. Wait for a response first.`);
+        throw new WalletError(`This student already has ${openOffers} session(s) from you waiting for their answer. Wait for a response first.`);
     }
 
     let makeupForLessonId: string | null = null;
@@ -201,13 +203,13 @@ export async function createOffer(args: {
 
 export async function respondToOffer(args: { lessonId: string; studentId: string; action: 'accept' | 'decline' }) {
     const lesson = await prisma.lesson.findUnique({ where: { id: args.lessonId }, include: OFFER_INCLUDE });
-    if (!lesson || lesson.origin !== 'MENTOR_OFFER') throw new WalletError('Offer not found', 404);
+    if (!lesson || lesson.origin !== 'MENTOR_OFFER') throw new WalletError('Session not found', 404);
     if (lesson.student_id !== args.studentId) throw new WalletError('Forbidden', 403);
-    if (lesson.status !== 'PENDING') throw new WalletError('This offer is no longer open');
+    if (lesson.status !== 'PENDING') throw new WalletError('This session request is no longer open');
 
     if (lesson.offer_expires_at && lesson.offer_expires_at.getTime() < Date.now()) {
-        await closeOffer(lesson.id, 'Offer expired');
-        throw new WalletError('This offer has expired');
+        await closeOffer(lesson.id, 'Expired — no response');
+        throw new WalletError('This session request has expired');
     }
 
     if (args.action === 'decline') {
@@ -238,7 +240,7 @@ export async function respondToOffer(args: { lessonId: string; studentId: string
             where: { id: lesson.id, status: 'PENDING' },
             data: { status: 'BOOKED', offer_responded_at: new Date() },
         });
-        if (accepted.count !== 1) throw new WalletError('This offer is no longer open');
+        if (accepted.count !== 1) throw new WalletError('This session request is no longer open');
         return tx.lesson.findUniqueOrThrow({ where: { id: lesson.id }, include: OFFER_INCLUDE });
     });
 
@@ -255,9 +257,9 @@ export async function respondToOffer(args: { lessonId: string; studentId: string
 
 export async function withdrawOffer(args: { lessonId: string; tutorId: string }) {
     const lesson = await prisma.lesson.findUnique({ where: { id: args.lessonId }, include: OFFER_INCLUDE });
-    if (!lesson || lesson.origin !== 'MENTOR_OFFER') throw new WalletError('Offer not found', 404);
+    if (!lesson || lesson.origin !== 'MENTOR_OFFER') throw new WalletError('Session not found', 404);
     if (lesson.tutor_id !== args.tutorId) throw new WalletError('Forbidden', 403);
-    if (lesson.status !== 'PENDING') throw new WalletError('Only an open offer can be withdrawn');
+    if (lesson.status !== 'PENDING') throw new WalletError('Only a session the student has not answered yet can be withdrawn');
 
     const updated = await prisma.lesson.update({
         where: { id: lesson.id },
@@ -297,7 +299,7 @@ const closeOffer = async (lessonId: string, reason: string) => {
     await prisma.lesson.updateMany({ where: { id: lessonId, status: 'PENDING' }, data: { status: 'CANCELLED', cancel_reason: reason } });
 };
 
-/** Scheduler: PENDING offers past their expiry -> CANCELLED, both sides told. */
+/** Scheduler: PENDING session requests past their expiry -> CANCELLED, both sides told. */
 export async function expireStaleOffers() {
     const stale = await prisma.lesson.findMany({
         where: { origin: 'MENTOR_OFFER', status: 'PENDING', offer_expires_at: { lte: new Date() } },
@@ -307,7 +309,7 @@ export async function expireStaleOffers() {
     let expired = 0;
     for (const l of stale) {
         try {
-            await closeOffer(l.id, 'Offer expired');
+            await closeOffer(l.id, 'Expired — no response');
             await queueEmail('CUSTOM_SESSION_CLOSED', l.student.user.email, { lessonId: l.id, role: 'student', reason: 'expired' }, `custom-closed:${l.id}:student`);
             await queueEmail('CUSTOM_SESSION_CLOSED', l.tutor.user.email, { lessonId: l.id, role: 'tutor', reason: 'expired' }, `custom-closed:${l.id}:tutor`);
             expired += 1;

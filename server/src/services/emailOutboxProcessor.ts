@@ -2,6 +2,7 @@ import prisma from '../config/db';
 import emailService, { maskEmail } from './emailService';
 import { escapeHtml } from '../utils/html';
 import { formatTimezoneLabel, resolveDemoTimezone } from './demoAvailability';
+import { confirmationWindowHours } from './walletService';
 
 type OutboxRow = {
     id: string;
@@ -343,11 +344,11 @@ async function sendOutboxRow(row: OutboxRow) {
 
         const reason = String(row.payload?.reason || '');
         const texts: Record<string, { title: string; headline: string; note?: string }> = {
-            declined: { title: 'Offer declined', headline: `${otherPartyName} declined your session offer.`, note: 'You can offer another time from your Sessions page.' },
-            withdrawn: { title: 'Offer withdrawn', headline: `${otherPartyName} withdrew the session offer below.` },
-            expired: { title: 'Offer expired', headline: forTutor
-                ? `${otherPartyName} did not respond to your session offer in time, so it has expired.`
-                : `The session offer from ${otherPartyName} expired before you responded.` },
+            declined: { title: 'Session declined', headline: `${otherPartyName} declined the free session you scheduled.`, note: 'You can schedule another time from your Sessions page.' },
+            withdrawn: { title: 'Session withdrawn', headline: `${otherPartyName} withdrew the free session below.` },
+            expired: { title: 'Session request expired', headline: forTutor
+                ? `${otherPartyName} did not respond in time, so the free session below was not confirmed.`
+                : `The free session ${otherPartyName} scheduled expired before you responded.` },
             cancelled_by_mentor: { title: 'Session cancelled', headline: `${otherPartyName} cancelled the session below.`, note: 'The time has been freed on your calendar.' },
             cancelled_by_student: { title: 'Session cancelled', headline: `${otherPartyName} cancelled the session below.`, note: 'The time has been freed on your calendar.' },
         };
@@ -537,7 +538,12 @@ async function sendOutboxRow(row: OutboxRow) {
         return;
     }
 
-    if (row.type === 'SESSION_CONFIRM_REQUEST_STUDENT') {
+    if (
+        row.type === 'SESSION_CONFIRM_REQUEST_STUDENT'
+        || row.type === 'SESSION_CONFIRM_REMINDER_STUDENT'
+        || row.type === 'SESSION_AUTO_CONFIRMED_STUDENT'
+        || row.type === 'SESSION_PROOF_REMINDER_MENTOR'
+    ) {
         const lessonId = row.payload?.lessonId as string | undefined;
         if (!lessonId) throw new Error('Missing lessonId in payload');
 
@@ -547,22 +553,60 @@ async function sendOutboxRow(row: OutboxRow) {
                 student: { select: { username: true } },
                 tutor: { select: { username: true, timezone: true } },
                 booking: { select: { client_timezone: true } },
+                dispute: { select: { status: true } },
             },
         });
         if (!lesson) throw new Error(`Lesson not found: ${lessonId}`);
 
+        const forMentor = row.type === 'SESSION_PROOF_REMINDER_MENTOR';
+        const awaiting = row.type === 'SESSION_CONFIRM_REQUEST_STUDENT' || row.type === 'SESSION_CONFIRM_REMINDER_STUDENT';
+        // A request or reminder queued earlier is pointless once the learner confirmed, reported
+        // a problem, or the window closed — drop it quietly.
+        if (awaiting && (lesson.status !== 'BOOKED' || lesson.student_confirmed_at || lesson.dispute?.status === 'OPEN')) {
+            console.log(`[EmailOutbox] Skipping ${row.type} for lesson ${lessonId}: no longer awaiting confirmation`);
+            return;
+        }
+
         const clientBase = (process.env.CLIENT_URL || process.env.CLIENT_BASE_URL || 'https://emplearnings.com').trim().replace(/\/+$/, '');
-        const timeZone = lesson.booking?.client_timezone || lesson.tutor?.timezone || 'UTC';
-        await emailService.sendSessionConfirmRequest({
+        const timeZone = forMentor
+            ? (lesson.tutor?.timezone || 'UTC')
+            : (lesson.booking?.client_timezone || lesson.tutor?.timezone || 'UTC');
+        const windowHours = confirmationWindowHours();
+        const common = {
             studentName: lesson.student?.username || 'Student',
-            studentEmail: row.to_email,
             mentorName: lesson.tutor?.username || 'Mentor',
             sessionDate: formatDatePart(lesson.start_time, timeZone),
             sessionTime: formatTimePart(lesson.start_time, timeZone),
-            sessionUrl: `${clientBase}/student/sessions/${lesson.id}`,
-            graceHours: Number(row.payload?.graceHours || 24),
-            reviewDays: Number(row.payload?.reviewDays || 7),
-        });
+            windowHours,
+            supportUrl: `${clientBase}/help`,
+        };
+
+        if (forMentor) {
+            await emailService.sendSessionProofReminderMentor({
+                ...common,
+                mentorEmail: row.to_email,
+                sessionUrl: `${clientBase}/sessions/${lesson.id}`,
+            });
+            return;
+        }
+
+        const sessionUrl = `${clientBase}/student/sessions/${lesson.id}`;
+        if (row.type === 'SESSION_CONFIRM_REQUEST_STUDENT') {
+            await emailService.sendSessionConfirmRequest({ ...common, studentEmail: row.to_email, sessionUrl });
+            return;
+        }
+        if (row.type === 'SESSION_CONFIRM_REMINDER_STUDENT') {
+            const afterHours = Number(row.payload?.afterHours || 0);
+            await emailService.sendSessionConfirmReminder({
+                ...common,
+                studentEmail: row.to_email,
+                sessionUrl,
+                isFinal: row.payload?.final === true,
+                hoursLeft: Math.max(1, windowHours - afterHours),
+            });
+            return;
+        }
+        await emailService.sendSessionAutoConfirmed({ ...common, studentEmail: row.to_email, sessionUrl });
         return;
     }
 

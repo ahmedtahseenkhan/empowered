@@ -40,7 +40,8 @@ type Props = {
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
-/** Mentor form: offer a free custom (make-up or extra) session to one of their own students. */
+/** Mentor form: schedule a free custom (make-up or extra) session with one of their own students.
+ *  No payment or credits are involved — the platform only tracks the session. */
 const CustomSessionModal: React.FC<Props> = ({ open, onClose, onCreated, prefill }) => {
     const [students, setStudents] = useState<StudentOption[]>([]);
     const [rules, setRules] = useState<Rules>({ offerExpiryHours: 48, minNoticeHours: 2, durations: [30, 45, 60], maxOpenOffersPerStudent: 3 });
@@ -114,7 +115,7 @@ const CustomSessionModal: React.FC<Props> = ({ open, onClose, onCreated, prefill
             onCreated(res.data?.lesson as CreatedCustomSession);
             onClose();
         } catch (e) {
-            setError(apiError(e, 'Could not send the offer. Please try again.'));
+            setError(apiError(e, 'Could not schedule the session. Please try again.'));
         } finally {
             setBusy(false);
         }
@@ -124,12 +125,16 @@ const CustomSessionModal: React.FC<Props> = ({ open, onClose, onCreated, prefill
     const label = 'block text-xs font-semibold text-gray-600 uppercase mb-1';
 
     return (
-        <Modal isOpen={open} onClose={() => { if (!busy) onClose(); }} title="Schedule a session">
+        <Modal isOpen={open} onClose={() => { if (!busy) onClose(); }} title="Schedule a free session">
             <div className="space-y-4">
                 <p className="text-sm text-gray-600">
-                    Offer a free session to one of your students. They receive an email and accept or decline from their dashboard.
-                    The offer expires after {rules.offerExpiryHours} hours if they do not respond.
+                    Schedule a free session with one of your students. They receive an email and accept or decline it from their dashboard.
+                    The request expires after {rules.offerExpiryHours} hours if they do not respond.
                 </p>
+                <div className="text-sm text-emerald-900 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+                    <span className="font-semibold">This session is free.</span> EmpowerEd does not charge the student or deduct any Learning Credits for it,
+                    no payment is collected on the platform, and no earnings are recorded for you.
+                </div>
 
                 {loading ? (
                     <div className="text-sm text-gray-500">Loading your students…</div>
@@ -210,7 +215,7 @@ const CustomSessionModal: React.FC<Props> = ({ open, onClose, onCreated, prefill
                 <div className="flex gap-3">
                     <Button variant="outline" className="flex-1" onClick={onClose} disabled={busy}>Cancel</Button>
                     <Button className="flex-1" onClick={submit} disabled={busy || loading || students.length === 0 || !studentId || !startIso || tooSoon}>
-                        {busy ? 'Sending…' : 'Send offer'}
+                        {busy ? 'Scheduling…' : 'Schedule free session'}
                     </Button>
                 </div>
             </div>

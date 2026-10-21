@@ -20,6 +20,7 @@ type WalletData = {
         enabled: boolean;
         feePercent: number;
         settlementDays: number;
+        confirmationWindowHours?: number;
         weeksPerBooking: number;
         cancelCutoffHours: number;
         purchaseMinCredits?: number;
@@ -291,7 +292,8 @@ const StudentWalletPage: React.FC = () => {
                                 <li>Credits are only released to the mentor after each session is completed — one session at a time.</li>
                                 <li>Cancel an upcoming session more than {wallet?.config.cancelCutoffHours || 24} hours before it starts and the credits return to your wallet instantly.</li>
                                 <li>All refunds are issued as Learning Credits to your wallet — not as a cash or card refund.</li>
-                                <li>Had a problem with a session? Report it within {wallet?.config.settlementDays || 7} days from your sessions page and our team will review it.</li>
+                                <li>After each session, click <span className="font-medium">Complete Session</span> on your sessions page to confirm it took place and approve the mentor's payment.</li>
+                                <li>Had a problem with a session? Report it from your sessions page or contact support within {wallet?.config.confirmationWindowHours || 72} hours of the session ending — otherwise it is confirmed automatically.</li>
                                 <li>Credits can only be used on EmpowerEd Learnings and cannot be withdrawn as cash. They never expire.</li>
                             </ul>
                             <p className="text-xs text-gray-500 pt-1">Buy credits any time with the form above — they're added to your wallet the moment payment completes.</p>

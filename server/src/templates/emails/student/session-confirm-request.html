@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Please Confirm Your Session</title>
+    <title>Please Complete Your Session</title>
 </head>
 <body style="margin: 0; padding: 0; font-family: 'Arial', sans-serif; background-color: #f4f4f4;">
     <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f4f4f4; padding: 20px 0;">
@@ -13,7 +13,7 @@
                     style="background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
                     <tr>
                         <td style="background: linear-gradient(135deg, #4A148C 0%, #8B55CC 100%); padding: 30px; text-align: center;">
-                            <h1 style="color: #ffffff; margin: 0; font-size: 22px;">How was your session?</h1>
+                            <h1 style="color: #ffffff; margin: 0; font-size: 22px;">Your session has ended — please complete it</h1>
                         </td>
                     </tr>
                     <tr>
@@ -24,19 +24,27 @@
                             <p style="font-size: 16px; color: #333333; line-height: 1.6; margin: 0 0 20px;">
                                 Your session with <strong>{{mentorName}}</strong> on
                                 <strong>{{sessionDate}} at {{sessionTime}}</strong> has ended.
-                                Please confirm that it took place successfully — your mentor confirms after you,
-                                and this releases their payment for the session.
-                            </p>
-                            <p style="font-size: 14px; color: #666666; line-height: 1.6; margin: 0 0 25px;">
-                                If you don't confirm, the session will be marked completed automatically after
-                                {{graceHours}} hours. Had a problem instead? Use "Report a problem" on the session
-                                page within {{reviewDays}} days and our team will review it.
+                                Please click <strong>Complete Session</strong> to confirm it took place.
+                                This approves the payment for your mentor.
                             </p>
                             <table width="100%" cellpadding="0" cellspacing="0">
                                 <tr>
-                                    <td align="center" style="padding: 10px 0 5px;">
+                                    <td align="center" style="padding: 10px 0 25px;">
                                         <a href="{{sessionUrl}}"
-                                            style="display: inline-block; background: linear-gradient(135deg, #4A148C 0%, #8B55CC 100%); color: #ffffff; text-decoration: none; padding: 15px 40px; border-radius: 6px; font-size: 16px; font-weight: bold;">Confirm session completed</a>
+                                            style="display: inline-block; background: linear-gradient(135deg, #4A148C 0%, #8B55CC 100%); color: #ffffff; text-decoration: none; padding: 15px 40px; border-radius: 6px; font-size: 16px; font-weight: bold;">Complete Session</a>
+                                    </td>
+                                </tr>
+                            </table>
+                            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #fff8e6; border: 1px solid #f5d98b; border-radius: 8px;">
+                                <tr>
+                                    <td style="padding: 16px 20px;">
+                                        <p style="font-size: 14px; color: #6b4f00; line-height: 1.6; margin: 0;">
+                                            If your session did not take place or you experienced an issue, please
+                                            <a href="{{supportUrl}}" style="color: #4A148C; font-weight: bold;">contact EmpowerEd support</a>
+                                            before the {{windowHours}}-hour confirmation window closes.
+                                            If we don't hear from you within {{windowHours}} hours, the session is confirmed automatically
+                                            and the payment approved for your mentor.
+                                        </p>
                                     </td>
                                 </tr>
                             </table>

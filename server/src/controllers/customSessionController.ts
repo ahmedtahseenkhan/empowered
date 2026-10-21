@@ -68,7 +68,7 @@ export const getMyStudentsForScheduling = async (req: AuthRequest, res: Response
     }
 };
 
-/** POST /api/custom-sessions — mentor offers a session to one of their students. */
+/** POST /api/custom-sessions — mentor schedules a free session with one of their students. */
 export const createCustomSessionOffer = async (req: AuthRequest, res: Response) => {
     try {
         const tutor = await requireTutor(req);
@@ -96,7 +96,7 @@ export const createCustomSessionOffer = async (req: AuthRequest, res: Response) 
         });
         return res.status(201).json({ lesson: shape(lesson) });
     } catch (e) {
-        return fail(res, e, 'Failed to create the session offer');
+        return fail(res, e, 'Failed to schedule the session');
     }
 };
 
@@ -109,18 +109,18 @@ export const respondToCustomSessionOffer = async (req: AuthRequest, res: Respons
         const lesson = await respondToOffer({ lessonId: String(req.params.lessonId || ''), studentId: student.id, action });
         return res.json({ lesson: shape(lesson) });
     } catch (e) {
-        return fail(res, e, 'Failed to respond to the offer');
+        return fail(res, e, 'Failed to respond to the session request');
     }
 };
 
-/** POST /api/custom-sessions/:lessonId/withdraw — mentor takes back an open offer. */
+/** POST /api/custom-sessions/:lessonId/withdraw — mentor takes back a session the student has not answered. */
 export const withdrawCustomSessionOffer = async (req: AuthRequest, res: Response) => {
     try {
         const tutor = await requireTutor(req);
         const lesson = await withdrawOffer({ lessonId: String(req.params.lessonId || ''), tutorId: tutor.id });
         return res.json({ lesson: shape(lesson) });
     } catch (e) {
-        return fail(res, e, 'Failed to withdraw the offer');
+        return fail(res, e, 'Failed to withdraw the session');
     }
 };
 

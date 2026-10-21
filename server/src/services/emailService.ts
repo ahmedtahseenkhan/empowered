@@ -239,6 +239,8 @@ class EmailService {
         });
     }
 
+    // ---- Session completion: learner confirmation window (72h by default) ----
+
     async sendSessionConfirmRequest(data: {
         studentName: string;
         studentEmail: string;
@@ -246,8 +248,8 @@ class EmailService {
         sessionDate: string;
         sessionTime: string;
         sessionUrl: string;
-        graceHours: number;
-        reviewDays: number;
+        supportUrl: string;
+        windowHours: number;
     }): Promise<void> {
         const html = this.renderTemplate('student/session-confirm-request', {
             ...data,
@@ -255,7 +257,73 @@ class EmailService {
         });
         await this.sendEmail({
             to: data.studentEmail,
-            subject: `Please confirm your session with ${data.mentorName}`,
+            subject: `Please complete your session with ${data.mentorName}`,
+            html,
+        });
+    }
+
+    async sendSessionConfirmReminder(data: {
+        studentName: string;
+        studentEmail: string;
+        mentorName: string;
+        sessionDate: string;
+        sessionTime: string;
+        sessionUrl: string;
+        supportUrl: string;
+        windowHours: number;
+        hoursLeft: number;
+        isFinal: boolean;
+    }): Promise<void> {
+        const html = this.renderTemplate('student/session-confirm-reminder', {
+            ...data,
+            year: new Date().getFullYear(),
+        });
+        await this.sendEmail({
+            to: data.studentEmail,
+            subject: data.isFinal
+                ? `Final reminder: complete your session with ${data.mentorName} (${data.hoursLeft}h left)`
+                : `Reminder: please complete your session with ${data.mentorName}`,
+            html,
+        });
+    }
+
+    async sendSessionAutoConfirmed(data: {
+        studentName: string;
+        studentEmail: string;
+        mentorName: string;
+        sessionDate: string;
+        sessionTime: string;
+        sessionUrl: string;
+        supportUrl: string;
+        windowHours: number;
+    }): Promise<void> {
+        const html = this.renderTemplate('student/session-auto-confirmed', {
+            ...data,
+            year: new Date().getFullYear(),
+        });
+        await this.sendEmail({
+            to: data.studentEmail,
+            subject: `Your session with ${data.mentorName} was confirmed automatically`,
+            html,
+        });
+    }
+
+    async sendSessionProofReminderMentor(data: {
+        mentorName: string;
+        mentorEmail: string;
+        studentName: string;
+        sessionDate: string;
+        sessionTime: string;
+        sessionUrl: string;
+        windowHours: number;
+    }): Promise<void> {
+        const html = this.renderTemplate('mentor/session-proof-reminder', {
+            ...data,
+            year: new Date().getFullYear(),
+        });
+        await this.sendEmail({
+            to: data.mentorEmail,
+            subject: `Session with ${data.studentName} ended — keep your attendance proof handy`,
             html,
         });
     }
@@ -423,7 +491,7 @@ class EmailService {
         });
     }
 
-    // ---- Custom sessions (mentor-offered, free) ----
+    // ---- Custom sessions (mentor-scheduled, free: no payment or credits involved) ----
 
     async sendSessionOffer(data: {
         studentName: string;
@@ -445,7 +513,7 @@ class EmailService {
         });
         await this.sendEmail({
             to: data.studentEmail,
-            subject: `${data.mentorName} offered you a free session on ${data.sessionDate}`,
+            subject: `${data.mentorName} scheduled a free session with you on ${data.sessionDate}`,
             html,
         });
     }

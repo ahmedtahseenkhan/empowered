@@ -29,6 +29,7 @@ interface Dispute {
         id: string;
         start_time: string;
         status: string;
+        reservation?: { credits: number; status: string } | null;
         earning?: { id: string; gross_cents: number; fee_cents: number; net_cents: number; status: string; available_at: string } | null;
     };
 }
@@ -314,6 +315,12 @@ const PaymentsPage: React.FC = () => {
                                         {d.resolution_note && <p className="mt-2 text-xs text-gray-500">Resolution note: {d.resolution_note}</p>}
                                     </div>
                                     <div className="lg:col-span-5 flex flex-col justify-between gap-3">
+                                        {!d.lesson.earning && d.lesson.reservation && (
+                                            <div className="text-sm text-gray-700 bg-gray-50 rounded-lg p-2">
+                                                <div className="text-xs text-gray-500">Reserved credits</div>
+                                                <div className="font-semibold">{d.lesson.reservation.credits} credits · {d.lesson.reservation.status === 'RESERVED' ? 'still reserved — session not yet confirmed' : d.lesson.reservation.status.toLowerCase()}</div>
+                                            </div>
+                                        )}
                                         {d.lesson.earning && (
                                             <div className="text-sm text-gray-700 grid grid-cols-3 gap-2">
                                                 <div className="bg-gray-50 rounded-lg p-2"><div className="text-xs text-gray-500">Session</div><div className="font-semibold">{money(d.lesson.earning.gross_cents)}</div></div>

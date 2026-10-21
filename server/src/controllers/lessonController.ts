@@ -4,7 +4,7 @@ import { AuthRequest } from '../middleware/authMiddleware';
 import { z } from 'zod';
 import { isTutorSlotAvailable, isTutorSlotFreeTx, lockTutorSchedule } from '../services/availability';
 import { updateMeetEventForLesson, ensureMeetLinkForLesson, updateMentorMeetEvent } from '../services/googleCalendar';
-import { completeLessonNow, WalletError } from '../services/walletService';
+import { completeLessonNow, confirmationWindowHours, WalletError } from '../services/walletService';
 
 // Student-initiated reschedule policy
 const RESCHEDULE_CUTOFF_HOURS = 24; // cannot reschedule within 24h of start
@@ -426,11 +426,10 @@ export const joinLesson = async (req: AuthRequest, res: Response) => {
 };
 
 /**
- * Two-sided completion confirmation. The student (who pays) confirms first;
- * the mentor's confirmation then finalizes the session as COMPLETED and, for
- * credit-funded sessions, releases the reserved credits into pending earnings.
- * If neither side confirms, the wallet scheduler still auto-completes
- * credit-funded sessions after the grace window as a backstop.
+ * Learner confirmation of a finished session ("Complete Session"). The learner's confirmation
+ * marks the session COMPLETED and, for credit-funded sessions, releases the reserved credits
+ * into the mentor's approved earnings. If the learner neither confirms nor reports a problem
+ * within the confirmation window (72h by default), the wallet scheduler completes it automatically.
  */
 export const confirmLessonComplete = async (req: AuthRequest, res: Response) => {
     try {
@@ -448,6 +447,7 @@ export const confirmLessonComplete = async (req: AuthRequest, res: Response) => 
                 id: true, tutor_id: true, student_id: true, status: true,
                 start_time: true, end_time: true,
                 student_confirmed_at: true, tutor_confirmed_at: true,
+                dispute: { select: { status: true } },
             },
         });
         if (!lesson) return res.status(404).json({ error: 'Session not found' });
@@ -466,37 +466,25 @@ export const confirmLessonComplete = async (req: AuthRequest, res: Response) => 
         if (Date.now() < lesson.end_time.getTime()) {
             return res.status(400).json({ error: 'You can confirm completion once the session has ended.' });
         }
-
-        let updated = lesson;
-        if (role === 'STUDENT') {
-            if (!lesson.student_confirmed_at) {
-                updated = await prisma.lesson.update({
-                    where: { id: lesson.id },
-                    data: { student_confirmed_at: new Date() },
-                    select: {
-                        id: true, tutor_id: true, student_id: true, status: true,
-                        start_time: true, end_time: true,
-                        student_confirmed_at: true, tutor_confirmed_at: true,
-                    },
-                });
-            }
-        } else {
-            if (!lesson.student_confirmed_at) {
-                return res.status(400).json({ error: 'The student has not confirmed this session yet. They confirm first.' });
-            }
-            if (!lesson.tutor_confirmed_at) {
-                await prisma.lesson.update({ where: { id: lesson.id }, data: { tutor_confirmed_at: new Date() } });
-                await completeLessonNow(lesson.id); // marks COMPLETED + releases credits for credit-funded sessions
-                updated = (await prisma.lesson.findUnique({
-                    where: { id: lesson.id },
-                    select: {
-                        id: true, tutor_id: true, student_id: true, status: true,
-                        start_time: true, end_time: true,
-                        student_confirmed_at: true, tutor_confirmed_at: true,
-                    },
-                }))!;
-            }
+        if (role === 'TUTOR') {
+            return res.status(400).json({
+                error: `The learner confirms the session. If they do not respond or report a problem within ${confirmationWindowHours()} hours, it is confirmed automatically and your earnings are approved.`,
+            });
         }
+        if (lesson.dispute?.status === 'OPEN') {
+            return res.status(400).json({ error: 'You reported a problem with this session. Our team will resolve it — no confirmation is needed.' });
+        }
+
+        if (!lesson.student_confirmed_at) {
+            await prisma.lesson.update({ where: { id: lesson.id }, data: { student_confirmed_at: new Date() } });
+        }
+        if (lesson.status === 'BOOKED') {
+            await completeLessonNow(lesson.id); // marks COMPLETED + releases credits for credit-funded sessions
+        }
+        const updated = (await prisma.lesson.findUnique({
+            where: { id: lesson.id },
+            select: { id: true, status: true, student_confirmed_at: true, tutor_confirmed_at: true },
+        }))!;
 
         return res.json({
             lesson: {

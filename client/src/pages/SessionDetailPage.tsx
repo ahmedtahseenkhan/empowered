@@ -74,13 +74,13 @@ const SessionDetailPage: React.FC = () => {
     const [actionError, setActionError] = useState('');
     const [actionNotice, setActionNotice] = useState('');
     const [confirmBusy, setConfirmBusy] = useState(false);
-    const [walletCfg, setWalletCfg] = useState<{ completionGraceMinutes?: number; settlementDays?: number } | null>(null);
+    const [walletCfg, setWalletCfg] = useState<{ completionGraceMinutes?: number; confirmationWindowHours?: number; settlementDays?: number } | null>(null);
 
     useEffect(() => {
         api.get('/wallet/config').then((r) => setWalletCfg(r.data || null)).catch(() => setWalletCfg(null));
     }, []);
 
-    const graceHours = Math.max(1, Math.round((walletCfg?.completionGraceMinutes ?? 1440) / 60));
+    const windowHours = walletCfg?.confirmationWindowHours || Math.max(1, Math.round((walletCfg?.completionGraceMinutes ?? 4320) / 60));
 
     useEffect(() => {
         if (!id) return;
@@ -152,8 +152,8 @@ const SessionDetailPage: React.FC = () => {
             setCustomConfirm(null);
             setActionNotice(action === 'accept'
                 ? 'Session confirmed. The meeting link is below and a confirmation email is on its way.'
-                : action === 'decline' ? 'Offer declined. Your mentor has been told.'
-                    : action === 'withdraw' ? 'Offer withdrawn. The student has been told.'
+                : action === 'decline' ? 'Session declined. Your mentor has been told.'
+                    : action === 'withdraw' ? 'Session withdrawn. The student has been told.'
                         : 'Session cancelled. The other side has been told.');
         } catch (e) {
             setActionError(apiError(e, 'Unable to update this session.'));
@@ -168,7 +168,7 @@ const SessionDetailPage: React.FC = () => {
         const ls = lesson.status.toUpperCase();
         const bt = lesson.billing_type.toUpperCase();
         if (isOffer) {
-            return <span className="px-3 py-1 rounded-full text-sm font-medium bg-amber-50 text-amber-700 border border-amber-200">{isStudent ? 'Session offer — please respond' : 'Offer sent — waiting for student'}</span>;
+            return <span className="px-3 py-1 rounded-full text-sm font-medium bg-amber-50 text-amber-700 border border-amber-200">{isStudent ? 'Free session — please respond' : 'Scheduled — waiting for student to accept'}</span>;
         }
         if (isCustom && ls === 'CANCELLED') {
             return <span className="px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-600 border border-gray-200">{lesson.cancel_reason || 'Cancelled'}</span>;
@@ -184,7 +184,8 @@ const SessionDetailPage: React.FC = () => {
             return <span className="px-3 py-1 rounded-full text-sm font-medium bg-green-600 text-white border border-green-600 animate-pulse">In progress — join now</span>;
         }
         if (ls === 'BOOKED' && nowMs > endMs) {
-            return <span className="px-3 py-1 rounded-full text-sm font-medium bg-blue-50 text-blue-700 border border-blue-200">Awaiting completion confirmation</span>;
+            if (lesson.dispute?.status === 'OPEN') return <span className="px-3 py-1 rounded-full text-sm font-medium bg-amber-50 text-amber-700 border border-amber-200">Reported — under review</span>;
+            return <span className="px-3 py-1 rounded-full text-sm font-medium bg-blue-50 text-blue-700 border border-blue-200">{lesson.student_confirmed_at ? 'Confirmed — finalizing' : isStudent ? 'Awaiting your confirmation' : 'Awaiting student confirmation'}</span>;
         }
         if (ls === 'CANCELLED') return <span className="px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-600 border border-gray-200">Cancelled</span>;
         if (lesson.booking?.funding === 'CREDITS') {
@@ -281,9 +282,11 @@ const SessionDetailPage: React.FC = () => {
     const canCancelCredits = !!lesson && isStudent && isCreditsFunded
         && lesson.status.toUpperCase() === 'BOOKED'
         && new Date(lesson.start_time).getTime() - Date.now() > 24 * 60 * 60 * 1000;
+    // Problems are reported inside the confirmation window: after the session ends and before
+    // it is confirmed (by the student or automatically).
     const canReportCredits = !!lesson && isStudent && isCreditsFunded
-        && lesson.status.toUpperCase() === 'COMPLETED'
-        && lesson.earning?.status === 'PENDING'
+        && lesson.status.toUpperCase() === 'BOOKED'
+        && Date.now() > new Date(lesson.end_time).getTime()
         && !lesson.dispute;
 
     const handleCancelCredits = async () => {
@@ -308,7 +311,7 @@ const SessionDetailPage: React.FC = () => {
             setReportBusy(true);
             setActionError('');
             await api.post(`/wallet/lessons/${lesson.id}/report`, { reason: reportReason });
-            setLesson({ ...lesson, dispute: { status: 'OPEN' }, earning: lesson.earning ? { ...lesson.earning, status: 'ON_HOLD' } : lesson.earning });
+            setLesson({ ...lesson, dispute: { status: 'OPEN' } });
             setReportOpen(false);
             setReportReason('');
             setActionNotice('Thanks — your report has been sent to the EmpowerEd team for review.');
@@ -332,11 +335,9 @@ const SessionDetailPage: React.FC = () => {
                 student_confirmed_at: upd?.student_confirmed_at ?? lesson.student_confirmed_at,
                 tutor_confirmed_at: upd?.tutor_confirmed_at ?? lesson.tutor_confirmed_at,
             });
-            setActionNotice(isStudent
-                ? 'Thanks! Your confirmation was recorded — your mentor confirms next.'
-                : 'Session confirmed as completed.');
+            setActionNotice('Thanks! Your session is confirmed and your mentor\'s payment has been approved.');
         } catch (e) {
-            setActionError(apiError(e, 'Unable to confirm completion.'));
+            setActionError(apiError(e, 'Unable to complete the session.'));
         } finally {
             setConfirmBusy(false);
         }
@@ -486,23 +487,23 @@ const SessionDetailPage: React.FC = () => {
                         {isOffer && (
                             <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
                                 <h3 className="font-semibold text-amber-900">
-                                    {isStudent ? `${lesson.tutor?.username || 'Your mentor'} offered you a free ${lesson.custom_kind === 'MAKEUP' ? 'make-up' : 'extra'} session` : 'Waiting for the student to respond'}
+                                    {isStudent ? `${lesson.tutor?.username || 'Your mentor'} scheduled a free ${lesson.custom_kind === 'MAKEUP' ? 'make-up' : 'extra'} session with you` : 'Waiting for the student to respond'}
                                 </h3>
                                 {lesson.offer_message && <p className="text-sm text-amber-900 mt-2 italic">“{lesson.offer_message}”</p>}
                                 <p className="text-xs text-amber-800 mt-2">
-                                    {lesson.offer_expires_at ? `This offer expires on ${formatDate(lesson.offer_expires_at)} at ${formatTime(lesson.offer_expires_at)}.` : ''} There is no charge for this session.
+                                    {lesson.offer_expires_at ? `This request expires on ${formatDate(lesson.offer_expires_at)} at ${formatTime(lesson.offer_expires_at)}.` : ''} This session is free — EmpowerEd does not charge or take any Learning Credits for it.
                                 </p>
                                 {actionError && <div className="mt-2 text-sm text-red-700">{actionError}</div>}
                                 <div className="flex flex-wrap gap-2 mt-3">
                                     {isStudent ? (
                                         <>
                                             <Button className="bg-green-600 hover:bg-green-700 text-white" disabled={customBusy} onClick={() => void runCustomAction('accept')}>
-                                                {customBusy ? 'Working…' : 'Accept offer'}
+                                                {customBusy ? 'Working…' : 'Accept'}
                                             </Button>
                                             <Button variant="outline" className="text-red-700 border-red-200 hover:bg-red-50" disabled={customBusy} onClick={() => setCustomConfirm('decline')}>Decline</Button>
                                         </>
                                     ) : (
-                                        <Button variant="outline" className="text-red-700 border-red-200 hover:bg-red-50" disabled={customBusy} onClick={() => setCustomConfirm('withdraw')}>Withdraw offer</Button>
+                                        <Button variant="outline" className="text-red-700 border-red-200 hover:bg-red-50" disabled={customBusy} onClick={() => setCustomConfirm('withdraw')}>Withdraw</Button>
                                     )}
                                 </div>
                             </div>
@@ -518,7 +519,7 @@ const SessionDetailPage: React.FC = () => {
                                     <>{lesson.reservation.credits} Learning Credits are reserved for this session. They are released to {isStudent ? 'your mentor' : 'you'} only after the session is completed.</>
                                 )}
                                 {lesson.reservation.status === 'RELEASED' && (
-                                    <>{lesson.reservation.credits} Learning Credits were released for this completed session{lesson.earning?.status === 'PENDING' && lesson.earning?.available_at ? ` (in review until ${formatDate(lesson.earning.available_at)})` : ''}.</>
+                                    <>{lesson.reservation.credits} Learning Credits were released for this completed session{lesson.earning?.status === 'PENDING' && lesson.earning?.available_at ? ` (approved for the mentor — payout-ready on ${formatDate(lesson.earning.available_at)})` : ''}.</>
                                 )}
                                 {lesson.reservation.status === 'RETURNED' && (
                                     <>{lesson.reservation.credits} Learning Credits were returned to the student's wallet.</>
@@ -529,26 +530,35 @@ const SessionDetailPage: React.FC = () => {
                         {lesson.status.toUpperCase() === 'BOOKED' && Date.now() > new Date(lesson.end_time).getTime() && (
                             <div className="bg-blue-50 border border-blue-200 rounded-xl p-5">
                                 <h3 className="font-semibold text-blue-900">Was this session completed successfully?</h3>
-                                {isStudent ? (
+                                {lesson.dispute?.status === 'OPEN' ? (
+                                    <p className="text-sm text-blue-800 mt-1">
+                                        {isStudent
+                                            ? 'You reported a problem with this session. The EmpowerEd team is reviewing it and your credits stay reserved until it is resolved.'
+                                            : 'The student reported a problem with this session. The EmpowerEd team is reviewing it — please keep your proof of attendance (Google Meet history, meeting details) ready.'}
+                                    </p>
+                                ) : isStudent ? (
                                     lesson.student_confirmed_at ? (
-                                        <p className="text-sm text-blue-800 mt-1">You confirmed this session. Waiting for your mentor to confirm as well.</p>
+                                        <p className="text-sm text-blue-800 mt-1">You confirmed this session. It is being finalized.</p>
                                     ) : (
                                         <>
-                                            <p className="text-sm text-blue-800 mt-1">Please confirm that this session took place successfully. Your mentor confirms after you. If you don't confirm, it will be marked completed automatically {graceHours} hours after the session ended.</p>
+                                            <p className="text-sm text-blue-800 mt-1">
+                                                Please click <span className="font-semibold">Complete Session</span> to confirm it took place — this approves your mentor's payment.
+                                                If the session did not take place or you had an issue, use <span className="font-semibold">Report a problem</span> below or contact support
+                                                before the {windowHours}-hour window closes. If we don't hear from you within {windowHours} hours, the session is confirmed automatically.
+                                            </p>
                                             <Button className="mt-3 bg-green-600 hover:bg-green-700 text-white" disabled={confirmBusy} onClick={handleConfirmComplete}>
-                                                {confirmBusy ? 'Confirming…' : 'Confirm session completed'}
+                                                {confirmBusy ? 'Completing…' : 'Complete Session'}
                                             </Button>
                                         </>
                                     )
                                 ) : lesson.student_confirmed_at ? (
-                                    <>
-                                        <p className="text-sm text-blue-800 mt-1">The student confirmed this session. Confirm to finalize it{isCreditsFunded ? ' and move your earnings into the review period' : ''}.</p>
-                                        <Button className="mt-3 bg-green-600 hover:bg-green-700 text-white" disabled={confirmBusy} onClick={handleConfirmComplete}>
-                                            {confirmBusy ? 'Confirming…' : 'Confirm completion'}
-                                        </Button>
-                                    </>
+                                    <p className="text-sm text-blue-800 mt-1">The student confirmed this session — it is being finalized{isCreditsFunded ? ' and your earnings approved' : ''}.</p>
                                 ) : (
-                                    <p className="text-sm text-blue-800 mt-1">Waiting for the student to confirm the session first — we've asked them by email. If they don't respond, the session completes automatically {graceHours} hours after it ended and your earnings are released{isCreditsFunded ? ' into the review period' : ''}.</p>
+                                    <p className="text-sm text-blue-800 mt-1">
+                                        The student confirms the session — we've asked them by email. If they don't respond or report a problem within {windowHours} hours,
+                                        it completes automatically{isCreditsFunded ? ' and your earnings are approved' : ''}. Please keep proof of attendance
+                                        (Google Meet history, meeting details) in case of a dispute.
+                                    </p>
                                 )}
                                 {actionError && <div className="mt-2 text-sm text-red-700">{actionError}</div>}
                             </div>
@@ -579,7 +589,7 @@ const SessionDetailPage: React.FC = () => {
                             )}
                             {!isStudent && !isCustom && ['MISSED', 'CANCELLED'].includes(lesson.status.toUpperCase()) && (
                                 <Button variant="outline" onClick={() => navigate(`/sessions?makeupFor=${lesson.id}&studentId=${lesson.student_id}`)}>
-                                    Offer make-up session
+                                    Schedule make-up session
                                 </Button>
                             )}
                             {canReportCredits && (
@@ -618,20 +628,20 @@ const SessionDetailPage: React.FC = () => {
             <Modal
                 isOpen={!!customConfirm}
                 onClose={() => { if (!customBusy) setCustomConfirm(null); }}
-                title={customConfirm === 'decline' ? 'Decline this offer?' : customConfirm === 'withdraw' ? 'Withdraw this offer?' : 'Cancel this session?'}
+                title={customConfirm === 'decline' ? 'Decline this session?' : customConfirm === 'withdraw' ? 'Withdraw this session?' : 'Cancel this session?'}
             >
                 {lesson && customConfirm && (
                     <div className="space-y-4">
                         <p className="text-sm text-gray-700">
                             {customConfirm === 'decline' && `${lesson.tutor?.username || 'Your mentor'} will be told you declined the session on ${formatDate(lesson.start_time)}.`}
-                            {customConfirm === 'withdraw' && `${lesson.student?.username || 'The student'} will be told the offer for ${formatDate(lesson.start_time)} was withdrawn.`}
+                            {customConfirm === 'withdraw' && `${lesson.student?.username || 'The student'} will be told the free session on ${formatDate(lesson.start_time)} was withdrawn.`}
                             {customConfirm === 'cancel' && `${otherPerson} will be told the session on ${formatDate(lesson.start_time)} is cancelled.`}
                         </p>
                         {actionError && <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{actionError}</div>}
                         <div className="flex gap-3">
                             <Button variant="outline" className="flex-1" onClick={() => setCustomConfirm(null)} disabled={customBusy}>Go back</Button>
                             <Button className="flex-1 bg-red-600 hover:bg-red-700" disabled={customBusy} onClick={() => void runCustomAction(customConfirm)}>
-                                {customBusy ? 'Working…' : customConfirm === 'decline' ? 'Decline offer' : customConfirm === 'withdraw' ? 'Withdraw offer' : 'Cancel session'}
+                                {customBusy ? 'Working…' : customConfirm === 'decline' ? 'Decline session' : customConfirm === 'withdraw' ? 'Withdraw session' : 'Cancel session'}
                             </Button>
                         </div>
                     </div>
@@ -657,7 +667,7 @@ const SessionDetailPage: React.FC = () => {
             <Modal isOpen={reportOpen} onClose={() => { if (!reportBusy) setReportOpen(false); }} title="Report a problem with this session">
                 <div className="space-y-4">
                     <p className="text-sm text-gray-700">
-                        Tell us what went wrong. The mentor's payment for this session is paused while the EmpowerEd team reviews your report.
+                        Tell us what went wrong. The session will not be confirmed automatically and your credits stay reserved while the EmpowerEd team reviews your report.
                     </p>
                     <textarea
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 min-h-[120px]"
