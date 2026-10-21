@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{#if isFinal}}Final Reminder: Complete Your Session{{else}}Reminder: Complete Your Session{{/if}}</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Arial', sans-serif; background-color: #f4f4f4;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f4f4f4; padding: 20px 0;">
+        <tr>
+            <td align="center">
+                <table width="600" cellpadding="0" cellspacing="0"
+                    style="background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    <tr>
+                        <td style="background: linear-gradient(135deg, #4A148C 0%, #8B55CC 100%); padding: 30px; text-align: center;">
+                            <h1 style="color: #ffffff; margin: 0; font-size: 22px;">{{#if isFinal}}Final reminder: please complete your session{{else}}Reminder: please complete your session{{/if}}</h1>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 40px 30px;">
+                            <p style="font-size: 16px; color: #333333; line-height: 1.6; margin: 0 0 20px;">
+                                Hello <strong>{{studentName}}</strong>,
+                            </p>
+                            <p style="font-size: 16px; color: #333333; line-height: 1.6; margin: 0 0 20px;">
+                                We haven't received your confirmation for the session with <strong>{{mentorName}}</strong> on
+                                <strong>{{sessionDate}} at {{sessionTime}}</strong>.
+                                If it took place, please click <strong>Complete Session</strong> — this approves the payment for your mentor.
+                            </p>
+                            <table width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td align="center" style="padding: 10px 0 25px;">
+                                        <a href="{{sessionUrl}}"
+                                            style="display: inline-block; background: linear-gradient(135deg, #4A148C 0%, #8B55CC 100%); color: #ffffff; text-decoration: none; padding: 15px 40px; border-radius: 6px; font-size: 16px; font-weight: bold;">Complete Session</a>
+                                    </td>
+                                </tr>
+                            </table>
+                            {{#if isFinal}}
+                            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #fdecec; border: 1px solid #f0b4b4; border-radius: 8px;">
+                                <tr>
+                                    <td style="padding: 16px 20px;">
+                                        <p style="font-size: 14px; color: #7a1f1f; line-height: 1.6; margin: 0 0 10px;">
+                                            <strong>If your session did not take place or you experienced an issue, please
+                                            <a href="{{supportUrl}}" style="color: #4A148C;">contact EmpowerEd support</a>
+                                            before the {{windowHours}}-hour confirmation window closes.</strong>
+                                        </p>
+                                        <p style="font-size: 14px; color: #7a1f1f; line-height: 1.6; margin: 0;">
+                                            You have about {{hoursLeft}} hours left. After that, the session is confirmed automatically
+                                            and the payment approved for your mentor.
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+                            {{else}}
+                            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #fff8e6; border: 1px solid #f5d98b; border-radius: 8px;">
+                                <tr>
+                                    <td style="padding: 16px 20px;">
+                                        <p style="font-size: 14px; color: #6b4f00; line-height: 1.6; margin: 0;">
+                                            Had a problem with the session? Use <strong>Report a problem</strong> on the session page or
+                                            <a href="{{supportUrl}}" style="color: #4A148C; font-weight: bold;">contact EmpowerEd support</a>
+                                            within the {{windowHours}}-hour confirmation window. Otherwise the session is confirmed
+                                            automatically in about {{hoursLeft}} hours.
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+                            {{/if}}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="background-color: #f8f8f8; padding: 20px 30px; text-align: center;">
+                            <p style="font-size: 12px; color: #999999; margin: 0;">
+                                © {{year}} EmpowerEd Learnings. All rights reserved.
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

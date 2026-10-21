@@ -35,6 +35,7 @@ type Lesson = {
     booking?: { frequency?: string; created_at?: string; funding?: string | null } | null;
     student_confirmed_at?: string | null;
     tutor_confirmed_at?: string | null;
+    dispute?: { status: string } | null;
 };
 
 const TutorSessionsPage: React.FC = () => {
@@ -45,14 +46,15 @@ const TutorSessionsPage: React.FC = () => {
     const [loadError, setLoadError] = useState('');
     const [tab, setTab] = useState<'upcoming' | 'past'>('upcoming');
     const [joinBusyId, setJoinBusyId] = useState<string | null>(null);
-    const [confirmBusyId, setConfirmBusyId] = useState<string | null>(null);
-    const [graceHours, setGraceHours] = useState(24);
+    const [windowHours, setWindowHours] = useState(72);
 
     useEffect(() => {
         api.get('/wallet/config')
             .then((r) => {
+                const hours = Number(r.data?.confirmationWindowHours);
                 const mins = Number(r.data?.completionGraceMinutes);
-                if (Number.isFinite(mins) && mins > 0) setGraceHours(Math.max(1, Math.round(mins / 60)));
+                if (Number.isFinite(hours) && hours > 0) setWindowHours(hours);
+                else if (Number.isFinite(mins) && mins > 0) setWindowHours(Math.max(1, Math.round(mins / 60)));
             })
             .catch(() => {});
     }, []);
@@ -61,7 +63,7 @@ const TutorSessionsPage: React.FC = () => {
     const [copiedId, setCopiedId] = useState<string | null>(null);
     const [notice, setNotice] = useState<{ title: string; message: string } | null>(null);
 
-    // Custom (mentor-offered) sessions
+    // Custom (mentor-scheduled, free) sessions
     const [scheduleOpen, setScheduleOpen] = useState(false);
     const [schedulePrefill, setSchedulePrefill] = useState<CustomSessionPrefill | null>(null);
     const [confirmAction, setConfirmAction] = useState<{ kind: 'withdraw' | 'cancel'; lesson: Lesson } | null>(null);
@@ -93,7 +95,7 @@ const TutorSessionsPage: React.FC = () => {
             student: { username: created.student?.username },
         }, ...prev]);
         setTab('upcoming');
-        setNotice({ title: 'Offer sent', message: `${created.student?.username || 'The student'} has been emailed the offer and can accept it from their dashboard.` });
+        setNotice({ title: 'Session scheduled', message: `${created.student?.username || 'The student'} has been emailed and can accept the free session from their dashboard.` });
     };
 
     const runConfirmAction = async () => {
@@ -108,7 +110,7 @@ const TutorSessionsPage: React.FC = () => {
                 : x)));
             setConfirmAction(null);
         } catch (e) {
-            setNotice({ title: 'Error', message: apiError(e, kind === 'withdraw' ? 'Unable to withdraw the offer.' : 'Unable to cancel the session.') });
+            setNotice({ title: 'Error', message: apiError(e, kind === 'withdraw' ? 'Unable to withdraw the session.' : 'Unable to cancel the session.') });
         } finally {
             setActionBusy(false);
         }
@@ -290,7 +292,7 @@ const TutorSessionsPage: React.FC = () => {
         const endMs = new Date(lesson.end_time).getTime();
         const nowMs2 = Date.now();
         if (isOffer(lesson)) {
-            return <span className={`${pill} bg-amber-50 text-amber-700 border-amber-200`}>Offer sent — waiting for student</span>;
+            return <span className={`${pill} bg-amber-50 text-amber-700 border-amber-200`}>Scheduled — waiting for student to accept</span>;
         }
         if (isCustom(lesson) && lessonStatus === 'CANCELLED') {
             return <span className={`${pill} bg-gray-50 text-gray-600 border-gray-200`}>{lesson.cancel_reason || 'Cancelled'}</span>;
@@ -302,9 +304,12 @@ const TutorSessionsPage: React.FC = () => {
             return <span className={`${pill} bg-green-600 text-white border-green-600 animate-pulse`}>In progress — join now</span>;
         }
         if (lessonStatus === 'BOOKED' && nowMs2 > endMs) {
+            if (lesson.dispute?.status === 'OPEN') {
+                return <span className={`${pill} bg-amber-50 text-amber-700 border-amber-200`}>Reported by student — under review</span>;
+            }
             return (
                 <span className={`${pill} bg-blue-50 text-blue-700 border-blue-200`}>
-                    {lesson.student_confirmed_at ? 'Student confirmed — finalize below' : 'Awaiting student confirmation'}
+                    {lesson.student_confirmed_at ? 'Confirmed by student' : 'Awaiting student confirmation'}
                 </span>
             );
         }
@@ -460,37 +465,18 @@ const TutorSessionsPage: React.FC = () => {
                                                     </>
                                                 );
                                             })()}
-                                            {(l.status || '').toUpperCase() === 'BOOKED' && Date.now() > new Date(l.end_time).getTime() && !l.student_confirmed_at ? (
-                                                <span className="inline-flex items-center px-3 py-2 rounded-lg text-xs bg-gray-50 text-gray-600 border border-gray-200 max-w-xs">
-                                                    Student confirms first — auto-completes {graceHours}h after the session if unconfirmed
+                                            {(l.status || '').toUpperCase() === 'BOOKED' && Date.now() > new Date(l.end_time).getTime() ? (
+                                                <span className="inline-flex items-center px-3 py-2 rounded-lg text-xs bg-gray-50 text-gray-600 border border-gray-200 max-w-sm">
+                                                    {l.dispute?.status === 'OPEN'
+                                                        ? 'The student reported a problem — our team is reviewing it. Keep your proof of attendance (Google Meet history, meeting details) ready.'
+                                                        : l.student_confirmed_at
+                                                            ? 'The student confirmed this session — it is being finalized.'
+                                                            : `The student confirms the session. If they don't respond or report a problem within ${windowHours}h, it completes automatically and your earnings are approved.`}
                                                 </span>
-                                            ) : null}
-                                            {(l.status || '').toUpperCase() === 'BOOKED' && Date.now() > new Date(l.end_time).getTime() && l.student_confirmed_at && !l.tutor_confirmed_at ? (
-                                                <Button
-                                                    className="bg-green-600 hover:bg-green-700 text-white"
-                                                    disabled={confirmBusyId === l.id}
-                                                    onClick={async (e) => {
-                                                        e.stopPropagation();
-                                                        try {
-                                                            setConfirmBusyId(l.id);
-                                                            const res = await api.post(`/lessons/${l.id}/confirm-complete`);
-                                                            const upd = res.data?.lesson;
-                                                            setLessons((prev) => prev.map((x) => (x.id === l.id
-                                                                ? { ...x, status: upd?.status || 'COMPLETED', tutor_confirmed_at: upd?.tutor_confirmed_at || new Date().toISOString() }
-                                                                : x)));
-                                                        } catch (err) {
-                                                            setNotice({ title: 'Error', message: apiError(err, 'Unable to confirm completion.') });
-                                                        } finally {
-                                                            setConfirmBusyId(null);
-                                                        }
-                                                    }}
-                                                >
-                                                    {confirmBusyId === l.id ? 'Confirming…' : 'Confirm completion'}
-                                                </Button>
                                             ) : null}
                                             {isOffer(l) ? (
                                                 <Button variant="outline" className="text-red-700 border-red-200 hover:bg-red-50" onClick={(e) => { e.stopPropagation(); setConfirmAction({ kind: 'withdraw', lesson: l }); }}>
-                                                    Withdraw offer
+                                                    Withdraw
                                                 </Button>
                                             ) : null}
                                             {isCustom(l) && l.status.toUpperCase() === 'BOOKED' && Date.now() < new Date(l.start_time).getTime() ? (
@@ -500,7 +486,7 @@ const TutorSessionsPage: React.FC = () => {
                                             ) : null}
                                             {!isCustom(l) && ['MISSED', 'CANCELLED'].includes(l.status.toUpperCase()) ? (
                                                 <Button variant="outline" className="flex items-center gap-2" onClick={(e) => { e.stopPropagation(); openSchedule({ studentId: l.student_id, makeupForLessonId: l.id, kind: 'MAKEUP', durationMinutes: durationMinutes(l.start_time, l.end_time) }); }}>
-                                                    <CalendarPlus className="w-4 h-4" />Offer make-up session
+                                                    <CalendarPlus className="w-4 h-4" />Schedule make-up session
                                                 </Button>
                                             ) : null}
                                             {l.google_calendar_html_link ? (
@@ -523,19 +509,19 @@ const TutorSessionsPage: React.FC = () => {
             <Modal
                 isOpen={!!confirmAction}
                 onClose={() => { if (!actionBusy) setConfirmAction(null); }}
-                title={confirmAction?.kind === 'withdraw' ? 'Withdraw this offer?' : 'Cancel this session?'}
+                title={confirmAction?.kind === 'withdraw' ? 'Withdraw this session?' : 'Cancel this session?'}
             >
                 {confirmAction && (
                     <div className="space-y-4">
                         <p className="text-sm text-gray-700">
                             {confirmAction.kind === 'withdraw'
-                                ? `${confirmAction.lesson.student?.username || 'The student'} will be told the offer for ${formatDateLong(confirmAction.lesson.start_time)} was withdrawn.`
+                                ? `${confirmAction.lesson.student?.username || 'The student'} will be told the free session on ${formatDateLong(confirmAction.lesson.start_time)} was withdrawn.`
                                 : `${confirmAction.lesson.student?.username || 'The student'} will be told the session on ${formatDateLong(confirmAction.lesson.start_time)} is cancelled.`}
                         </p>
                         <div className="flex gap-3">
                             <Button variant="outline" className="flex-1" onClick={() => setConfirmAction(null)} disabled={actionBusy}>Keep it</Button>
                             <Button className="flex-1 bg-red-600 hover:bg-red-700" onClick={runConfirmAction} disabled={actionBusy}>
-                                {actionBusy ? 'Working…' : confirmAction.kind === 'withdraw' ? 'Withdraw offer' : 'Cancel session'}
+                                {actionBusy ? 'Working…' : confirmAction.kind === 'withdraw' ? 'Withdraw session' : 'Cancel session'}
                             </Button>
                         </div>
                     </div>

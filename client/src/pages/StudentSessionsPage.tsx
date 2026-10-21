@@ -190,10 +190,12 @@ const StudentSessionsPage: React.FC = () => {
         isCreditsFunded(l)
         && (l.status || '').toUpperCase() === 'BOOKED'
         && new Date(l.start_time).getTime() - Date.now() > 24 * 60 * 60 * 1000;
+    // Problems are reported inside the confirmation window: after the session ends and before
+    // it is confirmed (by the student or automatically).
     const canReportCredits = (l: Lesson) =>
         isCreditsFunded(l)
-        && (l.status || '').toUpperCase() === 'COMPLETED'
-        && l.earning?.status === 'PENDING'
+        && (l.status || '').toUpperCase() === 'BOOKED'
+        && Date.now() > new Date(l.end_time).getTime()
         && !l.dispute;
 
     const submitCancel = async () => {
@@ -219,7 +221,7 @@ const StudentSessionsPage: React.FC = () => {
             setReportBusy(true);
             setActionError('');
             await api.post(`/wallet/lessons/${reportTarget.id}/report`, { reason: reportReason });
-            setLessons((prev) => prev.map((l) => (l.id === reportTarget.id ? { ...l, dispute: { status: 'OPEN' }, earning: l.earning ? { ...l.earning, status: 'ON_HOLD' } : l.earning } : l)));
+            setLessons((prev) => prev.map((l) => (l.id === reportTarget.id ? { ...l, dispute: { status: 'OPEN' } } : l)));
             setReportTarget(null);
             setReportReason('');
             setActionNotice('Thanks — your report has been sent to the EmpowerEd team for review.');
@@ -238,16 +240,16 @@ const StudentSessionsPage: React.FC = () => {
             setLessons((prev) => prev.map((x) => (x.id === l.id
                 ? { ...x, status: upd?.status || x.status, student_confirmed_at: upd?.student_confirmed_at ?? x.student_confirmed_at, tutor_confirmed_at: upd?.tutor_confirmed_at ?? x.tutor_confirmed_at }
                 : x)));
-            setActionNotice('Thanks! Your confirmation was recorded — your mentor confirms next.');
+            setActionNotice('Thanks! Your session is confirmed and your mentor\'s payment has been approved.');
         } catch (e) {
-            setJoinError(apiError(e, 'Unable to confirm completion.'));
+            setJoinError(apiError(e, 'Unable to complete the session.'));
             setErrorModalOpen(true);
         } finally {
             setConfirmBusyId(null);
         }
     };
 
-    // Custom (mentor-offered, free) sessions
+    // Custom (mentor-scheduled, free) sessions
     const isOffer = (l: Lesson) => l.origin === 'MENTOR_OFFER' && (l.status || '').toUpperCase() === 'PENDING';
     const isCustom = (l: Lesson) => l.origin === 'MENTOR_OFFER';
     const [offerBusyId, setOfferBusyId] = useState<string | null>(null);
@@ -265,9 +267,9 @@ const StudentSessionsPage: React.FC = () => {
             setOfferConfirm(null);
             setOfferNotice(action === 'accept'
                 ? `Session with ${l.tutor?.username || 'your mentor'} confirmed. You will get an email with the meeting link.`
-                : 'Offer declined. Your mentor has been told.');
+                : 'Session declined. Your mentor has been told.');
         } catch (e) {
-            setJoinError(apiError(e, action === 'accept' ? 'Unable to accept the offer.' : 'Unable to decline the offer.'));
+            setJoinError(apiError(e, action === 'accept' ? 'Unable to accept the session.' : 'Unable to decline the session.'));
             setErrorModalOpen(true);
         } finally {
             setOfferBusyId(null);
@@ -384,7 +386,7 @@ const StudentSessionsPage: React.FC = () => {
         const startMs = new Date(lesson.start_time).getTime();
         const endMs = new Date(lesson.end_time).getTime();
         if (isOffer(lesson)) {
-            return <span className={`${pill} bg-amber-50 text-amber-700 border-amber-200`}>Session offer — please respond</span>;
+            return <span className={`${pill} bg-amber-50 text-amber-700 border-amber-200`}>Free session — please respond</span>;
         }
         if (isCustom(lesson) && lessonStatus === 'CANCELLED') {
             return <span className={`${pill} bg-gray-50 text-gray-600 border-gray-200`}>{lesson.cancel_reason || 'Cancelled'}</span>;
@@ -396,9 +398,12 @@ const StudentSessionsPage: React.FC = () => {
             return <span className={`${pill} bg-green-600 text-white border-green-600 animate-pulse`}>In progress — join now</span>;
         }
         if (lessonStatus === 'BOOKED' && nowMs > endMs) {
+            if (lesson.dispute?.status === 'OPEN') {
+                return <span className={`${pill} bg-amber-50 text-amber-700 border-amber-200`}>Reported — under review</span>;
+            }
             return (
                 <span className={`${pill} bg-blue-50 text-blue-700 border-blue-200`}>
-                    {lesson.student_confirmed_at ? 'Waiting for mentor confirmation' : 'Awaiting your confirmation'}
+                    {lesson.student_confirmed_at ? 'Confirmed — finalizing' : 'Awaiting your confirmation'}
                 </span>
             );
         }
@@ -550,7 +555,7 @@ const StudentSessionsPage: React.FC = () => {
                                             {isOffer(l) ? (
                                                 <>
                                                     <Button className="bg-green-600 hover:bg-green-700 text-white" disabled={offerBusyId === l.id} onClick={() => void respondToOffer(l, 'accept')}>
-                                                        {offerBusyId === l.id ? 'Working…' : 'Accept offer'}
+                                                        {offerBusyId === l.id ? 'Working…' : 'Accept'}
                                                     </Button>
                                                     <Button variant="outline" className="text-red-700 border-red-200 hover:bg-red-50" disabled={offerBusyId === l.id} onClick={() => setOfferConfirm({ kind: 'decline', lesson: l })}>
                                                         Decline
@@ -560,6 +565,9 @@ const StudentSessionsPage: React.FC = () => {
                                                             “{l.offer_message}”
                                                         </span>
                                                     ) : null}
+                                                    <span className="inline-flex items-center px-3 py-2 rounded-lg text-xs bg-emerald-50 text-emerald-800 border border-emerald-200 max-w-md">
+                                                        Free session — EmpowerEd does not charge or take any Learning Credits for it.
+                                                    </span>
                                                 </>
                                             ) : null}
                                             {isCustom(l) && (l.status || '').toUpperCase() === 'BOOKED' && Date.now() < new Date(l.start_time).getTime() ? (
@@ -607,23 +615,17 @@ const StudentSessionsPage: React.FC = () => {
                                                     Report a problem
                                                 </Button>
                                             ) : null}
-                                            {(l.status || '').toUpperCase() === 'BOOKED' && nowMs > new Date(l.end_time).getTime() ? (
-                                                l.student_confirmed_at ? (
-                                                    <span className="inline-flex items-center px-3 py-2 rounded-lg text-sm bg-blue-50 text-blue-700 border border-blue-200">
-                                                        Confirmed — waiting for mentor
-                                                    </span>
-                                                ) : (
-                                                    <Button
-                                                        className="bg-green-600 hover:bg-green-700 text-white"
-                                                        disabled={confirmBusyId === l.id}
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            submitConfirmComplete(l);
-                                                        }}
-                                                    >
-                                                        {confirmBusyId === l.id ? 'Confirming…' : 'Confirm session completed'}
-                                                    </Button>
-                                                )
+                                            {(l.status || '').toUpperCase() === 'BOOKED' && nowMs > new Date(l.end_time).getTime() && !l.student_confirmed_at && l.dispute?.status !== 'OPEN' ? (
+                                                <Button
+                                                    className="bg-green-600 hover:bg-green-700 text-white"
+                                                    disabled={confirmBusyId === l.id}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        submitConfirmComplete(l);
+                                                    }}
+                                                >
+                                                    {confirmBusyId === l.id ? 'Completing…' : 'Complete Session'}
+                                                </Button>
                                             ) : null}
                                             {l.google_calendar_html_link ? (
                                                 <a href={safeExternalUrl(l.google_calendar_html_link)} target="_blank" rel="noopener noreferrer">
@@ -651,7 +653,7 @@ const StudentSessionsPage: React.FC = () => {
             <Modal
                 isOpen={!!offerConfirm}
                 onClose={() => { if (!offerBusyId) setOfferConfirm(null); }}
-                title={offerConfirm?.kind === 'decline' ? 'Decline this offer?' : 'Cancel this session?'}
+                title={offerConfirm?.kind === 'decline' ? 'Decline this session?' : 'Cancel this session?'}
             >
                 {offerConfirm && (
                     <div className="space-y-4">
@@ -664,7 +666,7 @@ const StudentSessionsPage: React.FC = () => {
                             <Button variant="outline" className="flex-1" onClick={() => setOfferConfirm(null)} disabled={!!offerBusyId}>Go back</Button>
                             <Button className="flex-1 bg-red-600 hover:bg-red-700" disabled={!!offerBusyId}
                                 onClick={() => offerConfirm.kind === 'decline' ? void respondToOffer(offerConfirm.lesson, 'decline') : void cancelCustom(offerConfirm.lesson)}>
-                                {offerBusyId ? 'Working…' : offerConfirm.kind === 'decline' ? 'Decline offer' : 'Cancel session'}
+                                {offerBusyId ? 'Working…' : offerConfirm.kind === 'decline' ? 'Decline session' : 'Cancel session'}
                             </Button>
                         </div>
                     </div>
@@ -770,7 +772,7 @@ const StudentSessionsPage: React.FC = () => {
                     <div className="space-y-4">
                         <p className="text-sm text-gray-700">
                             Tell us what went wrong with your session on <span className="font-medium">{formatDateLong(reportTarget.start_time)}</span>.
-                            The mentor's payment for this session is paused while the EmpowerEd team reviews your report.
+                            The session will not be confirmed automatically and your credits stay reserved while the EmpowerEd team reviews your report.
                         </p>
                         <textarea
                             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 min-h-[120px]"

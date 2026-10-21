@@ -1,39 +1,83 @@
+import { Prisma } from '@prisma/client';
 import prisma from '../config/db';
-import { WALLET_CONFIG, processCompletedLessons, settlePendingEarnings, runMonthlySettlement } from './walletService';
+import { WALLET_CONFIG, NO_OPEN_REPORT, confirmationWindowHours, processCompletedLessons, settlePendingEarnings, runMonthlySettlement } from './walletService';
 import { ensureMeetLinkForLesson, upgradeUpcomingLessonsToOpenAccess, releaseCancelledMentorMeetings } from './googleCalendar';
 import { expireStaleOffers } from './customSessionService';
 
-/** Ask the student to confirm a just-ended credit-funded session (their confirmation
- *  releases the mentor's payment; the grace-window backstop covers non-responders). */
+const queueEmail = async (type: string, toEmail: string | null | undefined, payload: Prisma.InputJsonObject, key: string) => {
+    if (!toEmail) return;
+    await prisma.emailOutbox.createMany({
+        data: [{ type, to_email: toEmail, payload, idempotency_key: key }],
+        skipDuplicates: true,
+    });
+};
+
+/** Credit-funded sessions that ended and are still waiting for the learner's "Complete Session". */
+const AWAITING_CONFIRMATION = {
+    status: 'BOOKED' as const,
+    student_confirmed_at: null,
+    booking: { funding: 'CREDITS' as const },
+    ...NO_OPEN_REPORT,
+};
+
+/** Right after a credit-funded session ends: ask the learner to confirm it ("Complete Session")
+ *  and remind the mentor to keep proof of attendance in case of a dispute. The learner's
+ *  confirmation approves the mentor's payment; the confirmation window covers non-responders. */
 async function requestCompletionConfirmations() {
     const lessons = await prisma.lesson.findMany({
         where: {
-            status: 'BOOKED',
-            student_confirmed_at: null,
-            end_time: { lte: new Date(), gte: new Date(Date.now() - 6 * 3600 * 1000) },
-            booking: { funding: 'CREDITS' },
+            ...AWAITING_CONFIRMATION,
+            end_time: { lte: new Date(), gte: new Date(Date.now() - 24 * 3600 * 1000) },
         },
-        select: { id: true, student: { select: { user: { select: { email: true } } } } },
+        select: {
+            id: true,
+            student: { select: { user: { select: { email: true } } } },
+            tutor: { select: { user: { select: { email: true } } } },
+        },
         take: 100,
     });
     for (const l of lessons) {
-        const email = l.student?.user?.email;
-        if (!email) continue;
         try {
-            await prisma.emailOutbox.create({
-                data: {
-                    type: 'SESSION_CONFIRM_REQUEST_STUDENT',
-                    to_email: email,
-                    payload: {
-                        lessonId: l.id,
-                        graceHours: Math.round(WALLET_CONFIG.completionGraceMinutes / 60),
-                        reviewDays: WALLET_CONFIG.settlementDays,
-                    },
-                    idempotency_key: `session-confirm-request:${l.id}`,
+            await queueEmail('SESSION_CONFIRM_REQUEST_STUDENT', l.student?.user?.email, { lessonId: l.id }, `session-confirm-request:${l.id}`);
+            await queueEmail('SESSION_PROOF_REMINDER_MENTOR', l.tutor?.user?.email, { lessonId: l.id }, `session-proof-reminder:${l.id}`);
+        } catch (e) {
+            console.error(`[Wallet] Failed to queue confirmation request for ${l.id}:`, e);
+        }
+    }
+}
+
+/** First (24h) and final (48h) confirmation reminders to learners who have not responded.
+ *  Each stage only covers its own slice of the window, so a lesson never gets both at once. */
+async function sendConfirmationReminders() {
+    const windowHours = confirmationWindowHours();
+    const stages = [
+        { key: 'first', afterHours: WALLET_CONFIG.confirmationReminderHours, untilHours: WALLET_CONFIG.confirmationFinalReminderHours, final: false },
+        { key: 'final', afterHours: WALLET_CONFIG.confirmationFinalReminderHours, untilHours: windowHours, final: true },
+    ].filter((st) => st.afterHours > 0 && st.afterHours < st.untilHours && st.afterHours < windowHours);
+
+    for (const stage of stages) {
+        const lessons = await prisma.lesson.findMany({
+            where: {
+                ...AWAITING_CONFIRMATION,
+                end_time: {
+                    lte: new Date(Date.now() - stage.afterHours * 3600 * 1000),
+                    gt: new Date(Date.now() - stage.untilHours * 3600 * 1000),
                 },
-            });
-        } catch (e: any) {
-            if (e.code !== 'P2002') console.error(`[Wallet] Failed to queue confirm request for ${l.id}:`, e);
+            },
+            select: { id: true, student: { select: { user: { select: { email: true } } } } },
+            take: 100,
+        });
+        for (const l of lessons) {
+            try {
+                await queueEmail(
+                    'SESSION_CONFIRM_REMINDER_STUDENT',
+                    l.student?.user?.email,
+                    { lessonId: l.id, stage: stage.key, afterHours: stage.afterHours, final: stage.final },
+                    `session-confirm-reminder:${l.id}:${stage.key}`,
+                );
+            } catch (e) {
+                console.error(`[Wallet] Failed to queue ${stage.key} confirmation reminder for ${l.id}:`, e);
+            }
         }
     }
 }
@@ -97,6 +141,7 @@ export async function runWalletJobs() {
         const offers = await expireStaleOffers();
         if (offers.expired) console.log(`[CustomSession] Expired ${offers.expired} unanswered session offer(s)`);
         await requestCompletionConfirmations();
+        await sendConfirmationReminders();
         const c = await processCompletedLessons();
         const s = await settlePendingEarnings();
         if (c.completed || c.returned || s.settled) {
@@ -121,7 +166,7 @@ export function startWalletScheduler() {
         return;
     }
     if (timer) return;
-    console.log(`[Wallet] Starting scheduler (interval=${INTERVAL_MS}ms, fee=${WALLET_CONFIG.feePercent}%, settlement=${WALLET_CONFIG.settlementDays}d)`);
+    console.log(`[Wallet] Starting scheduler (interval=${INTERVAL_MS}ms, fee=${WALLET_CONFIG.feePercent}%, confirmation=${confirmationWindowHours()}h, settlement=${WALLET_CONFIG.settlementDays}d)`);
     runWalletJobs();
     timer = setInterval(runWalletJobs, INTERVAL_MS);
 }

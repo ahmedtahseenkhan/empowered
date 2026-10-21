@@ -388,14 +388,15 @@ const PaymentsPage: React.FC = () => {
                             <div>
                                 <h2 className="text-xl font-semibold text-gray-900">Learning Credit Earnings</h2>
                                 <p className="text-sm text-gray-500 mt-1">
-                                    Sessions paid with Learning Credits. Earnings become payout-ready after a {walletEarnings.config.settlementDays}-day settlement &amp; review period.
+                                    Sessions paid with Learning Credits. Earnings are approved when the learner confirms the session (or automatically after the confirmation window)
+                                    and become payout-ready after a {walletEarnings.config.settlementDays}-day settlement period.
                                     A {walletEarnings.config.feePercent}% Payment &amp; Settlement Fee is applied to each completed session.
                                 </p>
                             </div>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                             <div className="bg-amber-50 p-4 rounded-lg">
-                                <div className="text-sm text-gray-600 mb-1">Pending (in review window)</div>
+                                <div className="text-sm text-gray-600 mb-1">Approved (settling)</div>
                                 <div className="text-2xl font-bold text-gray-900">{formatCurrency(walletEarnings.totals.pending_cents / 100)}</div>
                                 {walletEarnings.totals.on_hold_cents > 0 && (
                                     <div className="text-xs text-amber-700 mt-1">{formatCurrency(walletEarnings.totals.on_hold_cents / 100)} on hold (reported)</div>
@@ -433,7 +434,7 @@ const PaymentsPage: React.FC = () => {
                                     <tbody className="bg-white divide-y divide-gray-200 text-sm">
                                         {walletEarnings.earnings.map((e) => {
                                             const statusLabel: Record<string, { text: string; cls: string }> = {
-                                                PENDING: { text: `In review until ${formatDate(e.available_at)}`, cls: 'bg-amber-100 text-amber-800' },
+                                                PENDING: { text: `Approved — payout-ready ${formatDate(e.available_at)}`, cls: 'bg-amber-100 text-amber-800' },
                                                 ON_HOLD: { text: 'On hold — reported by student', cls: 'bg-red-100 text-red-800' },
                                                 AVAILABLE: { text: 'Payout-ready', cls: 'bg-green-100 text-green-800' },
                                                 TRANSFERRED: { text: 'Transferred', cls: 'bg-purple-100 text-purple-800' },
