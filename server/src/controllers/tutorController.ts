@@ -3,6 +3,7 @@ import prisma from '../config/db';
 import { AuthRequest } from '../middleware/authMiddleware'; // Assuming this exists or defining inline
 import { LessonSummary, emptyLessonSummary, addLessonToSummary, serializeLessonSummary } from '../utils/lessonSummary';
 import { isSafeHttpUrl } from '../utils/validation';
+import { PUBLIC_MENTOR_WHERE, getMentorVisibility } from '../utils/mentorVisibility';
 
 interface AuthenticatedRequest extends Request {
     user?: {
@@ -218,14 +219,10 @@ export const listPublicTutors = async (req: Request, res: Response) => {
             where.student_levels = { has: levelFilter };
         }
 
-        // Public visibility gate. A mentor only appears in search when ALL hold:
-        //  - admin-approved          (is_verified = true)
-        //  - account email-verified and not suspended (on the related User)
-        // This keeps fake/bot, unapproved and suspended profiles out of the
-        // public listing. Stripe Connect is NOT required: learners book with
-        // credits and mentors pick a payout method (Stripe/Zelle/bank) later.
-        where.is_verified = true;
-        where.user = { is_suspended: false, is_verified: true };
+        // Public visibility gate (admin-approved, email-verified, not suspended). The rule
+        // lives in utils/mentorVisibility so the admin "Visible to students" indicator can
+        // never drift from what students actually see.
+        Object.assign(where, PUBLIC_MENTOR_WHERE);
 
         const select = {
             id: true,
@@ -456,11 +453,7 @@ export const getPublicTutorById = async (req: Request, res: Response) => {
         const isOwner = !!requester?.id && requester.id === mentor.user?.id;
         const isAdmin = requester?.role === 'ADMIN';
 
-        const isPubliclyVisible =
-            mentor.is_verified &&
-            !!mentor.user &&
-            !mentor.user.is_suspended &&
-            mentor.user.is_verified;
+        const { is_publicly_visible: isPubliclyVisible } = getMentorVisibility(mentor);
         if (!isPubliclyVisible && !isOwner && !isAdmin) {
             return res.status(404).json({ error: 'Tutor not found' });
         }
