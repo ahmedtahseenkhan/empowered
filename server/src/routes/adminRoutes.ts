@@ -16,6 +16,7 @@ import {
     adminRejectExternalReview,
     adminSetUserSuspended,
     adminSetMentorApproved,
+    adminBulkSetMentorApproved,
     adminListSubscriptions,
     adminListPayments,
     adminListTickets,
@@ -81,6 +82,8 @@ router.use(requireAdmin);
 router.get('/analytics', requirePermission('dashboard'), adminGetAnalytics);
 
 router.get('/mentors', requirePermission('mentors'), adminListMentors);
+// Bulk route is registered before the `:id` routes so "bulk-approved" is never read as an id.
+router.put('/mentors/bulk-approved', requirePermission('mentors'), adminBulkSetMentorApproved);
 router.get('/mentors/:id', requirePermission('mentors'), adminGetMentor);
 router.put('/mentors/:id/approved', requirePermission('mentors'), adminSetMentorApproved);
 

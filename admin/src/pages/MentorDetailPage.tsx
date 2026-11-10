@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../api/axios';
-import { ArrowLeft, ShieldCheck, Mail, MapPin, Calendar, BookOpen, Star, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
+import { ArrowLeft, ShieldCheck, Mail, MapPin, Calendar, BookOpen, Star, AlertTriangle, CheckCircle, XCircle, ExternalLink } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { mentorPublicUrl, openExternal } from '../lib/urls';
 
 interface DetailedMentor {
     id: string;
@@ -15,7 +16,6 @@ interface DetailedMentor {
     country: string | null;
     tier: string;
     is_verified: boolean;
-    stripe_account_id: string | null;
     subscription_status: string | null;
     is_beta: boolean;
     rating: number;
@@ -93,11 +93,11 @@ const MentorDetailPage: React.FC = () => {
     if (loading) return <div className="text-center py-12 text-gray-500">Loading profile...</div>;
     if (!mentor) return <div className="text-center py-12 text-gray-500">Mentor not found.</div>;
 
-    // A mentor is shown to students only when ALL of these hold.
+    // A mentor is shown to students only when ALL of these hold. Stripe Connect is not
+    // required: learners book with credits and mentors pick a payout method later.
     const visibilityChecks = [
         { label: 'Email verified', ok: mentor.user.is_verified },
         { label: 'Admin approved', ok: mentor.is_verified },
-        { label: 'Stripe set up', ok: !!mentor.stripe_account_id },
         { label: 'Not suspended', ok: !mentor.user.is_suspended },
     ];
     const isPubliclyVisible = visibilityChecks.every(c => c.ok);
@@ -185,10 +185,21 @@ const MentorDetailPage: React.FC = () => {
                     "mt-6 rounded-lg border p-4",
                     isPubliclyVisible ? "bg-green-50 border-green-200" : "bg-amber-50 border-amber-200"
                 )}>
-                    <div className="flex items-center gap-2 font-medium text-sm mb-3">
-                        {isPubliclyVisible
-                            ? <><CheckCircle className="w-4 h-4 text-green-600" /> <span className="text-green-800">Visible to students</span></>
-                            : <><AlertTriangle className="w-4 h-4 text-amber-600" /> <span className="text-amber-800">Hidden from students — requirements not met</span></>}
+                    <div className="flex items-center justify-between gap-3 mb-3">
+                        <div className="flex items-center gap-2 font-medium text-sm">
+                            {isPubliclyVisible
+                                ? <><CheckCircle className="w-4 h-4 text-green-600" /> <span className="text-green-800">Visible to students</span></>
+                                : <><AlertTriangle className="w-4 h-4 text-amber-600" /> <span className="text-amber-800">Hidden from students — requirements not met</span></>}
+                        </div>
+                        {isPubliclyVisible && (
+                            <button
+                                type="button"
+                                onClick={() => openExternal(mentorPublicUrl(mentor.id))}
+                                className="inline-flex items-center gap-1.5 text-xs font-medium text-green-800 hover:text-green-900 underline underline-offset-2"
+                            >
+                                View public profile <ExternalLink className="w-3.5 h-3.5" />
+                            </button>
+                        )}
                     </div>
                     <div className="flex flex-wrap gap-x-6 gap-y-2">
                         {visibilityChecks.map(c => (
