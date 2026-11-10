@@ -220,12 +220,11 @@ export const listPublicTutors = async (req: Request, res: Response) => {
 
         // Public visibility gate. A mentor only appears in search when ALL hold:
         //  - admin-approved          (is_verified = true)
-        //  - Stripe payout set up    (stripe_account_id present)
         //  - account email-verified and not suspended (on the related User)
-        // This keeps fake/bot, unapproved, suspended and not-payment-ready
-        // profiles out of the public listing.
+        // This keeps fake/bot, unapproved and suspended profiles out of the
+        // public listing. Stripe Connect is NOT required: learners book with
+        // credits and mentors pick a payout method (Stripe/Zelle/bank) later.
         where.is_verified = true;
-        where.stripe_account_id = { not: null };
         where.user = { is_suspended: false, is_verified: true };
 
         const select = {
@@ -358,7 +357,6 @@ export const getPublicTutorById = async (req: Request, res: Response) => {
                 student_levels: true,
                 free_session_enabled: true,
                 // Needed only to enforce the public visibility gate (stripped before response).
-                stripe_account_id: true,
                 user: { select: { id: true, is_suspended: true, is_verified: true } },
                 categories: {
                     select: {
@@ -448,11 +446,11 @@ export const getPublicTutorById = async (req: Request, res: Response) => {
 
         if (!mentor) return res.status(404).json({ error: 'Tutor not found' });
 
-        // Same public visibility gate as the listing: hide unapproved, not-payment-ready,
-        // suspended or email-unverified mentors. 404 so the profile is indistinguishable
-        // from one that doesn't exist.
+        // Same public visibility gate as the listing: hide unapproved, suspended or
+        // email-unverified mentors. 404 so the profile is indistinguishable from one
+        // that doesn't exist. Stripe Connect is not required (credits-only booking).
         // EXCEPTION: the profile owner (viewing/previewing their own profile) and admins
-        // can always see it, regardless of approval/Stripe status. The route uses
+        // can always see it, regardless of approval status. The route uses
         // optionalAuth, so req.user is present when a valid token is sent.
         const requester = (req as any).user as { id?: string; role?: string } | undefined;
         const isOwner = !!requester?.id && requester.id === mentor.user?.id;
@@ -460,7 +458,6 @@ export const getPublicTutorById = async (req: Request, res: Response) => {
 
         const isPubliclyVisible =
             mentor.is_verified &&
-            !!mentor.stripe_account_id &&
             !!mentor.user &&
             !mentor.user.is_suspended &&
             mentor.user.is_verified;
@@ -477,8 +474,8 @@ export const getPublicTutorById = async (req: Request, res: Response) => {
         });
         const totalStudents = studentPairs.length;
 
-        // Strip gate-only fields so we don't leak account/Stripe internals to clients.
-        const { marketing_video_submission, stripe_account_id, user, ...rest } = mentor as any;
+        // Strip gate-only fields so we don't leak account internals to clients.
+        const { marketing_video_submission, user, ...rest } = mentor as any;
         res.json({ mentor: { ...rest, total_students: totalStudents, marketing_video_url: marketing_video_submission?.video_url ?? null } });
     } catch (error) {
         console.error('Get Public Tutor Error:', error);

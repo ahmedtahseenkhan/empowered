@@ -58,8 +58,8 @@ const TutorDashboard: React.FC = () => {
 
     const [profile, setProfile] = useState<any>(null);
     const [loading, setLoading] = useState(true);
-    const [connectStatus, setConnectStatus] = useState<{
-        hasAccount: boolean; detailsSubmitted?: boolean; chargesEnabled?: boolean; payoutsEnabled?: boolean;
+    const [payoutSettings, setPayoutSettings] = useState<{
+        method: 'STRIPE' | 'ZELLE' | 'BANK_TRANSFER' | null; stripe_connected: boolean;
     } | null>(null);
     const [availabilitySlots, setAvailabilitySlots] = useState<Array<{ start: string; end: string }>>([]);
     const [calendarBusy, setCalendarBusy] = useState(false);
@@ -124,9 +124,9 @@ const TutorDashboard: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        api.get('/payments/mentor/connect-status')
-            .then(res => setConnectStatus(res.data))
-            .catch(() => setConnectStatus(null));
+        api.get('/wallet/mentor/payout-settings')
+            .then(res => setPayoutSettings(res.data))
+            .catch(() => setPayoutSettings(null));
     }, []);
 
     useEffect(() => {
@@ -191,13 +191,11 @@ const TutorDashboard: React.FC = () => {
     const totalCount = Object.keys(checklist).length;
     const completionPct = Math.round((completedCount / totalCount) * 100);
 
-    // A mentor is only visible/bookable to students once their Stripe Connect
-    // payout account is fully onboarded. Show a disclaimer until then.
-    const paymentsReady = !!(connectStatus?.hasAccount
-        && connectStatus?.detailsSubmitted
-        && connectStatus?.chargesEnabled
-        && connectStatus?.payoutsEnabled);
-    const showConnectDisclaimer = connectStatus !== null && !paymentsReady;
+    // Visibility no longer depends on Stripe Connect (learners book with credits).
+    // Just nudge the mentor to pick a payout method so monthly payouts can be sent.
+    const showPayoutReminder = payoutSettings !== null
+        && !payoutSettings.method
+        && !payoutSettings.stripe_connected;
 
     const checklistItems = [
         { label: 'Upload a profile photo', done: checklist.photo, link: '/tutor-onboarding?section=bio', icon: Upload },
@@ -413,8 +411,8 @@ const TutorDashboard: React.FC = () => {
                     </div>
                 </div>
 
-                {/* ── Stripe Connect disclaimer ────────────────────────────────── */}
-                {showConnectDisclaimer && (
+                {/* ── Payout method reminder (non-blocking) ───────────────────── */}
+                {showPayoutReminder && (
                     <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
                         <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                             <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -422,22 +420,20 @@ const TutorDashboard: React.FC = () => {
                                     <AlertTriangle className="w-5 h-5 text-amber-600" />
                                 </div>
                                 <div className="min-w-0">
-                                    <h3 className="text-sm font-bold text-amber-900">
-                                        {connectStatus?.hasAccount ? 'Finish setting up payments' : 'Set up your payout account to go live'}
-                                    </h3>
+                                    <h3 className="text-sm font-bold text-amber-900">Choose how you'd like to get paid</h3>
                                     <p className="text-xs text-amber-800 mt-1 leading-relaxed">
-                                        Your profile stays hidden from students until you connect your Stripe payout account.
-                                        Complete Stripe Connect so students can find you, book sessions, and you can get paid.
+                                        Students can already find and book you. Pick a payout method (Stripe, Zelle, or bank transfer)
+                                        so we can send your earnings each month.
                                     </p>
                                 </div>
                             </div>
                             <Button
                                 size="sm"
                                 className="shrink-0 self-start sm:self-auto"
-                                onClick={() => navigate('/connect-account')}
+                                onClick={() => navigate('/payments')}
                             >
                                 <CreditCard className="w-3.5 h-3.5 mr-1.5" />
-                                {connectStatus?.hasAccount ? 'Complete setup' : 'Set up payments'}
+                                Set payout method
                             </Button>
                         </div>
                     </div>
@@ -802,8 +798,8 @@ const TutorDashboard: React.FC = () => {
                         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                             <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
                                 <h3 className="text-sm font-semibold text-gray-900">Profile Status</h3>
-                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${completionPct === 100 && paymentsReady ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-                                    {completionPct === 100 && paymentsReady ? 'Live ✓' : !paymentsReady ? 'Payments needed' : 'Incomplete'}
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${completionPct === 100 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                                    {completionPct === 100 ? 'Live ✓' : 'Incomplete'}
                                 </span>
                             </div>
                             <div className="p-4">
