@@ -17,33 +17,80 @@ import {
     resolveDemoTimezone,
 } from '../services/demoAvailability';
 import { createDemoMeetEvent, updateDemoMeetEvent, getPlatformMeetDiagnostics, upgradeUpcomingLessonsToOpenAccess } from '../services/googleCalendar';
+import { PUBLIC_MENTOR_WHERE, HIDDEN_MENTOR_WHERE, getMentorVisibility } from '../utils/mentorVisibility';
+
+const MENTOR_LIST_FILTERS = ['all', 'visible', 'hidden', 'pending_approval', 'email_unverified', 'suspended'] as const;
+type MentorListFilter = typeof MENTOR_LIST_FILTERS[number];
+
+const mentorFilterWhere = (filter: MentorListFilter): Prisma.TutorProfileWhereInput | null => {
+    switch (filter) {
+        case 'visible': return PUBLIC_MENTOR_WHERE;
+        case 'hidden': return HIDDEN_MENTOR_WHERE;
+        case 'pending_approval': return { is_verified: false };
+        case 'email_unverified': return { user: { is_verified: false } };
+        case 'suspended': return { user: { is_suspended: true } };
+        default: return null;
+    }
+};
 
 export const adminListMentors = async (req: AuthRequest, res: Response) => {
     try {
         const q = (req.query.q as string | undefined)?.trim();
+        const filterParam = (req.query.filter as string | undefined)?.trim() || 'all';
+        const filter: MentorListFilter = (MENTOR_LIST_FILTERS as readonly string[]).includes(filterParam)
+            ? (filterParam as MentorListFilter)
+            : 'all';
 
-        const mentors = await prisma.tutorProfile.findMany({
-            where: q
-                ? {
-                    OR: [
-                        { username: { contains: q, mode: 'insensitive' } },
-                        { user: { email: { contains: q, mode: 'insensitive' } } },
-                    ],
-                }
-                : undefined,
-            select: {
-                id: true,
-                username: true,
-                profile_photo: true,
-                tier: true,
-                is_verified: true,
-                user: { select: { id: true, email: true, is_suspended: true, created_at: true } },
+        const conditions: Prisma.TutorProfileWhereInput[] = [];
+        if (q) {
+            conditions.push({
+                OR: [
+                    { username: { contains: q, mode: 'insensitive' } },
+                    { user: { email: { contains: q, mode: 'insensitive' } } },
+                ],
+            });
+        }
+        const filterWhere = mentorFilterWhere(filter);
+        if (filterWhere) conditions.push(filterWhere);
+        const where: Prisma.TutorProfileWhereInput | undefined = conditions.length ? { AND: conditions } : undefined;
+
+        // Counts are platform-wide (not narrowed by q/filter) so the summary chips always
+        // tell the admin how many mentors students can currently see.
+        const [rows, total, visible, pendingApproval, emailUnverified, suspended] = await Promise.all([
+            prisma.tutorProfile.findMany({
+                where,
+                select: {
+                    id: true,
+                    username: true,
+                    profile_photo: true,
+                    tier: true,
+                    is_verified: true,
+                    user: { select: { id: true, email: true, is_suspended: true, is_verified: true, created_at: true } },
+                },
+                orderBy: { user: { created_at: 'desc' } },
+                take: 200,
+            }),
+            prisma.tutorProfile.count(),
+            prisma.tutorProfile.count({ where: PUBLIC_MENTOR_WHERE }),
+            prisma.tutorProfile.count({ where: { is_verified: false } }),
+            prisma.tutorProfile.count({ where: { user: { is_verified: false } } }),
+            prisma.tutorProfile.count({ where: { user: { is_suspended: true } } }),
+        ]);
+
+        const mentors = rows.map((m) => ({ ...m, ...getMentorVisibility(m) }));
+
+        return res.json({
+            mentors,
+            filter,
+            counts: {
+                total,
+                visible,
+                hidden: total - visible,
+                pending_approval: pendingApproval,
+                email_unverified: emailUnverified,
+                suspended,
             },
-            orderBy: { user: { created_at: 'desc' } },
-            take: 200,
         });
-
-        return res.json({ mentors });
     } catch (error) {
         console.error('adminListMentors error:', error);
         return res.status(500).json({ error: 'Server error' });
@@ -196,8 +243,56 @@ export const adminSetUserSuspended = async (req: AuthRequest, res: Response) => 
     }
 };
 
-// Approve (or revoke approval of) a mentor. Sets TutorProfile.is_verified, which
-// gates whether the mentor appears in the public listing / profile pages.
+class MentorNotFoundError extends Error {}
+
+/**
+ * Approve (or revoke approval of) one mentor: sets TutorProfile.is_verified (which gates
+ * the public listing / profile pages), audits the change, and emails the mentor when their
+ * profile goes live for the first time. Shared by the single and bulk approval endpoints.
+ */
+const applyMentorApproval = async (req: AuthRequest, id: string, is_verified: boolean) => {
+    // Read the current state so we only send the "profile is now live" email
+    // on the transition from unverified → verified (not on repeated saves).
+    const existing = await prisma.tutorProfile.findUnique({
+        where: { id },
+        select: { is_verified: true },
+    });
+    if (!existing) throw new MentorNotFoundError('Mentor not found');
+
+    const updated = await prisma.tutorProfile.update({
+        where: { id },
+        data: { is_verified },
+        select: { id: true, username: true, is_verified: true, user: { select: { email: true } } },
+    });
+
+    await logAdminAction(req, is_verified ? 'mentor.approve' : 'mentor.unapprove', { type: 'tutor_profile', id: updated.id }, {
+        username: updated.username,
+        email: updated.user?.email,
+        previous: existing.is_verified,
+    });
+
+    if (is_verified && !existing.is_verified && updated.user?.email) {
+        const baseUrl = (process.env.CLIENT_URL || process.env.CLIENT_BASE_URL || 'https://emplearnings.com').replace(/\/+$/, '');
+        try {
+            await emailService.sendMentorProfileLive({
+                mentorName: updated.username || 'there',
+                mentorEmail: updated.user.email,
+                profileUrl: `${baseUrl}/mentors/${updated.id}`,
+                dashboardUrl: `${baseUrl}/dashboard`,
+            });
+        } catch (e) {
+            console.error('Failed to send mentor profile-live email:', e);
+        }
+    }
+
+    return {
+        id: updated.id,
+        username: updated.username,
+        is_verified: updated.is_verified,
+        changed: existing.is_verified !== updated.is_verified,
+    };
+};
+
 export const adminSetMentorApproved = async (req: AuthRequest, res: Response) => {
     try {
         const { id } = req.params; // tutor profile id
@@ -206,43 +301,50 @@ export const adminSetMentorApproved = async (req: AuthRequest, res: Response) =>
         if (!id) return res.status(400).json({ error: 'Mentor id is required' });
         if (typeof is_verified !== 'boolean') return res.status(400).json({ error: 'is_verified must be a boolean' });
 
-        // Read the current state so we only send the "profile is now live" email
-        // on the transition from unverified → verified (not on repeated saves).
-        const existing = await prisma.tutorProfile.findUnique({
-            where: { id },
-            select: { is_verified: true },
-        });
-        if (!existing) return res.status(404).json({ error: 'Mentor not found' });
+        const mentor = await applyMentorApproval(req, id, is_verified);
+        return res.json({ mentor });
+    } catch (error) {
+        if (error instanceof MentorNotFoundError) return res.status(404).json({ error: 'Mentor not found' });
+        console.error('adminSetMentorApproved error:', error);
+        return res.status(500).json({ error: 'Server error' });
+    }
+};
 
-        const updated = await prisma.tutorProfile.update({
-            where: { id },
-            data: { is_verified },
-            select: { id: true, username: true, is_verified: true, user: { select: { email: true } } },
-        });
+const BULK_APPROVE_MAX = 200;
 
-        await logAdminAction(req, is_verified ? 'mentor.approve' : 'mentor.unapprove', { type: 'tutor_profile', id: updated.id }, {
-            username: updated.username,
-            email: updated.user?.email,
-            previous: existing.is_verified,
-        });
+// Approve / revoke approval for many mentors at once. Each mentor is processed on its own so
+// one bad id never blocks the rest; the response lists what was updated and what failed.
+export const adminBulkSetMentorApproved = async (req: AuthRequest, res: Response) => {
+    try {
+        const { ids, is_verified } = req.body as { ids?: unknown; is_verified?: boolean };
 
-        if (is_verified && !existing.is_verified && updated.user?.email) {
-            const baseUrl = (process.env.CLIENT_URL || process.env.CLIENT_BASE_URL || 'https://emplearnings.com').replace(/\/+$/, '');
+        if (typeof is_verified !== 'boolean') return res.status(400).json({ error: 'is_verified must be a boolean' });
+        if (!Array.isArray(ids) || ids.length === 0 || !ids.every((x) => typeof x === 'string' && x.trim())) {
+            return res.status(400).json({ error: 'ids must be a non-empty array of mentor ids' });
+        }
+        const uniqueIds = Array.from(new Set((ids as string[]).map((x) => x.trim())));
+        if (uniqueIds.length > BULK_APPROVE_MAX) {
+            return res.status(400).json({ error: `At most ${BULK_APPROVE_MAX} mentors can be updated at once` });
+        }
+
+        const updated: Array<{ id: string; username: string; is_verified: boolean; changed: boolean }> = [];
+        const failed: Array<{ id: string; error: string }> = [];
+        for (const id of uniqueIds) {
             try {
-                await emailService.sendMentorProfileLive({
-                    mentorName: updated.username || 'there',
-                    mentorEmail: updated.user.email,
-                    profileUrl: `${baseUrl}/mentors/${updated.id}`,
-                    dashboardUrl: `${baseUrl}/dashboard`,
-                });
+                updated.push(await applyMentorApproval(req, id, is_verified));
             } catch (e) {
-                console.error('Failed to send mentor profile-live email:', e);
+                if (e instanceof MentorNotFoundError) {
+                    failed.push({ id, error: 'Mentor not found' });
+                } else {
+                    console.error(`adminBulkSetMentorApproved: failed for mentor ${id}:`, e);
+                    failed.push({ id, error: 'Failed to update' });
+                }
             }
         }
 
-        return res.json({ mentor: { id: updated.id, username: updated.username, is_verified: updated.is_verified } });
+        return res.json({ updated, failed });
     } catch (error) {
-        console.error('adminSetMentorApproved error:', error);
+        console.error('adminBulkSetMentorApproved error:', error);
         return res.status(500).json({ error: 'Server error' });
     }
 };

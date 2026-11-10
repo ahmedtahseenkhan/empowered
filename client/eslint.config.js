@@ -22,6 +22,12 @@ export default defineConfig([
     rules: {
       // Existing code uses `any` widely (mostly in catch blocks); flag it without failing CI
       '@typescript-eslint/no-explicit-any': 'warn',
+      // eslint-plugin-react-hooks 7.1 promotes these React Compiler rules to errors.
+      // Keep them as warnings until the existing violations are fixed.
+      'react-hooks/set-state-in-effect': 'warn',
+      'react-hooks/purity': 'warn',
+      'react-hooks/immutability': 'warn',
+      'react-hooks/preserve-manual-memoization': 'warn',
     },
   },
 ])
